@@ -20,7 +20,7 @@ WEB_JOB_DESCRIPTION_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
     "required": ["status", "company", "jobTitle", "jobDescription", "error"],
     "properties": {
-        "status": {"enum": ["found", "unavailable"]},
+        "status": {"type": "string", "enum": ["found", "unavailable"]},
         "company": {"type": ["string", "null"]},
         "jobTitle": {"type": "string"},
         "jobDescription": {"type": "string"},

@@ -2,6 +2,7 @@ import json
 import unittest
 
 from forge.errors import ProviderError
+from forge.job_source import WEB_JOB_DESCRIPTION_SCHEMA
 from forge.jsonio import load_json
 from forge.openai_provider import (
     TAILORING_PLAN_SCHEMA,
@@ -82,6 +83,24 @@ class OpenAIProviderTests(unittest.TestCase):
             "Verified candidate context",
             payload["selectedVerifiedCandidateContext"],
         )
+
+    def test_strict_schema_enum_and_const_nodes_declare_their_types(self):
+        def assert_discriminator_types(value, path):
+            if isinstance(value, dict):
+                if "const" in value or "enum" in value:
+                    self.assertIn("type", value, path)
+                for key, child in value.items():
+                    assert_discriminator_types(child, f"{path}.{key}")
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    assert_discriminator_types(child, f"{path}[{index}]")
+
+        for name, schema in (
+            ("resume_tailoring_plan", TAILORING_PLAN_SCHEMA),
+            ("web_job_description", WEB_JOB_DESCRIPTION_SCHEMA),
+        ):
+            with self.subTest(schema=name):
+                assert_discriminator_types(schema, name)
 
     def test_rejects_attempt_to_rewrite_protected_field(self):
         plan = valid_plan()

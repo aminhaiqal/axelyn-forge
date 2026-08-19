@@ -31,7 +31,7 @@ TAILORING_PLAN_SCHEMA: Dict[str, Any] = {
                 "additionalProperties": False,
                 "required": ["operation", "target", "field", "value"],
                 "properties": {
-                    "operation": {"const": "rewrite"},
+                    "operation": {"type": "string", "const": "rewrite"},
                     "target": {"type": "string"},
                     "field": {"type": ["string", "null"]},
                     "value": {
