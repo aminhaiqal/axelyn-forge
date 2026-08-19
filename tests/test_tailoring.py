@@ -45,6 +45,8 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             self.assertEqual(f"{base}.operations.json", result.operations_output.name)
             self.assertEqual(f"{base}.json", result.data_output.name)
             self.assertEqual(f"{base}.docx", result.docx_output.name)
+            self.assertIsNone(result.keyword_alignment_output)
+            self.assertIsNone(result.keyword_coverage)
             self.assertEqual(3, result.applied_operations)
             self.assertEqual(root / "usage.sqlite3", result.usage_database)
             self.assertEqual(1, result.usage_summary["requests"])
@@ -71,6 +73,23 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             "company": "Texas Instruments",
             "jobTitle": "Full Stack Software Engineer",
             "roleSignals": ["Full-stack production systems"],
+            "jobKeywords": [
+                {
+                    "phrase": "Python",
+                    "priority": "required",
+                    "category": "technology",
+                },
+                {
+                    "phrase": "REST APIs",
+                    "priority": "required",
+                    "category": "technology",
+                },
+                {
+                    "phrase": "Kafka",
+                    "priority": "preferred",
+                    "category": "technology",
+                },
+            ],
             "selectedChunkIds": ["candidate-md--candidate-backend"],
             "gaps": ["No Kafka evidence"],
         }
@@ -147,6 +166,20 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             selected_context = main_payload["selectedVerifiedCandidateContext"]
             self.assertIn("Verified React and Python API evidence.", selected_context)
             self.assertNotIn("Evidence that should not reach", selected_context)
+            self.assertEqual(
+                ["Python", "REST APIs"],
+                [
+                    item["phrase"]
+                    for item in main_payload["keywordAlignment"]["mustSurface"]
+                ],
+            )
+            self.assertEqual(
+                ["Kafka"],
+                [
+                    item["phrase"]
+                    for item in main_payload["keywordAlignment"]["unsupported"]
+                ],
+            )
 
             self.assertIsNotNone(result.context_selection_output)
             selection_audit = load_json(result.context_selection_output)
@@ -157,10 +190,22 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
                 ["candidate-md--candidate-backend"],
                 selection_audit["selectedChunkIds"],
             )
+            self.assertEqual("Python", selection_audit["jobKeywords"][0]["phrase"])
+            self.assertIsNotNone(result.keyword_alignment_output)
+            alignment_audit = load_json(result.keyword_alignment_output)
+            self.assertEqual(result.workflow_id, alignment_audit["provider"]["workflowId"])
+            self.assertEqual(2, alignment_audit["coverage"]["targetedKeywords"])
+            self.assertEqual(2, alignment_audit["coverage"]["surfacedAfter"])
+            self.assertEqual(100.0, alignment_audit["coverage"]["percentage"])
+            self.assertEqual(alignment_audit["coverage"], result.keyword_coverage)
             operation_audit = load_json(result.operations_output)
             self.assertEqual(
                 ["candidate-md--candidate-backend"],
                 operation_audit["contextSelection"]["selectedChunkIds"],
+            )
+            self.assertEqual(
+                ["Python", "REST APIs"],
+                operation_audit["keywordAlignment"]["mustSurface"],
             )
             self.assertEqual(2, result.usage_summary["requests"])
             self.assertEqual(2, result.usage_summary["priced_requests"])
@@ -172,6 +217,13 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             "company": "Texas Instruments",
             "jobTitle": "Full Stack Software Engineer",
             "roleSignals": ["Production software"],
+            "jobKeywords": [
+                {
+                    "phrase": "Python",
+                    "priority": "required",
+                    "category": "technology",
+                }
+            ],
             "selectedChunkIds": ["candidate-md--candidate"],
             "gaps": [],
         }
@@ -218,6 +270,18 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             "company": "Texas Instruments",
             "jobTitle": "Full Stack Software Engineer",
             "roleSignals": ["Full-stack factory software"],
+            "jobKeywords": [
+                {
+                    "phrase": "Docker",
+                    "priority": "required",
+                    "category": "technology",
+                },
+                {
+                    "phrase": "Kafka",
+                    "priority": "preferred",
+                    "category": "technology",
+                },
+            ],
             "selectedChunkIds": ["candidate-md--candidate"],
             "gaps": ["No SECS/GEM evidence"],
         }

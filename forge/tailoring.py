@@ -24,7 +24,16 @@ from .job_source import (
     WebJobDescription,
     retrieve_job_description_with_openai,
 )
-from .openai_provider import DEFAULT_OPENAI_MODEL, generate_tailoring_plan
+from .keyword_alignment import (
+    KeywordAlignment,
+    align_job_keywords,
+    remove_noop_operations,
+)
+from .openai_provider import (
+    DEFAULT_OPENAI_MODEL,
+    build_editable_targets,
+    generate_tailoring_plan,
+)
 from .operations import apply_operations
 from .usage_store import OpenAIUsageStore
 from .validation import validate_resume
@@ -46,6 +55,9 @@ class TailoringResult:
     gaps: Tuple[str, ...]
     job_source_output: Optional[Path]
     context_selection_output: Optional[Path]
+    keyword_alignment_output: Optional[Path]
+    keyword_coverage: Optional[Dict[str, Any]]
+    no_op_operations_removed: Tuple[str, ...]
     operations_output: Path
     data_output: Path
     docx_output: Path
@@ -103,6 +115,7 @@ def tailor_resume_with_openai(
 
     context_text = ""
     context_selection: Optional[ContextSelection] = None
+    keyword_alignment: Optional[KeywordAlignment] = None
     web_job: Optional[WebJobDescription] = None
     context_database_path = Path(context_database) if context_database is not None else None
     usage_database_path = (
@@ -146,6 +159,11 @@ def tailor_resume_with_openai(
             workflow_id=workflow_id,
         )
         context_text = context_selection.selected_context_text()
+        keyword_alignment = align_job_keywords(
+            resume=resume,
+            keywords=context_selection.job_keywords,
+            selected_chunks=context_selection.selected_chunks,
+        )
 
     plan = generate_tailoring_plan(
         resume=resume,
@@ -154,12 +172,22 @@ def tailor_resume_with_openai(
         context_selection=(
             context_selection.as_prompt_summary() if context_selection is not None else None
         ),
+        keyword_alignment=(
+            keyword_alignment.as_prompt_dict() if keyword_alignment is not None else None
+        ),
         model=model,
         client=client,
         usage_store=usage_store,
         workflow_id=workflow_id,
     )
     operation_config = plan.as_operations_config()
+    filtered_operations, no_op_targets = remove_noop_operations(
+        plan.operations,
+        build_editable_targets(resume),
+    )
+    if not filtered_operations:
+        raise TailoringError("OpenAI tailoring plan contained only no-op rewrites")
+    operation_config["operations"] = [dict(item) for item in filtered_operations]
     operation_config["provider"]["workflowId"] = workflow_id
     operation_config["provider"]["usageDatabase"] = str(usage_database_path)
     if web_job is not None:
@@ -180,9 +208,34 @@ def tailor_resume_with_openai(
                 chunk.chunk_id for chunk in context_selection.selected_chunks
             ],
         }
+    if keyword_alignment is not None:
+        operation_config["keywordAlignment"] = {
+            "mode": "balanced",
+            "mustSurface": [
+                match.keyword.phrase for match in keyword_alignment.must_surface
+            ],
+            "noOpOperationsRemoved": list(no_op_targets),
+        }
     tailored, targets = apply_operations(resume, operation_config)
     validate_resume(tailored, resume_schema)
+    before_values = resolve_bindings(resume, binding_config)
     values = resolve_bindings(tailored, binding_config)
+    keyword_audit = (
+        keyword_alignment.build_audit(
+            before_values=before_values,
+            after_values=values,
+            no_op_targets=no_op_targets,
+        )
+        if keyword_alignment is not None
+        else None
+    )
+    if keyword_audit is not None and context_selection is not None:
+        keyword_audit["provider"] = {
+            "workflowId": workflow_id,
+            "contextSelectionModel": context_selection.model,
+            "contextSelectionResponseId": context_selection.response_id,
+            "usageDatabase": str(usage_database_path),
+        }
 
     prefix = safe_filename_component(candidate_prefix)
     title = safe_filename_component(plan.job_title)
@@ -196,6 +249,11 @@ def tailor_resume_with_openai(
     final_context_selection = (
         destination / f"{base_name}.context-selection.json"
         if context_selection is not None
+        else None
+    )
+    final_keyword_alignment = (
+        destination / f"{base_name}.keyword-alignment.json"
+        if keyword_audit is not None
         else None
     )
     final_data = destination / f"{base_name}.json"
@@ -225,6 +283,12 @@ def tailor_resume_with_openai(
                     staging / final_context_selection.name,
                     selection_audit,
                 )
+            staged_keyword_alignment = None
+            if keyword_audit is not None and final_keyword_alignment is not None:
+                staged_keyword_alignment = write_json(
+                    staging / final_keyword_alignment.name,
+                    keyword_audit,
+                )
             staged_operations = write_json(staging / final_operations.name, operation_config)
             staged_data = write_json(staging / final_data.name, tailored)
             staged_docx = staging / final_docx.name
@@ -234,6 +298,8 @@ def tailor_resume_with_openai(
                 os.replace(staged_job_source, final_job_source)
             if staged_context_selection is not None and final_context_selection is not None:
                 os.replace(staged_context_selection, final_context_selection)
+            if staged_keyword_alignment is not None and final_keyword_alignment is not None:
+                os.replace(staged_keyword_alignment, final_keyword_alignment)
             os.replace(staged_operations, final_operations)
             os.replace(staged_data, final_data)
             os.replace(staged_docx, final_docx)
@@ -264,6 +330,11 @@ def tailor_resume_with_openai(
         gaps=plan.gaps,
         job_source_output=final_job_source,
         context_selection_output=final_context_selection,
+        keyword_alignment_output=final_keyword_alignment,
+        keyword_coverage=(
+            keyword_audit.get("coverage") if keyword_audit is not None else None
+        ),
+        no_op_operations_removed=no_op_targets,
         operations_output=final_operations,
         data_output=final_data,
         docx_output=final_docx,

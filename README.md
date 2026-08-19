@@ -130,14 +130,14 @@ SQLite stores the schema version, source-document hashes and lengths, and each c
 
 ### OpenAI request costs in SQLite
 
-Every OpenAI call made by the `tailor` workflow creates an `llm_requests` ledger row before the request starts. URL retrieval, context selection, and main tailoring share one workflow ID but remain separate rows. Successful rows capture:
+Every OpenAI call made by the `tailor` workflow creates an `llm_requests` ledger row before the request starts. URL retrieval, context selection, and main tailoring share one workflow ID but remain separate rows. Keyword extraction is part of the existing context-selection response, so alignment does not add another OpenAI request. Successful rows capture:
 
 - requested and actual model, service tier, response ID, response status, and duration;
 - input, ordinary input, cached input, cache-write, output, reasoning, and total tokens;
 - the versioned public-pricing row and rate snapshot used for the estimate;
 - ordinary-input, cached-input, cache-write, output, web-search tool, and total estimated USD costs.
 
-The same workflow ID and usage-database path are written into the generated operations, job-source, and context-selection audit JSON, so an output resume can be traced back to all of its cost rows.
+The same workflow ID and usage-database path are written into the generated operations, job-source, context-selection, and keyword-alignment audit JSON, so an output resume can be traced back to all of its cost rows.
 
 A provider failure remains in the ledger with `status=failed`, the exception details, and a null cost because OpenAI returned no usage data. A process interrupted during a call leaves `status=started`, making incomplete accounting visible. Prompt text, resume data, job-description text, and API keys are never stored in the usage tables.
 
@@ -166,15 +166,18 @@ Both commands accept `--workflow-id`; `usage-list` also accepts `--limit`.
 
 Cost is explicitly recorded as an estimate based on the public standard-service price snapshot, not as an invoice amount. The seeded GPT-5.6 rates account for the separate cached-read and cache-write categories and apply the published long-context multipliers above 272K input tokens. Web retrieval also records the current $10 per 1,000 search-action price plus model-rate search-content tokens. Contract discounts, regional-processing uplifts, and future pricing changes can make billed cost differ. Current rates are sourced from the [OpenAI model pricing comparison](https://developers.openai.com/api/docs/models/compare), [built-in tool pricing](https://developers.openai.com/api/docs/pricing#built-in-tools), and [prompt-caching documentation](https://developers.openai.com/api/docs/guides/prompt-caching#measure-cache-reads-and-writes).
 
-The command produces auditable files named from the model-extracted job title. URL input adds the first file below, and context selection adds the second:
+The command produces auditable files named from the model-extracted job title. URL input adds the job-source audit; configured context selection adds both the selection and keyword-alignment audits:
 
 - `Amin_Haiqal_Resume_[Job_Title].job-source.json`
 - `Amin_Haiqal_Resume_[Job_Title].context-selection.json`
+- `Amin_Haiqal_Resume_[Job_Title].keyword-alignment.json`
 - `Amin_Haiqal_Resume_[Job_Title].operations.json`
 - `Amin_Haiqal_Resume_[Job_Title].json`
 - `Amin_Haiqal_Resume_[Job_Title].docx`
 
-The context-selection call sends the JD and full indexed context catalog to OpenAI. The main call sends the JD, canonical resume, explicit editable-target catalog, selection signals, and selected context excerpts. URL ingestion sends only the requested URL and retrieval instructions. All calls use `store=False`. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields.
+The context-selection call sends the JD and full indexed context catalog to OpenAI. It also extracts concise employer terminology and classifies each term as required, preferred, or responsibility-level. Forge then deterministically checks those terms against canonical stable-ID entities and the selected verified context. Up to 12 supported terms become `mustSurface` guidance for the main call; unsupported terms remain explicit gaps and cannot become candidate claims. No-op rewrites are removed before operations are applied.
+
+The main call sends the JD, canonical resume, explicit editable-target catalog, selection signals, evidence-backed keyword guidance, and selected context excerpts. URL ingestion sends only the requested URL and retrieval instructions. All calls use `store=False`. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. After rendering values are resolved, the keyword-alignment audit reports exact before/after coverage, missing targeted terms, changed Word binding tags, and changed resume sections.
 
 ## Discord bot
 
@@ -190,7 +193,7 @@ The bot registers one grouped slash command with three mutually exclusive input 
 
 Discord slash-command values are named options, so pasted text uses `jd:` rather than an unnamed positional argument. Forge requires exactly one of `jd`, `file`, or `url`. Direct `jd` input is limited by Discord to 6,000 characters. File input is limited to a non-empty UTF-8 `.txt` file; URL input passes through the same public-URL validation and OpenAI web-search ingestion as the CLI.
 
-The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with the generated DOCX, request count, estimated OpenAI cost, and material-gap count. Only one request runs at a time. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
+The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with the generated DOCX, request count, estimated OpenAI cost, evidence-backed keyword coverage, changed sections, and material-gap count. Only one request runs at a time. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
 
 Access is default-deny. `DISCORD_ALLOWED_USER_IDS` must contain at least one numeric user ID. No message-content or other privileged Gateway intent is used, and all command responses are ephemeral.
 

@@ -280,6 +280,12 @@ class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
                     job_title="Engineer",
                     company="Example",
                     usage_summary={"requests": 2, "estimated_cost_usd": 0.0123},
+                    keyword_coverage={
+                        "surfacedAfter": 10,
+                        "targetedKeywords": 12,
+                        "percentage": 83.3,
+                        "changedSections": ["Summary", "Experience", "Projects"],
+                    },
                     gaps=(),
                 )
 
@@ -297,6 +303,14 @@ class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(1, len(interaction.edits))
             self.assertEqual([output.name], interaction.edits[0]["attachment_names"])
             self.assertIn("Estimated OpenAI cost: USD 0.01230000", interaction.edits[0]["content"])
+            self.assertIn(
+                "Evidence-backed keyword coverage: 10/12 (83.3%)",
+                interaction.edits[0]["content"],
+            )
+            self.assertIn(
+                "Sections tailored: Summary, Experience, Projects",
+                interaction.edits[0]["content"],
+            )
 
     async def test_unauthorized_or_ambiguous_request_never_runs_forge(self):
         calls = []

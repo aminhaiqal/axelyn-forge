@@ -226,6 +226,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 if result.context_database is not None:
                     print(f"Context database: {result.context_database}")
                 print(f"Context selection: {result.context_selection_output}")
+            if result.keyword_alignment_output is not None:
+                print(f"Keyword alignment: {result.keyword_alignment_output}")
+            if result.keyword_coverage is not None:
+                coverage = result.keyword_coverage
+                print(
+                    "Evidence-backed keyword coverage: "
+                    f"{coverage['surfacedAfter']}/{coverage['targetedKeywords']} "
+                    f"({coverage['percentage']:.1f}%)"
+                )
+                if coverage["changedSections"]:
+                    print("Sections tailored: " + ", ".join(coverage["changedSections"]))
+            if result.no_op_operations_removed:
+                print(
+                    "No-op operations removed: "
+                    + ", ".join(result.no_op_operations_removed)
+                )
             print(f"Tailoring operations: {result.operations_output}")
             print(f"Tailored resume JSON: {result.data_output}")
             print(f"Tailored DOCX: {result.docx_output}")

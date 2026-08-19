@@ -1,6 +1,7 @@
 import json
 import unittest
 
+from forge.context_selection import CONTEXT_SELECTION_SCHEMA
 from forge.errors import ProviderError
 from forge.job_source import WEB_JOB_DESCRIPTION_SCHEMA
 from forge.jsonio import load_json
@@ -65,6 +66,11 @@ class OpenAIProviderTests(unittest.TestCase):
             resume=self.resume,
             job_description="A supplied full-stack job description",
             candidate_context="Verified candidate context",
+            keyword_alignment={
+                "mode": "balanced",
+                "mustSurface": [{"phrase": "REST APIs"}],
+                "unsupported": [{"phrase": "Kafka"}],
+            },
             model="gpt-5-mini-test",
             client=client,
         )
@@ -83,6 +89,11 @@ class OpenAIProviderTests(unittest.TestCase):
             "Verified candidate context",
             payload["selectedVerifiedCandidateContext"],
         )
+        self.assertEqual("balanced", payload["keywordAlignment"]["mode"])
+        self.assertEqual(
+            "REST APIs",
+            payload["keywordAlignment"]["mustSurface"][0]["phrase"],
+        )
 
     def test_strict_schema_enum_and_const_nodes_declare_their_types(self):
         def assert_discriminator_types(value, path):
@@ -97,6 +108,7 @@ class OpenAIProviderTests(unittest.TestCase):
 
         for name, schema in (
             ("resume_tailoring_plan", TAILORING_PLAN_SCHEMA),
+            ("resume_context_selection", CONTEXT_SELECTION_SCHEMA),
             ("web_job_description", WEB_JOB_DESCRIPTION_SCHEMA),
         ):
             with self.subTest(schema=name):

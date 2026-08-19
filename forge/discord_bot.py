@@ -282,10 +282,26 @@ def _success_message(result: TailoringResult) -> str:
     request_count = int(summary.get("requests", 0))
     company = f" at {result.company}" if result.company else ""
     gap_note = f"\nMaterial gaps reported: {len(result.gaps)}" if result.gaps else ""
+    coverage = getattr(result, "keyword_coverage", None)
+    coverage_note = ""
+    if isinstance(coverage, Mapping):
+        surfaced = int(coverage.get("surfacedAfter", 0))
+        targeted = int(coverage.get("targetedKeywords", 0))
+        percentage = float(coverage.get("percentage", 0.0))
+        sections = coverage.get("changedSections", [])
+        section_note = (
+            f"\nSections tailored: {', '.join(str(item) for item in sections)}"
+            if isinstance(sections, list) and sections
+            else ""
+        )
+        coverage_note = (
+            f"\nEvidence-backed keyword coverage: {surfaced}/{targeted} "
+            f"({percentage:.1f}%){section_note}"
+        )
     return (
         f"Resume tailored for {result.job_title}{company}.\n"
         f"OpenAI requests: {request_count}\n"
-        f"Estimated OpenAI cost: USD {cost:.8f}{gap_note}"
+        f"Estimated OpenAI cost: USD {cost:.8f}{coverage_note}{gap_note}"
     )
 
 

@@ -57,6 +57,8 @@ Truthfulness is strict. Use only evidence in the canonical resume and verified c
 
 Optimize for relevance rather than keyword stuffing. Rewrite existing editable content to foreground the strongest genuine overlap. Keep bullets concise enough for the existing fixed-slot Word template. Do not change identity, contact details, employers, job titles, dates, education, entity IDs, or entity types. Use only target/field combinations in editableTargets. For text entities, field must be null. For absolute targets, field must be null.
 
+The keywordAlignment object is deterministic guidance derived from the JD and verified candidate evidence. Preserve or surface the employer's exact mustSurface phrases in natural, evidence-backed wording. Never introduce phrases listed as unsupported. Aim for meaningful coverage across summary, experience, projects, and skills when those sections contain relevant evidence. Prefer 8-15 substantive rewrites when justified, but never create a rewrite identical to currentValue merely to reach a count.
+
 Return a concise list of material gaps. Do not include generic weaknesses or advice in gaps."""
 
 
@@ -173,6 +175,7 @@ def generate_tailoring_plan(
     job_description: str,
     candidate_context: str = "",
     context_selection: Optional[Mapping[str, Any]] = None,
+    keyword_alignment: Optional[Mapping[str, Any]] = None,
     model: str = DEFAULT_OPENAI_MODEL,
     client=None,
     usage_store: Optional[OpenAIUsageStore] = None,
@@ -191,6 +194,7 @@ def generate_tailoring_plan(
             "editableTargets": editable_targets,
             "selectedVerifiedCandidateContext": candidate_context,
             "contextSelection": dict(context_selection or {}),
+            "keywordAlignment": dict(keyword_alignment or {}),
             "jobDescription": job_description,
         },
         ensure_ascii=False,

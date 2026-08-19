@@ -16,6 +16,18 @@ def selection_plan(selected_ids):
         "company": "Texas Instruments",
         "jobTitle": "Full Stack Software Engineer",
         "roleSignals": ["Full-stack delivery", "Production data systems"],
+        "jobKeywords": [
+            {
+                "phrase": "Python",
+                "priority": "required",
+                "category": "technology",
+            },
+            {
+                "phrase": "Kafka",
+                "priority": "preferred",
+                "category": "technology",
+            },
+        ],
         "selectedChunkIds": selected_ids,
         "gaps": ["No direct Kafka evidence"],
     }
@@ -51,6 +63,10 @@ class ContextSelectionTests(unittest.TestCase):
 
         self.assertEqual(selected_ids, [chunk.chunk_id for chunk in selection.selected_chunks])
         self.assertIn("Python API evidence.", selection.selected_context_text())
+        self.assertEqual(
+            ["Python", "Kafka"],
+            [keyword.phrase for keyword in selection.job_keywords],
+        )
         call = client.responses.calls[0]
         self.assertEqual("gpt-context-test", call["model"])
         self.assertEqual("default", call["service_tier"])
@@ -58,6 +74,24 @@ class ContextSelectionTests(unittest.TestCase):
         self.assertEqual(CONTEXT_SELECTION_SCHEMA, call["text"]["format"]["schema"])
         payload = json.loads(call["input"])
         self.assertEqual(3, len(payload["candidateContextChunks"]))
+
+    def test_selector_rejects_duplicate_job_keywords(self):
+        plan = selection_plan([self.chunks[0].chunk_id])
+        plan["jobKeywords"].append(
+            {
+                "phrase": "python",
+                "priority": "preferred",
+                "category": "technology",
+            }
+        )
+        client = FakeOpenAIClient(FakeOpenAIResponse(plan))
+
+        with self.assertRaisesRegex(ProviderError, "duplicate job keyword"):
+            select_context_with_openai(
+                job_description="JD",
+                chunks=self.chunks,
+                client=client,
+            )
 
     def test_selector_rejects_unknown_or_duplicate_ids(self):
         unknown = FakeOpenAIClient(FakeOpenAIResponse(selection_plan(["invented-id"])))
