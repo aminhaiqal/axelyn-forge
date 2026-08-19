@@ -7,7 +7,7 @@ import unicodedata
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from .bindings import resolve_bindings
 from .context_selection import (
@@ -35,6 +35,7 @@ from .openai_provider import (
     generate_tailoring_plan,
 )
 from .operations import apply_operations
+from .pdf import convert_docx_to_pdf
 from .usage_store import OpenAIUsageStore
 from .validation import validate_resume
 
@@ -61,6 +62,7 @@ class TailoringResult:
     operations_output: Path
     data_output: Path
     docx_output: Path
+    pdf_output: Optional[Path]
     applied_operations: int
     render_report: RenderReport
 
@@ -100,6 +102,8 @@ def tailor_resume_with_openai(
     model: str = DEFAULT_OPENAI_MODEL,
     context_selection_model: str = DEFAULT_CONTEXT_SELECTION_MODEL,
     web_search_model: str = DEFAULT_WEB_SEARCH_MODEL,
+    include_pdf: bool = False,
+    pdf_converter: Callable[[PathLike, PathLike], Path] = convert_docx_to_pdf,
     client=None,
 ) -> TailoringResult:
     """Generate a scoped OpenAI plan, validate it, and render final artifacts."""
@@ -258,6 +262,7 @@ def tailor_resume_with_openai(
     )
     final_data = destination / f"{base_name}.json"
     final_docx = destination / f"{base_name}.docx"
+    final_pdf = destination / f"{base_name}.pdf" if include_pdf else None
 
     try:
         with tempfile.TemporaryDirectory(dir=str(destination), prefix=".forge-tailor-") as temp_dir:
@@ -293,6 +298,9 @@ def tailor_resume_with_openai(
             staged_data = write_json(staging / final_data.name, tailored)
             staged_docx = staging / final_docx.name
             render_report = render_docx(template, staged_docx, values, strict=True)
+            staged_pdf = None
+            if final_pdf is not None:
+                staged_pdf = pdf_converter(staged_docx, staging / final_pdf.name)
 
             if staged_job_source is not None and final_job_source is not None:
                 os.replace(staged_job_source, final_job_source)
@@ -303,6 +311,8 @@ def tailor_resume_with_openai(
             os.replace(staged_operations, final_operations)
             os.replace(staged_data, final_data)
             os.replace(staged_docx, final_docx)
+            if staged_pdf is not None and final_pdf is not None:
+                os.replace(staged_pdf, final_pdf)
     except OSError as exc:
         raise TailoringError(f"Could not publish tailored resume artifacts: {exc}") from exc
 
@@ -338,6 +348,7 @@ def tailor_resume_with_openai(
         operations_output=final_operations,
         data_output=final_data,
         docx_output=final_docx,
+        pdf_output=final_pdf,
         applied_operations=len(targets),
         render_report=published_report,
     )

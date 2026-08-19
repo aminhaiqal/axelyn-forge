@@ -1,6 +1,6 @@
 # Axelyn Forge
 
-Axelyn Forge validates canonical resume JSON, resolves semantic bindings, and replaces text inside Word Structured Document Tags (SDTs). The DOCX template remains the source of truth for presentation: Forge edits `w:t` payloads without rebuilding paragraphs, runs, tables, numbering, or document layout.
+Axelyn Forge validates canonical resume JSON, resolves semantic bindings, and replaces text inside Word Structured Document Tags (SDTs). The DOCX template remains the source of truth for presentation: Forge edits `w:t` payloads without rebuilding paragraphs, runs, tables, numbering, or document layout. Tailoring also creates a PDF derivative through headless LibreOffice for convenient delivery.
 
 ## Setup
 
@@ -31,6 +31,19 @@ Render the included canonical resume and fixed-slot binding fixture:
 ```
 
 `schemas/profile.schema.json` is the default schema. Supply `--schema` to use a different one. Rendering validates the data and resolves all bindings before it writes an output file. The source template can never be used as the output path.
+
+Convert any existing Forge DOCX to PDF without modifying the source document:
+
+```bash
+.venv/bin/forge docx-to-pdf \
+  --input output/amin.docx \
+  --output output/amin.pdf
+
+# Equivalent convenience script when `forge` is on PATH:
+scripts/docx-to-pdf.sh output/amin.docx output/amin.pdf
+```
+
+The standalone command requires LibreOffice Writer. The Docker image already includes it. PDF conversion uses an isolated temporary LibreOffice profile, validates the resulting PDF, and atomically replaces the requested output only after success.
 
 ## AI tailoring boundary
 
@@ -109,6 +122,7 @@ After resolving the JD input, `--context` adds a context-selection call before t
 4. Forge rejects unknown, duplicate, empty, or excessive selections and resolves accepted IDs from SQLite.
 5. The main tailoring call receives the canonical resume and only the selected context chunks verbatim.
 6. Protected-field checks, schema validation, binding, and deterministic DOCX rendering run locally.
+7. Headless LibreOffice converts the finished DOCX into a validated PDF; the DOCX remains untouched.
 
 Index or refresh the database independently:
 
@@ -174,6 +188,7 @@ The command produces auditable files named from the model-extracted job title. U
 - `Amin_Haiqal_Resume_[Job_Title].operations.json`
 - `Amin_Haiqal_Resume_[Job_Title].json`
 - `Amin_Haiqal_Resume_[Job_Title].docx`
+- `Amin_Haiqal_Resume_[Job_Title].pdf`
 
 The context-selection call sends the JD and full indexed context catalog to OpenAI. It also extracts concise employer terminology and classifies each term as required, preferred, or responsibility-level. Forge then deterministically checks those terms against canonical stable-ID entities and the selected verified context. Up to 12 supported terms become `mustSurface` guidance for the main call; unsupported terms remain explicit gaps and cannot become candidate claims. No-op rewrites are removed before operations are applied.
 
@@ -193,7 +208,7 @@ The bot registers one grouped slash command with three mutually exclusive input 
 
 Discord slash-command values are named options, so pasted text uses `jd:` rather than an unnamed positional argument. Forge requires exactly one of `jd`, `file`, or `url`. Direct `jd` input is limited by Discord to 6,000 characters. File input is limited to a non-empty UTF-8 `.txt` file; URL input passes through the same public-URL validation and OpenAI web-search ingestion as the CLI.
 
-The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with the generated DOCX, request count, estimated OpenAI cost, evidence-backed keyword coverage, changed sections, and material-gap count. Only one request runs at a time. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
+The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with both the generated DOCX and PDF, request count, estimated OpenAI cost, evidence-backed keyword coverage, changed sections, and material-gap count. Only one request runs at a time. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
 
 Access is default-deny. `DISCORD_ALLOWED_USER_IDS` must contain at least one numeric user ID. No message-content or other privileged Gateway intent is used, and all command responses are ephemeral.
 
@@ -209,7 +224,7 @@ Setting `DISCORD_GUILD_ID` keeps the command scoped to one server and makes comm
 
 ### VPS deployment
 
-Docker Compose runs the bot as an unprivileged user with a read-only container filesystem. The named `forge-state` volume is the only persistent writable location and contains the SQLite context/cost database plus generated artifacts.
+Docker Compose runs the bot as an unprivileged user with a read-only container filesystem. The named `forge-state` volume is the only persistent writable location and contains the SQLite context/cost database plus generated artifacts. The image includes LibreOffice Writer and maps the template's unembedded Aptos, Calibri, Cambria, and Courier fonts to available substitutes, including metric-compatible replacements where available. Because Microsoft Word and LibreOffice use different layout engines, inspect the PDF fixture after template or font changes; the DOCX remains the authoritative document.
 
 ```bash
 cp .env.example .env
@@ -250,7 +265,7 @@ The GitHub `production` environment uses these repository secrets:
 
 If the production branch changes, update both the workflow trigger and `DEPLOY_BRANCH` in `scripts/vps-deploy.sh` together.
 
-Back up the `forge-state` volume regularly. SQLite, generated resume JSON, and DOCX files can contain personal information and should not be placed in a public directory.
+Back up the `forge-state` volume regularly. SQLite, generated resume JSON, DOCX, and PDF files can contain personal information and should not be placed in a public directory.
 
 ## Binding paths
 
@@ -262,4 +277,4 @@ A source beginning with `document` is an absolute semantic path, such as `docume
 .venv/bin/python -m unittest discover -v
 ```
 
-The suite covers schema failures, duplicate stable IDs, SDT discovery, complete binding coverage, identity rendering, multiple and Unicode replacements, preservation of paragraph/run properties, missing bindings, source-template protection, and output archive validity.
+The suite covers schema failures, duplicate stable IDs, SDT discovery, complete binding coverage, identity rendering, multiple and Unicode replacements, preservation of paragraph/run properties, missing bindings, source-template protection, DOCX archive validity, atomic PDF conversion, and Discord dual-file delivery.

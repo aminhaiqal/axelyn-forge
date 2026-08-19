@@ -7,6 +7,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        fonts-crosextra-caladea \
+        fonts-crosextra-carlito \
+        fonts-liberation \
+        libreoffice-writer \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY deploy/fontconfig/99-axelyn-forge-font-substitutions.conf /etc/fonts/conf.d/
+RUN fc-cache -f
+
 COPY pyproject.toml README.md ./
 COPY forge ./forge
 RUN python -m pip install .

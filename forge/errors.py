@@ -53,6 +53,10 @@ class DocxError(ForgeError):
     """A DOCX archive or WordprocessingML part is invalid."""
 
 
+class PDFConversionError(ForgeError):
+    """A rendered DOCX could not be converted into a valid PDF."""
+
+
 class MissingTemplateBindingError(BindingError):
     """One or more template SDTs have no resolved value."""
 

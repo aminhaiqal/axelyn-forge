@@ -11,6 +11,7 @@ from .context_selection import DEFAULT_CONTEXT_SELECTION_MODEL
 from .context_store import SQLiteContextStore, sync_context_database
 from .job_source import DEFAULT_WEB_SEARCH_MODEL
 from .openai_provider import DEFAULT_OPENAI_MODEL
+from .pdf import DEFAULT_PDF_TIMEOUT_SECONDS, convert_docx_to_pdf
 from .tailoring import tailor_resume_with_openai
 from .usage_store import OpenAIUsageStore
 
@@ -65,6 +66,19 @@ def _parser() -> argparse.ArgumentParser:
     )
     usage_summary.add_argument("--database", required=True, type=Path)
     usage_summary.add_argument("--workflow-id")
+
+    pdf = subcommands.add_parser(
+        "docx-to-pdf",
+        help="convert an existing DOCX into a PDF with headless LibreOffice",
+    )
+    pdf.add_argument("--input", required=True, type=Path)
+    pdf.add_argument("--output", required=True, type=Path)
+    pdf.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_PDF_TIMEOUT_SECONDS,
+        help=f"conversion timeout in seconds (default: {DEFAULT_PDF_TIMEOUT_SECONDS})",
+    )
 
     render = subcommands.add_parser("render", help="validate, bind, and render a new DOCX")
     render.add_argument("--template", required=True, type=Path)
@@ -187,6 +201,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps(summary, indent=2, ensure_ascii=False))
             return 0
 
+        if args.command == "docx-to-pdf":
+            output = convert_docx_to_pdf(
+                args.input,
+                args.output,
+                timeout_seconds=args.timeout,
+            )
+            print(f"Converted PDF: {output}")
+            return 0
+
         if args.command == "tailor":
             model = args.model or os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
             context_model = args.context_model or os.environ.get(
@@ -214,6 +237,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 model=model,
                 context_selection_model=context_model,
                 web_search_model=web_model,
+                include_pdf=True,
             )
             print(f"OpenAI model: {result.model}")
             print(f"OpenAI workflow ID: {result.workflow_id}")
@@ -245,6 +269,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"Tailoring operations: {result.operations_output}")
             print(f"Tailored resume JSON: {result.data_output}")
             print(f"Tailored DOCX: {result.docx_output}")
+            print(f"Tailored PDF: {result.pdf_output}")
             print(
                 "OpenAI requests: "
                 f"{result.usage_summary['requests']}; estimated cost: USD "

@@ -15,6 +15,16 @@ from .test_job_source import found_job, web_output, web_usage
 from .test_openai_provider import valid_plan
 
 
+VALID_PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\nstartxref\n0\n%%EOF\n"
+
+
+def fake_pdf_converter(source, output):
+    validate_docx_archive(source)
+    destination = Path(output)
+    destination.write_bytes(VALID_PDF)
+    return destination
+
+
 class OpenAITailoringWorkflowTests(unittest.TestCase):
     def test_safe_filename_component(self):
         self.assertEqual(
@@ -23,7 +33,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
         )
         self.assertEqual("AI_Platform", safe_filename_component("AI / Platform"))
 
-    def test_mocked_openai_workflow_emits_all_three_artifacts(self):
+    def test_mocked_openai_workflow_emits_docx_and_pdf_artifacts(self):
         client = FakeOpenAIClient(FakeOpenAIResponse(valid_plan()))
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -38,6 +48,8 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
                 output_dir=root / "output",
                 usage_database=root / "usage.sqlite3",
                 model="gpt-5-mini-test",
+                include_pdf=True,
+                pdf_converter=fake_pdf_converter,
                 client=client,
             )
 
@@ -45,6 +57,8 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             self.assertEqual(f"{base}.operations.json", result.operations_output.name)
             self.assertEqual(f"{base}.json", result.data_output.name)
             self.assertEqual(f"{base}.docx", result.docx_output.name)
+            self.assertEqual(f"{base}.pdf", result.pdf_output.name)
+            self.assertEqual(VALID_PDF, result.pdf_output.read_bytes())
             self.assertIsNone(result.keyword_alignment_output)
             self.assertIsNone(result.keyword_coverage)
             self.assertEqual(3, result.applied_operations)

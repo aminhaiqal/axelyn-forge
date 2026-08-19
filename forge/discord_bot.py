@@ -264,6 +264,7 @@ class ForgeDiscordRunner:
                     model=self.config.model,
                     context_selection_model=self.config.context_model,
                     web_search_model=self.config.web_model,
+                    include_pdf=True,
                 )
         finally:
             self._busy = False
@@ -400,15 +401,21 @@ class ForgeDiscordClient(discord.Client):
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             result = await self.runner.run(attachment=attachment, url=url, jd=jd)
-            upload = discord.File(str(result.docx_output), filename=result.docx_output.name)
+            if result.pdf_output is None:
+                raise DiscordBotError("Forge did not produce the expected PDF output")
+            uploads = [
+                discord.File(str(result.docx_output), filename=result.docx_output.name),
+                discord.File(str(result.pdf_output), filename=result.pdf_output.name),
+            ]
             try:
                 await interaction.edit_original_response(
                     content=_success_message(result),
-                    attachments=[upload],
+                    attachments=uploads,
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
             finally:
-                upload.close()
+                for upload in uploads:
+                    upload.close()
         except ForgeError as exc:
             await interaction.edit_original_response(
                 content=f"Forge could not tailor the resume: {_display_error(exc)}",

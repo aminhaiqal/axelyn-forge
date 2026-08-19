@@ -202,6 +202,7 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(sentinel, result)
         self.assertEqual("Role requirements ✓", observed["jd_text"])
         self.assertIsNone(observed["job_description_url"])
+        self.assertTrue(observed["include_pdf"])
         self.assertFalse(observed["job_description"].exists())
 
     async def test_txt_attachment_becomes_existing_temporary_jd_for_forge(self):
@@ -269,14 +270,17 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_authorized_request_is_deferred_privately_and_returns_docx(self):
+    async def test_authorized_request_is_deferred_privately_and_returns_docx_and_pdf(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "Amin_Haiqal_Resume_Engineer.docx"
             output.write_bytes(b"test-docx")
+            pdf_output = output.with_suffix(".pdf")
+            pdf_output.write_bytes(b"test-pdf")
 
             def tailor(**kwargs):
                 return SimpleNamespace(
                     docx_output=output,
+                    pdf_output=pdf_output,
                     job_title="Engineer",
                     company="Example",
                     usage_summary={"requests": 2, "estimated_cost_usd": 0.0123},
@@ -301,7 +305,10 @@ class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual({"ephemeral": True, "thinking": True}, interaction.response.deferred)
             self.assertEqual([], interaction.response.messages)
             self.assertEqual(1, len(interaction.edits))
-            self.assertEqual([output.name], interaction.edits[0]["attachment_names"])
+            self.assertEqual(
+                [output.name, pdf_output.name],
+                interaction.edits[0]["attachment_names"],
+            )
             self.assertIn("Estimated OpenAI cost: USD 0.01230000", interaction.edits[0]["content"])
             self.assertIn(
                 "Evidence-backed keyword coverage: 10/12 (83.3%)",
