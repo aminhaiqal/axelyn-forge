@@ -176,6 +176,63 @@ The command produces auditable files named from the model-extracted job title. U
 
 The context-selection call sends the JD and full indexed context catalog to OpenAI. The main call sends the JD, canonical resume, explicit editable-target catalog, selection signals, and selected context excerpts. URL ingestion sends only the requested URL and retrieval instructions. All calls use `store=False`. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields.
 
+## Discord bot
+
+Forge can run as a private Discord Gateway bot on a small VPS. It makes an outbound connection to Discord, so the VPS does not need a domain, TLS certificate, reverse proxy, or public application port.
+
+The bot registers one grouped slash command with two mutually exclusive input options:
+
+```text
+/forge tailor file:<job-description.txt>
+/forge tailor url:<https://company.example/jobs/123>
+```
+
+Discord represents attachments and strings as different option types, so they appear as `file` and `url` under the same command. Forge requires exactly one. File input is limited to a non-empty UTF-8 `.txt` file; URL input passes through the same public-URL validation and OpenAI web-search ingestion as the CLI.
+
+The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with the generated DOCX, request count, estimated OpenAI cost, and material-gap count. Only one request runs at a time. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
+
+Access is default-deny. `DISCORD_ALLOWED_USER_IDS` must contain at least one numeric user ID. No message-content or other privileged Gateway intent is used, and all command responses are ephemeral.
+
+### Discord application setup
+
+1. Create an application in the Discord Developer Portal and add a bot.
+2. Keep all privileged Gateway intents disabled.
+3. Install the app in a private test server with the `bot` and `applications.commands` scopes. Grant only the permissions needed to use commands, send messages, and attach files.
+4. Enable Developer Mode in Discord, then copy your user ID and test-server ID.
+5. Copy `.env.example` to `.env` and replace the placeholder values. Never commit `.env` or paste either token into chat.
+
+Setting `DISCORD_GUILD_ID` keeps the command scoped to one server and makes command updates appear immediately during development. If it is omitted, Forge registers the command globally while still enforcing the user allowlist.
+
+### VPS deployment
+
+Docker Compose runs the bot as an unprivileged user with a read-only container filesystem. The named `forge-state` volume is the only persistent writable location and contains the SQLite context/cost database plus generated artifacts.
+
+```bash
+cp .env.example .env
+chmod 600 .env
+# Edit .env locally on the VPS, then:
+docker compose up -d --build
+docker compose logs -f forge-discord
+```
+
+There are no published container ports. The VPS firewall can remain closed except for the SSH access you already use for administration.
+
+Inspect the accumulated OpenAI estimate without entering the container shell:
+
+```bash
+docker compose exec forge-discord \
+  forge usage-summary --database /state/context.sqlite3
+```
+
+Update or restart the service with:
+
+```bash
+git pull --ff-only
+docker compose up -d --build
+```
+
+Back up the `forge-state` volume regularly. SQLite, generated resume JSON, and DOCX files can contain personal information and should not be placed in a public directory.
+
 ## Binding paths
 
 A source beginning with `document` is an absolute semantic path, such as `document.profile.fullName`. Any other source begins with a stable canonical ID, such as `experience-axelyn.role` or `aria-highlight-1.text`. Bindings can join arrays, compose several values with a separator, select a link by semantic fields, split one semantic value across fixed continuation slots, and intentionally emit a literal value.

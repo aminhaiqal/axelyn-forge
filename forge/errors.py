@@ -41,6 +41,14 @@ class UsageStoreError(ForgeError):
     """The SQLite LLM request/cost ledger could not be read or updated."""
 
 
+class DiscordBotError(ForgeError):
+    """Discord bot configuration or input is invalid."""
+
+
+class DiscordBotBusyError(DiscordBotError):
+    """The single-worker Discord bot is already tailoring another resume."""
+
+
 class DocxError(ForgeError):
     """A DOCX archive or WordprocessingML part is invalid."""
 
