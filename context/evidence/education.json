@@ -1,0 +1,22 @@
+{
+  "education": [
+    {
+      "id": "education-utm",
+      "institution": "Universiti Teknologi Malaysia",
+      "qualification": "Bachelor of Computer Science (Software Engineering) with Honours",
+      "location": "Skudai, Johor",
+      "start": "2021-09",
+      "end": "2024-08"
+    }
+  ],
+  "languages": [
+    {
+      "language": "Malay",
+      "proficiency": "Native"
+    },
+    {
+      "language": "English",
+      "proficiency": "Professional Proficiency"
+    }
+  ]
+}

@@ -1,0 +1,169 @@
+{
+  "projects": [
+    {
+      "id": "project-monitorscape",
+      "name": "Monitorscape",
+      "category": [
+        "backend",
+        "data",
+        "platform",
+        "regtech"
+      ],
+      "strongFor": [
+        "backend-engineer",
+        "software-engineer",
+        "data-engineer",
+        "systems-analyst"
+      ],
+      "facts": [
+        "Built regulatory monitoring ingestion pipelines",
+        "Collected from government portals, RSS feeds, public APIs, PDFs and dynamic web sources",
+        "Implemented extraction, validation, transformation, categorization and summarization workflows",
+        "Persisted structured records in PostgreSQL",
+        "Implemented structured logging, retries and recovery mechanisms",
+        "Handled unavailable services, malformed documents and changing portal behavior"
+      ],
+      "technologies": [
+        "Python",
+        "Django",
+        "FastAPI",
+        "PostgreSQL",
+        "Redis",
+        "Docker",
+        "AWS",
+        "REST APIs"
+      ],
+      "positioning": "Treat as production backend/data engineering, not merely web scraping."
+    },
+    {
+      "id": "project-aria",
+      "name": "ARIA",
+      "fullName": "Autonomous Regulatory Intelligence Agent",
+      "category": [
+        "ai",
+        "backend",
+        "regtech"
+      ],
+      "strongFor": [
+        "ai-engineer",
+        "software-engineer",
+        "backend-engineer"
+      ],
+      "facts": [
+        "Combined source ingestion, document processing and structured LLM analysis",
+        "Implemented evidence attribution",
+        "Generated recommended actions",
+        "Stored persistent execution records",
+        "Implemented duplicate detection",
+        "Implemented validation and failure handling",
+        "Produced auditable outputs"
+      ],
+      "technologies": [
+        "Python",
+        "FastAPI",
+        "PostgreSQL",
+        "Docker",
+        "REST APIs",
+        "LLM APIs",
+        "RAG",
+        "Structured Outputs"
+      ],
+      "constraints": [
+        "Do not claim production customer deployment unless explicitly verified"
+      ]
+    },
+    {
+      "id": "project-pastelocity",
+      "name": "Pastelocity",
+      "category": [
+        "business-systems",
+        "ecommerce",
+        "client-delivery"
+      ],
+      "strongFor": [
+        "technical-business-analyst",
+        "systems-analyst",
+        "solutions-engineer",
+        "software-engineer"
+      ],
+      "facts": [
+        "Built for a client",
+        "Covers products, customers, orders, payments and receipts",
+        "Supports daily operational workflows",
+        "Includes e-commerce foundations",
+        "Consolidated business processes into a unified software system",
+        "Required business process understanding, requirements translation, data modelling and implementation"
+      ],
+      "positioning": "Treat as a business operations system, not simply an online store.",
+      "preferredDescription": "Designed and built a business operations system that unified product, customer, order, payment, receipt and e-commerce workflows.",
+      "constraints": [
+        "Do not invent revenue metrics",
+        "Do not invent conversion improvements",
+        "Do not invent user counts",
+        "Do not invent sales growth",
+        "Do not invent order volume"
+      ]
+    },
+    {
+      "id": "project-memora",
+      "name": "Memora",
+      "category": [
+        "product",
+        "event-tech",
+        "full-stack"
+      ],
+      "strongFor": [
+        "software-engineer",
+        "product-engineer",
+        "backend-engineer"
+      ],
+      "facts": [
+        "Built a private event photo and digital wish-card platform",
+        "Guests can participate without installing an application or creating an account",
+        "Supports photo uploads and digital wish cards",
+        "Implemented authentication",
+        "Designed PostgreSQL data models",
+        "Built REST APIs",
+        "Implemented ownership validation",
+        "Supports ordered photo attachments",
+        "Uses containerized deployment",
+        "Supports Google Drive gallery export"
+      ],
+      "technologies": [
+        "Python",
+        "FastAPI",
+        "Django",
+        "PostgreSQL",
+        "React",
+        "TypeScript",
+        "Docker",
+        "Google Drive API",
+        "Cloud Storage"
+      ]
+    },
+    {
+      "id": "project-qwen-classifier",
+      "name": "Romanian Legislative Classifier",
+      "category": [
+        "machine-learning",
+        "nlp"
+      ],
+      "strongFor": [
+        "ai-engineer",
+        "machine-learning-engineer"
+      ],
+      "facts": [
+        "Fine-tuned Qwen3-1.7B for multi-label classification of Romanian legislative summaries",
+        "Used approximately 5000 training examples",
+        "Trained locally on NVIDIA RTX 4060",
+        "Worked with QLoRA/LoRA and quantization"
+      ],
+      "metrics": {
+        "exactMatch": 43.35,
+        "microF1": 71.91,
+        "macroF1": 55.66,
+        "invalidOutputs": 0
+      }
+    }
+  ]
+}

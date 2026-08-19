@@ -1,0 +1,49 @@
+{
+  "experience": [
+    {
+      "id": "experience-axelyn",
+      "organization": "Axelyn Technologies",
+      "role": "Software Engineer",
+      "employmentType": "Self-employed",
+      "start": "2024-01",
+      "end": null,
+      "current": true,
+      "location": "Malaysia / Remote",
+      "facts": [
+        "Built backend services using Python and Go",
+        "Worked with Django and FastAPI",
+        "Designed REST APIs",
+        "Used PostgreSQL and Redis",
+        "Implemented authentication and authorization",
+        "Built background processing workflows",
+        "Built data-ingestion workflows",
+        "Integrated external services",
+        "Worked with React and TypeScript interfaces",
+        "Deployed with Docker",
+        "Used Kubernetes/k3s",
+        "Used AWS",
+        "Used GitHub Actions",
+        "Worked with Linux and Traefik",
+        "Implemented testing, structured logging, validation, retries, idempotency and monitoring",
+        "Owned work from requirements through implementation, deployment and stakeholder handoff"
+      ]
+    },
+    {
+      "id": "experience-armo",
+      "organization": "ARMO - Romanian Association of Online Stores",
+      "role": "Software Engineering Intern",
+      "start": "2023-10",
+      "end": "2024-01",
+      "location": "Romania / Remote",
+      "facts": [
+        "Built Python-based extraction pipelines for more than 20 government portals",
+        "Converted legislative updates into structured regulatory-monitoring data",
+        "Used Django and PostgreSQL",
+        "Implemented scheduled processing",
+        "Implemented validation and structured logging",
+        "Worked on database schema design",
+        "Implemented failure recovery for changing external sources"
+      ]
+    }
+  ]
+}

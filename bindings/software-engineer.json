@@ -1,0 +1,280 @@
+{
+  "schemaVersion": "1.0.0",
+  "bindings": {
+    "profile.fullName": {
+      "source": "document.profile.fullName"
+    },
+    "profile.headline": {
+      "source": "document.profile.headline"
+    },
+    "profile.contactLine": {
+      "sources": [
+        "document.profile.contact.email",
+        "document.profile.contact.phone",
+        "document.profile.contact.location",
+        {
+          "source": "document.profile.contact.links",
+          "select": {
+            "type": "linkedin"
+          },
+          "path": "url",
+          "stripPrefix": "https://"
+        }
+      ],
+      "separator": " | "
+    },
+    "summary.text": {
+      "source": "summary-1.text"
+    },
+
+    "experience.axelyn.role": {
+      "source": "experience-axelyn.role"
+    },
+    "experience.axelyn.date": {
+      "source": "experience-axelyn.date.display"
+    },
+    "experience.axelyn.meta": {
+      "sources": [
+        "experience-axelyn.organization",
+        {
+          "source": "experience-axelyn.employmentType",
+          "required": false
+        },
+        {
+          "source": "experience-axelyn.location",
+          "required": false
+        }
+      ],
+      "separator": " | "
+    },
+    "experience.axelyn.highlight.1": {
+      "source": "axelyn-highlight-1.text"
+    },
+    "experience.axelyn.highlight.2": {
+      "source": "axelyn-highlight-2.text"
+    },
+    "experience.axelyn.highlight.3": {
+      "source": "axelyn-highlight-3.text"
+    },
+    "experience.axelyn.highlight.4": {
+      "source": "axelyn-highlight-4.text"
+    },
+    "experience.axelyn.technologies": {
+      "source": "experience-axelyn.technologies",
+      "join": ", "
+    },
+
+    "experience.armo.role": {
+      "source": "experience-armo.role"
+    },
+    "experience.armo.date": {
+      "source": "experience-armo.date.display"
+    },
+    "experience.armo.meta": {
+      "sources": [
+        "experience-armo.organization",
+        {
+          "source": "experience-armo.employmentType",
+          "required": false
+        },
+        {
+          "source": "experience-armo.location",
+          "required": false
+        }
+      ],
+      "separator": " | "
+    },
+    "experience.armo.highlight.1": {
+      "source": "armo-highlight-1.text"
+    },
+    "experience.armo.highlight.2": {
+      "source": "armo-highlight-2.text"
+    },
+    "experience.armo.technologies": {
+      "source": "experience-armo.technologies",
+      "join": ", "
+    },
+
+    "project.monitorscape.title": {
+      "sources": [
+        "project-monitorscape.name",
+        "project-monitorscape.subtitle"
+      ],
+      "separator": " – "
+    },
+    "project.monitorscape.date": {
+      "source": "project-monitorscape.date.display"
+    },
+    "project.monitorscape.role": {
+      "source": "project-monitorscape.role"
+    },
+    "project.monitorscape.highlight.1": {
+      "source": "monitorscape-highlight-1.text"
+    },
+    "project.monitorscape.highlight.2": {
+      "source": "monitorscape-highlight-2.text"
+    },
+    "project.monitorscape.highlight.3": {
+      "source": "monitorscape-highlight-3.text"
+    },
+    "project.monitorscape.technologies": {
+      "source": "project-monitorscape.technologies",
+      "join": ", "
+    },
+
+    "project.aria.title": {
+      "sources": [
+        "project-aria.name",
+        "project-aria.subtitle"
+      ],
+      "separator": " - "
+    },
+    "project.aria.date": {
+      "source": "project-aria.date.display"
+    },
+    "project.aria.role": {
+      "source": "project-aria.role"
+    },
+    "project.aria.highlight.1": {
+      "source": "aria-highlight-1.text"
+    },
+    "project.aria.highlight.2.part1": {
+      "source": "aria-highlight-2.text",
+      "split": {
+        "maxChars": 123,
+        "part": "head"
+      }
+    },
+    "project.aria.highlight.2.part2": {
+      "source": "aria-highlight-2.text",
+      "split": {
+        "maxChars": 123,
+        "part": "tail"
+      }
+    },
+    "project.aria.highlight.3": {
+      "source": "aria-highlight-3.text"
+    },
+    "project.aria.technologies": {
+      "source": "project-aria.technologies",
+      "join": ", "
+    },
+
+    "project.memora.title": {
+      "sources": [
+        "project-memora.name",
+        "project-memora.subtitle"
+      ],
+      "separator": " - "
+    },
+    "project.memora.date": {
+      "source": "project-memora.date.display"
+    },
+    "project.memora.role": {
+      "source": "project-memora.role"
+    },
+    "project.memora.highlight.1": {
+      "source": "memora-highlight-1.text"
+    },
+    "project.memora.highlight.2": {
+      "source": "memora-highlight-2.text"
+    },
+    "project.memora.technologies": {
+      "source": "project-memora.technologies",
+      "join": ", "
+    },
+
+    "engineeringPractice.1": {
+      "source": "practice-1.text"
+    },
+    "engineeringPractice.2": {
+      "source": "practice-2.text"
+    },
+    "engineeringPractice.3": {
+      "source": "practice-3.text"
+    },
+    "engineeringPractice.4": {
+      "source": "practice-4.text"
+    },
+
+    "education.utm.qualification": {
+      "source": "education-utm.qualification"
+    },
+    "education.utm.date": {
+      "source": "education-utm.date.display"
+    },
+    "education.utm.meta": {
+      "sources": [
+        "education-utm.institution",
+        {
+          "source": "education-utm.location",
+          "required": false
+        }
+      ],
+      "separator": " | "
+    },
+
+    "skills.programming.label": {
+      "source": "skills-programming.label"
+    },
+    "skills.programming.items": {
+      "source": "skills-programming.items",
+      "join": ", "
+    },
+    "skills.backend.label": {
+      "source": "skills-backend.label"
+    },
+    "skills.backend.items": {
+      "source": "skills-backend.items",
+      "join": ", "
+    },
+    "skills.data.label": {
+      "source": "skills-data.label"
+    },
+    "skills.data.items": {
+      "source": "skills-data.items",
+      "join": ", "
+    },
+    "skills.cloud.label": {
+      "source": "skills-cloud.label"
+    },
+    "skills.cloud.items": {
+      "source": "skills-cloud.items",
+      "join": ", "
+    },
+    "skills.reliability.label": {
+      "source": "skills-reliability.label"
+    },
+    "skills.reliability.items": {
+      "source": "skills-reliability.items",
+      "join": ", "
+    },
+    "skills.ai.label": {
+      "source": "skills-ai.label"
+    },
+    "skills.ai.items": {
+      "source": "skills-ai.items",
+      "join": ", "
+    },
+    "skills.softwareEngineering.label": {
+      "source": "skills-software-engineering.label"
+    },
+    "skills.softwareEngineering.items": {
+      "source": "skills-software-engineering.items",
+      "join": ", "
+    },
+
+    "language.malay.name": {
+      "source": "language-malay.language"
+    },
+    "language.malay.proficiency": {
+      "source": "language-malay.proficiency"
+    },
+    "language.english.name": {
+      "source": "language-english.language"
+    },
+    "language.english.proficiency": {
+      "source": "language-english.proficiency"
+    }
+  }
+}

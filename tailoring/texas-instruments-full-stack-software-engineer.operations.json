@@ -1,0 +1,295 @@
+{
+  "schemaVersion": "1.0.0",
+  "target": {
+    "company": "Texas Instruments",
+    "jobTitle": "Full Stack Software Engineer"
+  },
+  "operations": [
+    {
+      "operation": "rewrite",
+      "target": "document.id",
+      "value": "amin-haiqal-texas-instruments-full-stack-software-engineer"
+    },
+    {
+      "operation": "rewrite",
+      "target": "document.variant",
+      "value": "full-stack-software-engineer"
+    },
+    {
+      "operation": "rewrite",
+      "target": "document.metadata.title",
+      "value": "Amin Haiqal - Full Stack Software Engineer Resume"
+    },
+    {
+      "operation": "rewrite",
+      "target": "document.metadata.source",
+      "value": "Tailored from the master resume for the supplied Texas Instruments job description"
+    },
+    {
+      "operation": "rewrite",
+      "target": "document.profile.headline",
+      "value": "Full Stack Software Engineer | React, TypeScript, Python, APIs & Cloud Systems"
+    },
+    {
+      "operation": "rewrite",
+      "target": "summary-1",
+      "value": "Full-stack software engineer with 2+ years of experience building and operating production web applications, REST APIs, data pipelines, and cloud systems using React, TypeScript, Python, Go, Django, FastAPI, PostgreSQL, Redis, Docker, Kubernetes, Linux, and AWS. Delivers across the full software development lifecycle, from translating operational requirements and designing interfaces, APIs, and data models to testing, deployment, monitoring, incident debugging, and stakeholder handoff. Built multi-source ingestion and automation workflows with validation, structured logging, retries, recovery mechanisms, and production-focused reliability."
+    },
+    {
+      "operation": "rewrite",
+      "target": "axelyn-highlight-1",
+      "value": "Built and shipped production full-stack systems across business operations, regulatory intelligence, and event technology, translating real operational requirements into React/TypeScript interfaces, REST APIs, backend services, PostgreSQL data models, and automation workflows."
+    },
+    {
+      "operation": "rewrite",
+      "target": "axelyn-highlight-2",
+      "value": "Developed Python and Go services with Django/FastAPI, REST APIs, PostgreSQL, Redis, authentication and authorization, background processing, external integrations, and user-facing React/TypeScript features."
+    },
+    {
+      "operation": "rewrite",
+      "target": "axelyn-highlight-3",
+      "value": "Engineered multi-source data-ingestion and scheduled processing workflows with validation, structured logging, retries, idempotency, health checks, and recovery mechanisms to keep production data accurate and reviewable."
+    },
+    {
+      "operation": "rewrite",
+      "target": "axelyn-highlight-4",
+      "value": "Deployed and operated containerized applications on Linux using Docker, Kubernetes/k3s, AWS, GitHub Actions, and Traefik; monitored service health, debugged production failures, and delivered reliability improvements through automated testing and observability."
+    },
+    {
+      "operation": "rewrite",
+      "target": "experience-axelyn",
+      "field": "technologies",
+      "value": [
+        "React",
+        "TypeScript",
+        "Python",
+        "Go",
+        "Django",
+        "FastAPI",
+        "REST APIs",
+        "PostgreSQL",
+        "Redis",
+        "Docker",
+        "Kubernetes/k3s",
+        "Linux",
+        "AWS",
+        "GitHub Actions"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "armo-highlight-1",
+      "value": "Built Python data-extraction pipelines for more than 20 government portals, converting time-sensitive legislative updates from varied external sources into consistent structured data for regulatory monitoring."
+    },
+    {
+      "operation": "rewrite",
+      "target": "armo-highlight-2",
+      "value": "Developed Django and PostgreSQL ingestion workflows with scheduled processing, validation, structured logging, SQL schema design, and recovery mechanisms for failed jobs, unavailable services, and changing source behavior."
+    },
+    {
+      "operation": "rewrite",
+      "target": "monitorscape-highlight-1",
+      "value": "Engineered an hourly ingestion pipeline across a nine-hour daily monitoring window, collecting operational updates from government portals, RSS feeds, public APIs, PDFs, and dynamically scraped pages."
+    },
+    {
+      "operation": "rewrite",
+      "target": "monitorscape-highlight-2",
+      "value": "Built modular processing workflows that validated, transformed, categorized, summarized, and stored structured records in PostgreSQL, giving product users consistent and reviewable monitoring data."
+    },
+    {
+      "operation": "rewrite",
+      "target": "monitorscape-highlight-3",
+      "value": "Improved production stability and data accuracy with structured logging, retries, recovery mechanisms, and source-specific handling for unavailable services, malformed documents, and breaking portal changes."
+    },
+    {
+      "operation": "rewrite",
+      "target": "project-monitorscape",
+      "field": "technologies",
+      "value": [
+        "Python",
+        "Django",
+        "FastAPI",
+        "REST APIs",
+        "PostgreSQL",
+        "Redis",
+        "Data Ingestion",
+        "Docker",
+        "AWS"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "aria-highlight-1",
+      "value": "Built an autonomous regulatory-intelligence web system combining source ingestion, document processing, structured LLM analysis, evidence attribution, and recommended actions in an integrated end-to-end workflow."
+    },
+    {
+      "operation": "rewrite",
+      "target": "aria-highlight-2",
+      "value": "Developed Python/FastAPI REST services with PostgreSQL persistence, duplicate detection, validation, failure handling, and auditable execution records for reliable integration with automated agents and review workflows."
+    },
+    {
+      "operation": "rewrite",
+      "target": "aria-highlight-3",
+      "value": "Designed production-oriented API, data-persistence, and background-processing components that kept automated outputs structured, traceable, and reviewable by users."
+    },
+    {
+      "operation": "rewrite",
+      "target": "project-aria",
+      "field": "technologies",
+      "value": [
+        "Python",
+        "FastAPI",
+        "REST APIs",
+        "PostgreSQL",
+        "Docker",
+        "LLM APIs",
+        "RAG",
+        "Structured Outputs"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "memora-highlight-1",
+      "value": "Built a guest-facing event web platform for photo uploads and digital wish cards, delivering a simple user experience without requiring an application install or account creation."
+    },
+    {
+      "operation": "rewrite",
+      "target": "memora-highlight-2",
+      "value": "Designed React/TypeScript interfaces, authenticated Python backend workflows, PostgreSQL data models, REST APIs, ownership validation, ordered photo attachments, containerized deployment, and Google Drive integration."
+    },
+    {
+      "operation": "rewrite",
+      "target": "project-memora",
+      "field": "technologies",
+      "value": [
+        "React",
+        "TypeScript",
+        "Python",
+        "FastAPI",
+        "Django",
+        "REST APIs",
+        "PostgreSQL",
+        "Docker",
+        "Google Drive API"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "practice-1",
+      "value": "Full-stack software delivery across requirements analysis, interface and API design, data-model design, implementation, automated testing, deployment, monitoring, iteration, and stakeholder handoff."
+    },
+    {
+      "operation": "rewrite",
+      "target": "practice-2",
+      "value": "Data and integration engineering across multi-source ingestion pipelines, scheduled and background workflows, external APIs, ETL-style transformations, SQL data models, and reusable structured outputs."
+    },
+    {
+      "operation": "rewrite",
+      "target": "practice-3",
+      "value": "Production reliability and cloud operations using unit, integration, and API testing, structured logging, health checks, retries, idempotency, Docker, Kubernetes/k3s, AWS, Linux, and CI/CD."
+    },
+    {
+      "operation": "rewrite",
+      "target": "practice-4",
+      "value": "AI-system integration using Python services, REST APIs, LLM APIs, RAG, structured outputs, document processing, evidence attribution, validation, and human-reviewable workflows."
+    },
+    {
+      "operation": "rewrite",
+      "target": "skills-programming",
+      "field": "items",
+      "value": [
+        "TypeScript",
+        "Python",
+        "Go",
+        "SQL"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "skills-backend",
+      "field": "label",
+      "value": "Full Stack & APIs"
+    },
+    {
+      "operation": "rewrite",
+      "target": "skills-backend",
+      "field": "items",
+      "value": [
+        "React",
+        "Django",
+        "FastAPI",
+        "REST API design",
+        "Authentication",
+        "Background jobs",
+        "External integrations"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "skills-data",
+      "field": "items",
+      "value": [
+        "PostgreSQL",
+        "Redis",
+        "Data ingestion",
+        "ETL-style workflows",
+        "Schema design",
+        "Indexing",
+        "Query optimization"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "skills-cloud",
+      "field": "items",
+      "value": [
+        "Docker",
+        "Kubernetes/k3s",
+        "Linux",
+        "GitHub Actions",
+        "CI/CD",
+        "AWS",
+        "Git",
+        "Traefik"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "skills-reliability",
+      "field": "items",
+      "value": [
+        "Unit testing",
+        "Integration testing",
+        "API testing",
+        "Production monitoring",
+        "Structured logging",
+        "Retries",
+        "Incident debugging"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "skills-ai",
+      "field": "items",
+      "value": [
+        "OpenAI API",
+        "LLM integration",
+        "RAG",
+        "Structured outputs",
+        "AI-agent workflows"
+      ]
+    },
+    {
+      "operation": "rewrite",
+      "target": "skills-software-engineering",
+      "field": "items",
+      "value": [
+        "System design",
+        "Full SDLC",
+        "Requirements translation",
+        "Production support",
+        "Stakeholder handoff"
+      ]
+    }
+  ]
+}

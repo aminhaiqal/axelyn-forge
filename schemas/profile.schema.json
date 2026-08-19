@@ -1,0 +1,833 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://axelyn.com/schemas/forge/resume.schema.json",
+  "title": "Axelyn Forge Resume",
+  "description": "Canonical semantic resume schema used by Axelyn Forge.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "document"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": [
+        "1.0.0"
+      ]
+    },
+    "document": {
+      "$ref": "#/$defs/document"
+    }
+  },
+
+  "$defs": {
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "locale",
+        "profile",
+        "sections"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "resume"
+        },
+        "locale": {
+          "type": "string",
+          "minLength": 2,
+          "examples": [
+            "en-MY",
+            "en-US"
+          ]
+        },
+        "variant": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metadata": {
+          "$ref": "#/$defs/metadata"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/section"
+          }
+        }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "createdAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fullName",
+        "contact"
+      ],
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "headline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contact": {
+          "$ref": "#/$defs/contact"
+        }
+      }
+    },
+
+    "contact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "email"
+        },
+        "phone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        }
+      }
+    },
+
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "url"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+
+    "sectionBase": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "visible": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+
+    "section": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/summarySection"
+        },
+        {
+          "$ref": "#/$defs/experienceSection"
+        },
+        {
+          "$ref": "#/$defs/projectsSection"
+        },
+        {
+          "$ref": "#/$defs/bulletListSection"
+        },
+        {
+          "$ref": "#/$defs/educationSection"
+        },
+        {
+          "$ref": "#/$defs/skillsSection"
+        },
+        {
+          "$ref": "#/$defs/languagesSection"
+        },
+        {
+          "$ref": "#/$defs/customSection"
+        }
+      ]
+    },
+
+    "summarySection": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sectionBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "title",
+            "content"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "summary"
+            },
+            "title": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/contentBlock"
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "experienceSection": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sectionBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "title",
+            "items"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "experience"
+            },
+            "title": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/position"
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "projectsSection": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sectionBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "title",
+            "items"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "projects"
+            },
+            "title": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/project"
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "bulletListSection": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sectionBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "title",
+            "items"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "bullet-list"
+            },
+            "title": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/bullet"
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "educationSection": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sectionBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "title",
+            "items"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "education"
+            },
+            "title": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/educationEntry"
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "skillsSection": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sectionBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "title",
+            "groups"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "skills"
+            },
+            "title": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/skillGroup"
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "languagesSection": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sectionBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "title",
+            "items"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "languages"
+            },
+            "title": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/languageEntry"
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "customSection": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "type",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "not": {
+            "enum": [
+              "summary",
+              "experience",
+              "projects",
+              "bullet-list",
+              "education",
+              "skills",
+              "languages"
+            ]
+          }
+        },
+        "title": {
+          "type": "string"
+        },
+        "visible": {
+          "type": "boolean"
+        }
+      }
+    },
+
+    "contentBlock": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/paragraph"
+        },
+        {
+          "$ref": "#/$defs/bullet"
+        }
+      ]
+    },
+
+    "paragraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "text"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "paragraph"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+
+    "bullet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "text"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "bullet"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "role",
+        "organization",
+        "date",
+        "highlights"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "position"
+        },
+        "role": {
+          "type": "string"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "employmentType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "date": {
+          "$ref": "#/$defs/dateRange"
+        },
+        "highlights": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bullet"
+          }
+        },
+        "technologies": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
+    },
+
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "project"
+        },
+        "name": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "date": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/dateRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "highlights": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bullet"
+          }
+        },
+        "technologies": {
+          "$ref": "#/$defs/stringList"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        }
+      }
+    },
+
+    "educationEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "qualification",
+        "institution"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "education-entry"
+        },
+        "qualification": {
+          "type": "string"
+        },
+        "institution": {
+          "type": "string"
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "date": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/dateRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+
+    "skillGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "items"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string"
+        },
+        "items": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
+    },
+
+    "languageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "language",
+        "proficiency"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "language": {
+          "type": "string"
+        },
+        "proficiency": {
+          "type": "string"
+        }
+      }
+    },
+
+    "dateRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}(-\\d{2})?$"
+        },
+        "end": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}(-\\d{2})?$"
+        },
+        "current": {
+          "type": "boolean",
+          "default": false
+        },
+        "display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

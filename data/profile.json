@@ -1,0 +1,418 @@
+{
+  "schemaVersion": "1.0.0",
+  "document": {
+    "id": "amin-haiqal-software-engineer",
+    "type": "resume",
+    "locale": "en-MY",
+    "variant": "software-engineer",
+    "metadata": {
+      "title": "Amin Haiqal - Software Engineer Resume",
+      "source": "docx"
+    },
+    "profile": {
+      "fullName": "MUHAMMAD AMIN HAIQAL BIN ROSLEE",
+      "headline": "Software Engineer | Python, Go, APIs, Data & Cloud Systems",
+      "contact": {
+        "email": "aminhaiqal15@gmail.com",
+        "phone": "(+60) 17-667 2587",
+        "location": "Klang, Selangor",
+        "links": [
+          {
+            "type": "linkedin",
+            "label": "LinkedIn",
+            "url": "https://linkedin.com/in/amin-haiqal"
+          }
+        ]
+      }
+    },
+    "sections": [
+      {
+        "id": "summary",
+        "type": "summary",
+        "title": "SUMMARY",
+        "visible": true,
+        "content": [
+          {
+            "id": "summary-1",
+            "type": "paragraph",
+            "text": "Software engineer with 2+ years of experience building and operating production backend, data, cloud, and AI-enabled systems using Python, Go, Django, FastAPI, PostgreSQL, Docker, Kubernetes, and AWS. Experienced across the full software development lifecycle, from translating business requirements and designing APIs and data models to implementation, testing, deployment, monitoring, and stakeholder handoff. Built multi-source data pipelines, secure web services, automation workflows, and LLM-enabled systems with a focus on reliability, maintainability, and real business workflows."
+          }
+        ]
+      },
+      {
+        "id": "experience",
+        "type": "experience",
+        "title": "PROFESSIONAL EXPERIENCE",
+        "visible": true,
+        "items": [
+          {
+            "id": "experience-axelyn",
+            "type": "position",
+            "role": "Software Engineer",
+            "organization": "Axelyn Technologies",
+            "employmentType": "Self-employed",
+            "location": "Malaysia / Remote",
+            "date": {
+              "start": "2024-01",
+              "end": null,
+              "current": true,
+              "display": "Jan 2024 - Present"
+            },
+            "highlights": [
+              {
+                "id": "axelyn-highlight-1",
+                "type": "bullet",
+                "text": "Built and shipped production software products across regulatory intelligence, public-sector technology, and event technology, translating business requirements into APIs, backend services, data models, automation workflows, and user-facing features."
+              },
+              {
+                "id": "axelyn-highlight-2",
+                "type": "bullet",
+                "text": "Designed Python and Go services with Django/FastAPI, REST APIs, PostgreSQL, Redis, authentication and authorization, background processing, data-ingestion workflows, external integrations, and React/TypeScript interfaces."
+              },
+              {
+                "id": "axelyn-highlight-3",
+                "type": "bullet",
+                "text": "Improved production reliability through unit, integration, and API testing, structured logging, validation, retries, idempotency, health checks, scheduled jobs, debugging, and failure recovery."
+              },
+              {
+                "id": "axelyn-highlight-4",
+                "type": "bullet",
+                "text": "Deployed and operated containerized applications using Docker, Kubernetes/k3s, AWS, GitHub Actions, Linux, and Traefik; owned delivery from architecture and implementation through deployment, monitoring, iteration, and stakeholder handoff."
+              }
+            ],
+            "technologies": [
+              "Python",
+              "Go",
+              "Django",
+              "FastAPI",
+              "REST APIs",
+              "PostgreSQL",
+              "Redis",
+              "React",
+              "TypeScript",
+              "Docker",
+              "Kubernetes/k3s",
+              "AWS",
+              "Git",
+              "GitHub Actions"
+            ]
+          },
+          {
+            "id": "experience-armo",
+            "type": "position",
+            "role": "Software Engineering Intern",
+            "organization": "ARMO - Romanian Association of Online Stores",
+            "location": "Romania | Remote",
+            "date": {
+              "start": "2023-10",
+              "end": "2024-01",
+              "current": false,
+              "display": "Oct 2023 - Jan 2024"
+            },
+            "highlights": [
+              {
+                "id": "armo-highlight-1",
+                "type": "bullet",
+                "text": "Built Python-based data extraction pipelines for more than 20 government portals, converting legislative updates into structured data for regulatory monitoring."
+              },
+              {
+                "id": "armo-highlight-2",
+                "type": "bullet",
+                "text": "Developed Django and PostgreSQL ingestion workflows with scheduled processing, validation, structured logging, database schema design, and recovery mechanisms for failed collection jobs and changing source behavior."
+              }
+            ],
+            "technologies": [
+              "Python",
+              "Django",
+              "PostgreSQL",
+              "SQL",
+              "lxml",
+              "Beautiful Soup",
+              "Git"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "projects",
+        "type": "projects",
+        "title": "SELECTED PROJECTS",
+        "visible": true,
+        "items": [
+          {
+            "id": "project-monitorscape",
+            "type": "project",
+            "name": "Monitorscape",
+            "subtitle": "Regulatory Monitoring Platform",
+            "role": "Backend, Data, and Platform Engineering",
+            "date": {
+              "start": "2024",
+              "end": "2025",
+              "display": "2024 - 2025"
+            },
+            "highlights": [
+              {
+                "id": "monitorscape-highlight-1",
+                "type": "bullet",
+                "text": "Engineered an hourly ingestion pipeline across a nine-hour daily monitoring window, collecting legislative and regulatory updates from government portals, RSS feeds, public APIs, PDFs, and dynamically scraped pages."
+              },
+              {
+                "id": "monitorscape-highlight-2",
+                "type": "bullet",
+                "text": "Built modular extraction and processing workflows that validated, transformed, categorized, summarized, and stored structured reviewable records in PostgreSQL for downstream product use."
+              },
+              {
+                "id": "monitorscape-highlight-3",
+                "type": "bullet",
+                "text": "Improved production reliability with structured logging, retries, recovery mechanisms, and source-specific handling for unavailable services, malformed documents, and breaking portal changes."
+              }
+            ],
+            "technologies": [
+              "Python",
+              "Django",
+              "FastAPI",
+              "PostgreSQL",
+              "Redis",
+              "Docker",
+              "AWS",
+              "REST APIs",
+              "Data Ingestion"
+            ]
+          },
+          {
+            "id": "project-aria",
+            "type": "project",
+            "name": "ARIA",
+            "subtitle": "Autonomous Regulatory Intelligence Agent",
+            "role": "Software and AI Systems Engineer",
+            "date": {
+              "start": "2026",
+              "end": "2026",
+              "display": "2026"
+            },
+            "highlights": [
+              {
+                "id": "aria-highlight-1",
+                "type": "bullet",
+                "text": "Built an autonomous regulatory-intelligence system combining source ingestion, document processing, structured LLM analysis, evidence attribution, and recommended actions in an end-to-end workflow."
+              },
+              {
+                "id": "aria-highlight-2",
+                "type": "bullet",
+                "text": "Developed Python/FastAPI services with persistent execution records, duplicate detection, validation, failure handling, and auditable outputs to improve the reliability of automated analysis."
+              },
+              {
+                "id": "aria-highlight-3",
+                "type": "bullet",
+                "text": "Designed the system for reviewable outputs and production-oriented operation, combining API development, data persistence, background processing, and structured AI workflows."
+              }
+            ],
+            "technologies": [
+              "Python",
+              "FastAPI",
+              "PostgreSQL",
+              "Docker",
+              "REST APIs",
+              "LLM APIs",
+              "RAG",
+              "Structured Outputs"
+            ]
+          },
+          {
+            "id": "project-memora",
+            "type": "project",
+            "name": "Memora",
+            "subtitle": "Event Photo and Digital Wish-Card Platform",
+            "role": "Creator and Software Engineer",
+            "date": {
+              "start": "2026",
+              "end": "2026",
+              "display": "2026"
+            },
+            "highlights": [
+              {
+                "id": "memora-highlight-1",
+                "type": "bullet",
+                "text": "Built a private event platform that allows guests to upload photos and create digital wish cards without installing an application or creating an account."
+              },
+              {
+                "id": "memora-highlight-2",
+                "type": "bullet",
+                "text": "Designed authenticated backend workflows, PostgreSQL data models, REST APIs, ownership validation, ordered photo attachments, containerized deployment, and Google Drive gallery export."
+              }
+            ],
+            "technologies": [
+              "Python",
+              "FastAPI",
+              "Django",
+              "PostgreSQL",
+              "React",
+              "TypeScript",
+              "Docker",
+              "Google Drive API",
+              "Cloud Storage"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "engineering-practices",
+        "type": "bullet-list",
+        "title": "ENGINEERING PRACTICES",
+        "visible": true,
+        "items": [
+          {
+            "id": "practice-1",
+            "type": "bullet",
+            "text": "End-to-end software delivery across requirements analysis, system design, API and data-model design, implementation, testing, deployment, monitoring, iteration, and stakeholder handoff."
+          },
+          {
+            "id": "practice-2",
+            "type": "bullet",
+            "text": "Data and integration engineering across ingestion pipelines, ETL-style transformations, external APIs, scheduled/background workflows, SQL data models, and reusable structured outputs."
+          },
+          {
+            "id": "practice-3",
+            "type": "bullet",
+            "text": "Reliability and cloud operations using unit/integration/API testing, structured logging, health checks, retries, idempotency, Docker, Kubernetes/k3s, AWS, Linux, and CI/CD."
+          },
+          {
+            "id": "practice-4",
+            "type": "bullet",
+            "text": "Applied AI integration using LLM APIs, RAG, structured outputs, document processing, evidence attribution, validation, and human reviewable workflows."
+          }
+        ]
+      },
+      {
+        "id": "education",
+        "type": "education",
+        "title": "EDUCATION",
+        "visible": true,
+        "items": [
+          {
+            "id": "education-utm",
+            "type": "education-entry",
+            "qualification": "Bachelor of Computer Science (Software Engineering) with Honours",
+            "institution": "Universiti Teknologi Malaysia",
+            "location": "Skudai, Johor",
+            "date": {
+              "start": "2021-09",
+              "end": "2024-08",
+              "display": "Sep 2021 - Aug 2024"
+            }
+          }
+        ]
+      },
+      {
+        "id": "technical-skills",
+        "type": "skills",
+        "title": "TECHNICAL SKILLS",
+        "visible": true,
+        "groups": [
+          {
+            "id": "skills-programming",
+            "label": "Programming",
+            "items": [
+              "Python",
+              "Go",
+              "TypeScript",
+              "SQL"
+            ]
+          },
+          {
+            "id": "skills-backend",
+            "label": "Backend & APIs",
+            "items": [
+              "Django",
+              "FastAPI",
+              "REST API design",
+              "Authentication",
+              "Background jobs",
+              "External integrations"
+            ]
+          },
+          {
+            "id": "skills-data",
+            "label": "Data Systems",
+            "items": [
+              "PostgreSQL",
+              "Redis",
+              "Data ingestion",
+              "ETL-style workflows",
+              "Schema design",
+              "Indexing",
+              "Query optimization"
+            ]
+          },
+          {
+            "id": "skills-cloud",
+            "label": "Cloud & DevOps",
+            "items": [
+              "AWS",
+              "Docker",
+              "Kubernetes/k3s",
+              "Linux",
+              "Git",
+              "GitHub Actions",
+              "CI/CD",
+              "Traefik"
+            ]
+          },
+          {
+            "id": "skills-reliability",
+            "label": "Testing & Reliability",
+            "items": [
+              "Unit testing",
+              "Integration testing",
+              "API testing",
+              "Structured logging",
+              "Retries",
+              "Idempotency",
+              "Monitoring"
+            ]
+          },
+          {
+            "id": "skills-ai",
+            "label": "AI Systems",
+            "items": [
+              "OpenAI API",
+              "LLM integration",
+              "RAG",
+              "Structured outputs",
+              "AI-assisted document processing"
+            ]
+          },
+          {
+            "id": "skills-software-engineering",
+            "label": "Software Engineering",
+            "items": [
+              "System design",
+              "Full SDLC",
+              "Requirements translation",
+              "Production support",
+              "Stakeholder handoff"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "languages",
+        "type": "languages",
+        "title": "LANGUAGES",
+        "visible": true,
+        "items": [
+          {
+            "id": "language-malay",
+            "language": "Malay",
+            "proficiency": "Native"
+          },
+          {
+            "id": "language-english",
+            "language": "English",
+            "proficiency": "Professional Proficiency"
+          }
+        ]
+      }
+    ]
+  }
+}

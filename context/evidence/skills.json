@@ -1,0 +1,60 @@
+{
+  "skills": {
+    "programming": [
+      "Python",
+      "Go",
+      "TypeScript",
+      "SQL"
+    ],
+    "backend": [
+      "Django",
+      "FastAPI",
+      "REST APIs",
+      "Authentication",
+      "Background jobs",
+      "External integrations"
+    ],
+    "data": [
+      "PostgreSQL",
+      "Redis",
+      "Data ingestion",
+      "ETL-style workflows",
+      "Schema design",
+      "Indexing",
+      "Query optimization"
+    ],
+    "cloudDevOps": [
+      "AWS",
+      "Docker",
+      "Kubernetes/k3s",
+      "Linux",
+      "Git",
+      "GitHub Actions",
+      "CI/CD",
+      "Traefik"
+    ],
+    "reliability": [
+      "Unit testing",
+      "Integration testing",
+      "API testing",
+      "Structured logging",
+      "Retries",
+      "Idempotency",
+      "Monitoring"
+    ],
+    "ai": [
+      "OpenAI API",
+      "LLM integration",
+      "RAG",
+      "Structured outputs",
+      "AI-assisted document processing"
+    ],
+    "softwareEngineering": [
+      "System design",
+      "Full SDLC",
+      "Requirements translation",
+      "Production support",
+      "Stakeholder handoff"
+    ]
+  }
+}
