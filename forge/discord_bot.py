@@ -20,6 +20,7 @@ from .tailoring import TailoringResult, tailor_resume_with_openai
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MAX_TXT_BYTES = 512 * 1024
+DISCORD_MAX_STRING_OPTION_LENGTH = 6000
 
 
 def _required_text(environ: Mapping[str, str], name: str) -> str:
@@ -141,6 +142,7 @@ class DiscordBotConfig:
 class TailorSource:
     kind: str
     url: Optional[str] = None
+    text: Optional[str] = None
 
 
 def validate_tailor_source(
@@ -149,12 +151,15 @@ def validate_tailor_source(
     attachment_size: Optional[int],
     url: Optional[str],
     max_txt_bytes: int,
+    jd: Optional[str] = None,
 ) -> TailorSource:
     normalized_input = url.strip() if isinstance(url, str) else ""
+    normalized_jd = jd.strip() if isinstance(jd, str) else ""
     has_attachment = attachment_name is not None
     has_url = bool(normalized_input)
-    if has_attachment == has_url:
-        raise DiscordBotError("Provide exactly one input: file or url")
+    has_jd = bool(normalized_jd)
+    if sum((has_attachment, has_url, has_jd)) != 1:
+        raise DiscordBotError("Provide exactly one input: file, url, or jd")
 
     if has_attachment:
         filename = attachment_name or ""
@@ -167,6 +172,14 @@ def validate_tailor_source(
                 f"The .txt file is too large; maximum size is {max_txt_bytes} bytes"
             )
         return TailorSource(kind="file")
+
+    if has_jd:
+        if len(normalized_jd) > DISCORD_MAX_STRING_OPTION_LENGTH:
+            raise DiscordBotError(
+                "The jd input is too long; use a .txt file for descriptions over "
+                f"{DISCORD_MAX_STRING_OPTION_LENGTH:,} characters"
+            )
+        return TailorSource(kind="jd", text=normalized_jd)
 
     normalized_url, _ = normalize_job_url(normalized_input)
     return TailorSource(kind="url", url=normalized_url)
@@ -193,12 +206,14 @@ class ForgeDiscordRunner:
         *,
         attachment: Optional[discord.Attachment] = None,
         url: Optional[str] = None,
+        jd: Optional[str] = None,
     ) -> TailoringResult:
         source = validate_tailor_source(
             attachment_name=attachment.filename if attachment is not None else None,
             attachment_size=attachment.size if attachment is not None else None,
             url=url,
             max_txt_bytes=self.config.max_txt_bytes,
+            jd=jd,
         )
         if self._busy:
             raise DiscordBotBusyError(
@@ -229,6 +244,9 @@ class ForgeDiscordRunner:
                         raise DiscordBotError("The attached .txt job description is empty")
                     job_description = Path(temp_dir) / "job-description.txt"
                     job_description.write_text(text, encoding="utf-8")
+                elif source.kind == "jd":
+                    job_description = Path(temp_dir) / "job-description.txt"
+                    job_description.write_text(source.text or "", encoding="utf-8")
 
                 return await asyncio.to_thread(
                     self._tailor,
@@ -293,18 +311,22 @@ class ForgeDiscordClient(discord.Client):
 
         @self.forge_group.command(
             name="tailor",
-            description="Tailor a resume from one .txt job description or job-posting URL",
+            description="Tailor a resume from pasted text, a .txt file, or a job-posting URL",
         )
         @app_commands.describe(
             file="UTF-8 .txt job description",
             url="Public job-posting URL",
+            jd="Job-description text, up to 6,000 characters",
         )
         async def tailor_command(
             interaction: discord.Interaction,
             file: Optional[discord.Attachment] = None,
             url: Optional[str] = None,
+            jd: Optional[
+                app_commands.Range[str, 1, DISCORD_MAX_STRING_OPTION_LENGTH]
+            ] = None,
         ) -> None:
-            await self._handle_tailor(interaction, attachment=file, url=url)
+            await self._handle_tailor(interaction, attachment=file, url=url, jd=jd)
 
         self.tree.add_command(self.forge_group, guild=self.command_guild)
 
@@ -323,6 +345,7 @@ class ForgeDiscordClient(discord.Client):
         *,
         attachment: Optional[discord.Attachment],
         url: Optional[str],
+        jd: Optional[str] = None,
     ) -> None:
         if interaction.user.id not in self.config.allowed_user_ids:
             await interaction.response.send_message(
@@ -338,11 +361,13 @@ class ForgeDiscordClient(discord.Client):
                 attachment_size=attachment.size if attachment is not None else None,
                 url=url,
                 max_txt_bytes=self.config.max_txt_bytes,
+                jd=jd,
             )
         except ForgeError as exc:
             await interaction.response.send_message(
                 f"Invalid request: {_display_error(exc)}\n"
-                "Use `/forge tailor file:<job.txt>` or `/forge tailor url:<https://...>`.",
+                "Use `/forge tailor jd:<text>`, `/forge tailor file:<job.txt>`, "
+                "or `/forge tailor url:<https://...>`.",
                 ephemeral=True,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
@@ -358,7 +383,7 @@ class ForgeDiscordClient(discord.Client):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            result = await self.runner.run(attachment=attachment, url=url)
+            result = await self.runner.run(attachment=attachment, url=url, jd=jd)
             upload = discord.File(str(result.docx_output), filename=result.docx_output.name)
             try:
                 await interaction.edit_original_response(

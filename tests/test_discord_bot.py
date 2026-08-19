@@ -89,7 +89,7 @@ class DiscordBotConfigurationTests(unittest.TestCase):
                 }
             )
 
-    def test_single_grouped_tailor_command_has_file_and_url_options(self):
+    def test_single_grouped_tailor_command_has_jd_file_and_url_options(self):
         client = ForgeDiscordClient(bot_config())
         self.assertTrue(client.intents.guilds)
         self.assertFalse(client.intents.members)
@@ -100,29 +100,46 @@ class DiscordBotConfigurationTests(unittest.TestCase):
         command = group.get_command("tailor")
         self.assertIsNotNone(command)
         parameters = {parameter.name: parameter for parameter in command.parameters}
-        self.assertEqual({"file", "url"}, set(parameters))
+        self.assertEqual({"file", "url", "jd"}, set(parameters))
         self.assertEqual(discord.AppCommandOptionType.attachment, parameters["file"].type)
         self.assertEqual(discord.AppCommandOptionType.string, parameters["url"].type)
+        self.assertEqual(discord.AppCommandOptionType.string, parameters["jd"].type)
         self.assertFalse(parameters["file"].required)
         self.assertFalse(parameters["url"].required)
+        self.assertFalse(parameters["jd"].required)
+        command_payload = command.to_dict(client.tree)
+        option_payloads = {
+            option["name"]: option for option in command_payload["options"]
+        }
+        self.assertEqual(6000, option_payloads["jd"]["max_length"])
 
 
 class DiscordTailorSourceTests(unittest.TestCase):
-    def test_exactly_one_file_or_url_is_required(self):
-        for attachment_name, size, url in (
-            (None, None, None),
-            ("jd.txt", 20, "https://example.com/jobs/1"),
+    def test_exactly_one_jd_file_or_url_is_required(self):
+        for attachment_name, size, url, jd in (
+            (None, None, None, None),
+            ("jd.txt", 20, "https://example.com/jobs/1", None),
+            ("jd.txt", 20, None, "Role requirements"),
+            (None, None, "https://example.com/jobs/1", "Role requirements"),
         ):
-            with self.subTest(attachment_name=attachment_name, url=url):
+            with self.subTest(attachment_name=attachment_name, url=url, jd=jd):
                 with self.assertRaisesRegex(DiscordBotError, "exactly one"):
                     validate_tailor_source(
                         attachment_name=attachment_name,
                         attachment_size=size,
                         url=url,
                         max_txt_bytes=1024,
+                        jd=jd,
                     )
 
-    def test_txt_file_and_public_url_are_accepted(self):
+    def test_jd_txt_file_and_public_url_are_accepted(self):
+        jd_source = validate_tailor_source(
+            attachment_name=None,
+            attachment_size=None,
+            url=None,
+            max_txt_bytes=1024,
+            jd="  Role requirements  ",
+        )
         file_source = validate_tailor_source(
             attachment_name="job.TXT",
             attachment_size=20,
@@ -135,6 +152,8 @@ class DiscordTailorSourceTests(unittest.TestCase):
             url=" HTTPS://Careers.Example.com/jobs/1#apply ",
             max_txt_bytes=1024,
         )
+        self.assertEqual("jd", jd_source.kind)
+        self.assertEqual("Role requirements", jd_source.text)
         self.assertEqual("file", file_source.kind)
         self.assertEqual("url", url_source.kind)
         self.assertEqual("https://careers.example.com/jobs/1", url_source.url)
@@ -154,9 +173,37 @@ class DiscordTailorSourceTests(unittest.TestCase):
                 url=None,
                 max_txt_bytes=1024,
             )
+        with self.assertRaisesRegex(DiscordBotError, "use a .txt file"):
+            validate_tailor_source(
+                attachment_name=None,
+                attachment_size=None,
+                url=None,
+                max_txt_bytes=1024,
+                jd="x" * 6001,
+            )
 
 
 class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_jd_becomes_existing_temporary_jd_for_forge(self):
+        observed = {}
+        sentinel = object()
+
+        def tailor(**kwargs):
+            observed.update(kwargs)
+            observed["jd_text"] = kwargs["job_description"].read_text(
+                encoding="utf-8"
+            )
+            self.assertTrue(kwargs["job_description"].is_file())
+            return sentinel
+
+        runner = ForgeDiscordRunner(bot_config(), tailor=tailor)
+        result = await runner.run(jd="  Role requirements ✓  ")
+
+        self.assertIs(sentinel, result)
+        self.assertEqual("Role requirements ✓", observed["jd_text"])
+        self.assertIsNone(observed["job_description_url"])
+        self.assertFalse(observed["job_description"].exists())
+
     async def test_txt_attachment_becomes_existing_temporary_jd_for_forge(self):
         observed = {}
         sentinel = object()
@@ -240,8 +287,9 @@ class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
             interaction = FakeInteraction()
             await client._handle_tailor(
                 interaction,
-                attachment=FakeAttachment("job.txt", b"Job requirements"),
+                attachment=None,
                 url=None,
+                jd="Job requirements",
             )
 
             self.assertEqual({"ephemeral": True, "thinking": True}, interaction.response.deferred)

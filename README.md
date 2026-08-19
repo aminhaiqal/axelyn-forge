@@ -180,14 +180,15 @@ The context-selection call sends the JD and full indexed context catalog to Open
 
 Forge can run as a private Discord Gateway bot on a small VPS. It makes an outbound connection to Discord, so the VPS does not need a domain, TLS certificate, reverse proxy, or public application port.
 
-The bot registers one grouped slash command with two mutually exclusive input options:
+The bot registers one grouped slash command with three mutually exclusive input options:
 
 ```text
+/forge tailor jd:<job-description-text>
 /forge tailor file:<job-description.txt>
 /forge tailor url:<https://company.example/jobs/123>
 ```
 
-Discord represents attachments and strings as different option types, so they appear as `file` and `url` under the same command. Forge requires exactly one. File input is limited to a non-empty UTF-8 `.txt` file; URL input passes through the same public-URL validation and OpenAI web-search ingestion as the CLI.
+Discord slash-command values are named options, so pasted text uses `jd:` rather than an unnamed positional argument. Forge requires exactly one of `jd`, `file`, or `url`. Direct `jd` input is limited by Discord to 6,000 characters. File input is limited to a non-empty UTF-8 `.txt` file; URL input passes through the same public-URL validation and OpenAI web-search ingestion as the CLI.
 
 The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with the generated DOCX, request count, estimated OpenAI cost, and material-gap count. Only one request runs at a time. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
 
@@ -230,6 +231,21 @@ Update or restart the service with:
 git pull --ff-only
 docker compose up -d --build
 ```
+
+### Automatic VPS deployment
+
+Pushes to `agent/resume-tailoring-pipeline` run the full test suite and then deploy the exact pushed commit through `.github/workflows/deploy-discord.yml`. GitHub authenticates with a dedicated SSH key that is restricted on the VPS to `scripts/vps-deploy.sh`; it is not a general-purpose shell credential.
+
+The VPS keeps immutable releases under `/home/debian/apps/axelyn-forge-deploy/releases`. A deployment rebuilds and recreates the bot, waits for a successful Discord Gateway connection, and updates the `current` release link only after verification. A failed replacement rolls back to the prior release. The environment file remains at `/home/debian/apps/axelyn-forge/.env`, while SQLite and generated artifacts remain in the existing `forge-state` Docker volume.
+
+The GitHub `production` environment uses these repository secrets:
+
+- `VPS_HOST`
+- `VPS_USER`
+- `VPS_SSH_PRIVATE_KEY`
+- `VPS_KNOWN_HOSTS`
+
+If the production branch changes, update both the workflow trigger and `DEPLOY_BRANCH` in `scripts/vps-deploy.sh` together.
 
 Back up the `forge-state` volume regularly. SQLite, generated resume JSON, and DOCX files can contain personal information and should not be placed in a public directory.
 
