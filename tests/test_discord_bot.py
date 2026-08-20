@@ -116,7 +116,9 @@ class DiscordBotConfigurationTests(unittest.TestCase):
         option_payloads = {
             option["name"]: option for option in command_payload["options"]
         }
-        self.assertEqual(6000, option_payloads["jd"]["max_length"])
+        self.assertNotIn("max_length", option_payloads["jd"])
+        self.assertNotIn("min_length", option_payloads["jd"])
+        self.assertIn("Forge limit: 6,000", option_payloads["jd"]["description"])
         self.assertIn("default: Yes", option_payloads["cover_letter"]["description"])
 
 
@@ -164,6 +166,21 @@ class DiscordTailorSourceTests(unittest.TestCase):
         self.assertEqual("url", url_source.kind)
         self.assertEqual("https://careers.example.com/jobs/1", url_source.url)
 
+    def test_pasted_jd_normalizes_invisible_web_clipboard_artifacts(self):
+        pasted_jd = "\ufeff" + ("x" * 5674) + ("\u200b" * 400)
+        self.assertGreater(len(pasted_jd), 6000)
+
+        source = validate_tailor_source(
+            attachment_name=None,
+            attachment_size=None,
+            url=None,
+            max_txt_bytes=1024,
+            jd=pasted_jd,
+        )
+
+        self.assertEqual("jd", source.kind)
+        self.assertEqual("x" * 5674, source.text)
+
     def test_non_txt_or_oversized_file_is_rejected(self):
         with self.assertRaisesRegex(DiscordBotError, "UTF-8 .txt"):
             validate_tailor_source(
@@ -179,7 +196,10 @@ class DiscordTailorSourceTests(unittest.TestCase):
                 url=None,
                 max_txt_bytes=1024,
             )
-        with self.assertRaisesRegex(DiscordBotError, "use a .txt file"):
+        with self.assertRaisesRegex(
+            DiscordBotError,
+            r"received 6,001 characters.*limit: 6,000.*UTF-8 \.txt",
+        ):
             validate_tailor_source(
                 attachment_name=None,
                 attachment_size=None,
@@ -203,7 +223,7 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
             return sentinel
 
         runner = ForgeDiscordRunner(bot_config(), tailor=tailor)
-        result = await runner.run(jd="  Role requirements ✓  ")
+        result = await runner.run(jd="  Role\u200b requirements ✓  ")
 
         self.assertIs(sentinel, result)
         self.assertEqual("Role requirements ✓", observed["jd_text"])

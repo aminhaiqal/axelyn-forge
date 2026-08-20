@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import tempfile
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, FrozenSet, Mapping, Optional
@@ -20,7 +21,15 @@ from .tailoring import TailoringResult, tailor_resume_with_openai
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MAX_TXT_BYTES = 512 * 1024
-DISCORD_MAX_STRING_OPTION_LENGTH = 6000
+MAX_PASTED_JD_LENGTH = 6000
+_PASTED_TEXT_IGNORABLES = str.maketrans(
+    {
+        "\u00ad": None,  # Soft hyphen copied from wrapped web content.
+        "\u200b": None,  # Zero-width space.
+        "\u2060": None,  # Word joiner.
+        "\ufeff": None,  # Byte-order mark / zero-width no-break space.
+    }
+)
 
 
 def _required_text(environ: Mapping[str, str], name: str) -> str:
@@ -186,6 +195,16 @@ class TailorSource:
     text: Optional[str] = None
 
 
+def _normalize_pasted_jd(value: str) -> str:
+    """Remove non-semantic clipboard artifacts before enforcing the paste limit."""
+
+    normalized = unicodedata.normalize("NFC", value)
+    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = normalized.replace("\u00a0", " ").replace("\u202f", " ")
+    normalized = normalized.translate(_PASTED_TEXT_IGNORABLES)
+    return normalized.strip()
+
+
 def validate_tailor_source(
     *,
     attachment_name: Optional[str],
@@ -195,7 +214,7 @@ def validate_tailor_source(
     jd: Optional[str] = None,
 ) -> TailorSource:
     normalized_input = url.strip() if isinstance(url, str) else ""
-    normalized_jd = jd.strip() if isinstance(jd, str) else ""
+    normalized_jd = _normalize_pasted_jd(jd) if isinstance(jd, str) else ""
     has_attachment = attachment_name is not None
     has_url = bool(normalized_input)
     has_jd = bool(normalized_jd)
@@ -215,10 +234,12 @@ def validate_tailor_source(
         return TailorSource(kind="file")
 
     if has_jd:
-        if len(normalized_jd) > DISCORD_MAX_STRING_OPTION_LENGTH:
+        character_count = len(normalized_jd)
+        if character_count > MAX_PASTED_JD_LENGTH:
             raise DiscordBotError(
-                "The jd input is too long; use a .txt file for descriptions over "
-                f"{DISCORD_MAX_STRING_OPTION_LENGTH:,} characters"
+                f"Forge received {character_count:,} characters in jd after "
+                f"normalization (limit: {MAX_PASTED_JD_LENGTH:,}). "
+                "Use a UTF-8 .txt file for a longer description"
             )
         return TailorSource(kind="jd", text=normalized_jd)
 
@@ -384,16 +405,14 @@ class ForgeDiscordClient(discord.Client):
         @app_commands.describe(
             file="UTF-8 .txt job description",
             url="Public job-posting URL",
-            jd="Job-description text, up to 6,000 characters",
+            jd="Paste job-description text (Forge limit: 6,000 characters)",
             cover_letter="Also generate a tailored cover letter (default: Yes)",
         )
         async def tailor_command(
             interaction: discord.Interaction,
             file: Optional[discord.Attachment] = None,
             url: Optional[str] = None,
-            jd: Optional[
-                app_commands.Range[str, 1, DISCORD_MAX_STRING_OPTION_LENGTH]
-            ] = None,
+            jd: Optional[str] = None,
             cover_letter: bool = True,
         ) -> None:
             await self._handle_tailor(
