@@ -94,7 +94,7 @@ def _parser() -> argparse.ArgumentParser:
 
     tailor = subcommands.add_parser(
         "tailor",
-        help="use OpenAI to turn a JD into validated resume JSON and DOCX",
+        help="use OpenAI to create validated resume and cover-letter artifacts",
     )
     job_source = tailor.add_mutually_exclusive_group(required=True)
     job_source.add_argument("--jd", type=Path, help="UTF-8 job-description file")
@@ -141,6 +141,43 @@ def _parser() -> argparse.ArgumentParser:
         "--filename-prefix",
         default="Amin_Haiqal_Resume",
         help="safe prefix used before the model-extracted job title",
+    )
+    tailor.add_argument(
+        "--no-cover-letter",
+        action="store_false",
+        dest="include_cover_letter",
+        help="skip cover-letter generation and emit only the tailored resume",
+    )
+    tailor.set_defaults(include_cover_letter=True)
+    tailor.add_argument(
+        "--cover-letter-template",
+        type=Path,
+        default=Path("templates/Amin_Haiqal_Cover_Letter_SDT_Template.docx"),
+    )
+    tailor.add_argument(
+        "--cover-letter-data",
+        type=Path,
+        default=Path("data/cover_letter.json"),
+    )
+    tailor.add_argument(
+        "--cover-letter-schema",
+        type=Path,
+        default=Path("schemas/cover-letter.schema.json"),
+    )
+    tailor.add_argument(
+        "--cover-letter-bindings",
+        type=Path,
+        default=Path("bindings/cover-letter.json"),
+    )
+    tailor.add_argument(
+        "--cover-letter-prefix",
+        default="Amin_Haiqal_Cover_Letter",
+    )
+    tailor.add_argument(
+        "--cover-letter-model",
+        help=(
+            "cover-letter model (defaults to OPENAI_COVER_LETTER_MODEL, then --model)"
+        ),
     )
     return parser
 
@@ -218,6 +255,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             web_model = args.web_model or os.environ.get(
                 "OPENAI_WEB_MODEL", DEFAULT_WEB_SEARCH_MODEL
             )
+            cover_letter_model = (
+                args.cover_letter_model
+                or os.environ.get("OPENAI_COVER_LETTER_MODEL")
+                or model
+            )
             context_database = args.context_db
             if args.context is not None and context_database is None:
                 context_database = Path("data/context.sqlite3")
@@ -238,6 +280,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 context_selection_model=context_model,
                 web_search_model=web_model,
                 include_pdf=True,
+                include_cover_letter=args.include_cover_letter,
+                cover_letter_template=args.cover_letter_template,
+                cover_letter_data=args.cover_letter_data,
+                cover_letter_schema=args.cover_letter_schema,
+                cover_letter_bindings=args.cover_letter_bindings,
+                cover_letter_prefix=args.cover_letter_prefix,
+                cover_letter_model=cover_letter_model,
             )
             print(f"OpenAI model: {result.model}")
             print(f"OpenAI workflow ID: {result.workflow_id}")
@@ -270,6 +319,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"Tailored resume JSON: {result.data_output}")
             print(f"Tailored DOCX: {result.docx_output}")
             print(f"Tailored PDF: {result.pdf_output}")
+            if result.cover_letter_docx_output is not None:
+                print(f"Cover-letter model: {result.cover_letter_model}")
+                print(f"Cover-letter JSON: {result.cover_letter_data_output}")
+                print(f"Cover-letter DOCX: {result.cover_letter_docx_output}")
+                print(f"Cover-letter PDF: {result.cover_letter_pdf_output}")
             print(
                 "OpenAI requests: "
                 f"{result.usage_summary['requests']}; estimated cost: USD "

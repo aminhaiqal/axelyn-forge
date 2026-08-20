@@ -24,7 +24,7 @@ RUN python -m pip install .
 
 COPY bindings ./bindings
 COPY context ./context
-COPY data/profile.json ./data/profile.json
+COPY data/profile.json data/cover_letter.json ./data/
 COPY schemas ./schemas
 COPY templates ./templates
 

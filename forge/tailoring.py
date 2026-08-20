@@ -6,17 +6,22 @@ import tempfile
 import unicodedata
 import uuid
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from .bindings import resolve_bindings
+from .cover_letter import (
+    build_cover_letter_document,
+    generate_cover_letter_draft,
+)
 from .context_selection import (
     DEFAULT_CONTEXT_SELECTION_MODEL,
     ContextSelection,
     select_context_with_openai,
 )
 from .context_store import SQLiteContextStore, read_context_source, sync_context_database
-from .docx import RenderReport, render_docx
+from .docx import RenderReport, render_docx, update_docx_core_properties
 from .errors import TailoringError
 from .jsonio import load_json, write_json
 from .job_source import (
@@ -37,7 +42,7 @@ from .openai_provider import (
 from .operations import apply_operations
 from .pdf import convert_docx_to_pdf
 from .usage_store import OpenAIUsageStore
-from .validation import validate_resume
+from .validation import build_stable_id_index, validate_document, validate_resume
 
 PathLike = Union[str, Path]
 
@@ -63,8 +68,13 @@ class TailoringResult:
     data_output: Path
     docx_output: Path
     pdf_output: Optional[Path]
+    cover_letter_model: Optional[str]
+    cover_letter_data_output: Optional[Path]
+    cover_letter_docx_output: Optional[Path]
+    cover_letter_pdf_output: Optional[Path]
     applied_operations: int
     render_report: RenderReport
+    cover_letter_render_report: Optional[RenderReport]
 
 
 def _read_text(path: PathLike, label: str) -> str:
@@ -103,6 +113,14 @@ def tailor_resume_with_openai(
     context_selection_model: str = DEFAULT_CONTEXT_SELECTION_MODEL,
     web_search_model: str = DEFAULT_WEB_SEARCH_MODEL,
     include_pdf: bool = False,
+    include_cover_letter: bool = False,
+    cover_letter_template: Optional[PathLike] = None,
+    cover_letter_data: Optional[PathLike] = None,
+    cover_letter_schema: Optional[PathLike] = None,
+    cover_letter_bindings: Optional[PathLike] = None,
+    cover_letter_prefix: str = "Amin_Haiqal_Cover_Letter",
+    cover_letter_model: Optional[str] = None,
+    cover_letter_date: Optional[date] = None,
     pdf_converter: Callable[[PathLike, PathLike], Path] = convert_docx_to_pdf,
     client=None,
 ) -> TailoringResult:
@@ -111,6 +129,34 @@ def tailor_resume_with_openai(
     resume_schema = load_json(schema)
     binding_config = load_json(bindings)
     validate_resume(resume, resume_schema)
+
+    cover_template_path = None
+    base_cover_letter = None
+    cover_schema_config = None
+    cover_binding_config = None
+    if include_cover_letter:
+        cover_assets = {
+            "cover-letter template": cover_letter_template,
+            "cover-letter data": cover_letter_data,
+            "cover-letter schema": cover_letter_schema,
+            "cover-letter bindings": cover_letter_bindings,
+        }
+        missing_cover_assets = [
+            label for label, value in cover_assets.items() if value is None
+        ]
+        if missing_cover_assets:
+            raise TailoringError(
+                "Missing required cover-letter assets: " + ", ".join(missing_cover_assets)
+            )
+        cover_template_path = Path(cover_letter_template)  # type: ignore[arg-type]
+        if not cover_template_path.is_file():
+            raise TailoringError(
+                f"Cover-letter template does not exist: {cover_template_path}"
+            )
+        base_cover_letter = load_json(cover_letter_data)  # type: ignore[arg-type]
+        cover_schema_config = load_json(cover_letter_schema)  # type: ignore[arg-type]
+        cover_binding_config = load_json(cover_letter_bindings)  # type: ignore[arg-type]
+        validate_document(base_cover_letter, cover_schema_config, label="Cover letter")
 
     has_file_jd = job_description is not None
     has_url_jd = isinstance(job_description_url, str) and bool(job_description_url.strip())
@@ -241,6 +287,63 @@ def tailor_resume_with_openai(
             "usageDatabase": str(usage_database_path),
         }
 
+    generated_cover_letter = None
+    cover_values = None
+    resolved_cover_letter_model = None
+    if include_cover_letter:
+        resolved_cover_letter_model = cover_letter_model or model
+        selected_chunk_ids = (
+            [chunk.chunk_id for chunk in context_selection.selected_chunks]
+            if context_selection is not None
+            else []
+        )
+        allowed_evidence_ids = [
+            "job-description",
+            *build_stable_id_index(tailored).keys(),
+            *selected_chunk_ids,
+        ]
+        cover_draft = generate_cover_letter_draft(
+            tailored_resume=tailored,
+            job_description=jd_text,
+            job_title=plan.job_title,
+            company=plan.company,
+            candidate_context=context_text,
+            context_selection=(
+                context_selection.as_prompt_summary()
+                if context_selection is not None
+                else None
+            ),
+            keyword_alignment=(
+                keyword_alignment.as_prompt_dict()
+                if keyword_alignment is not None
+                else None
+            ),
+            gaps=plan.gaps,
+            allowed_evidence_ids=allowed_evidence_ids,
+            model=resolved_cover_letter_model,
+            client=client,
+            usage_store=usage_store,
+            workflow_id=workflow_id,
+        )
+        generated_cover_letter = build_cover_letter_document(
+            base=base_cover_letter,  # type: ignore[arg-type]
+            tailored_resume=tailored,
+            draft=cover_draft,
+            job_title=plan.job_title,
+            company=plan.company,
+            workflow_id=workflow_id,
+            application_date=cover_letter_date,
+        )
+        validate_document(
+            generated_cover_letter,
+            cover_schema_config,  # type: ignore[arg-type]
+            label="Cover letter",
+        )
+        cover_values = resolve_bindings(
+            generated_cover_letter,
+            cover_binding_config,  # type: ignore[arg-type]
+        )
+
     prefix = safe_filename_component(candidate_prefix)
     title = safe_filename_component(plan.job_title)
     base_name = f"{prefix}_{title}"
@@ -263,7 +366,23 @@ def tailor_resume_with_openai(
     final_data = destination / f"{base_name}.json"
     final_docx = destination / f"{base_name}.docx"
     final_pdf = destination / f"{base_name}.pdf" if include_pdf else None
+    cover_base_name = None
+    final_cover_data = None
+    final_cover_docx = None
+    final_cover_pdf = None
+    if generated_cover_letter is not None:
+        cover_name_parts = [safe_filename_component(cover_letter_prefix)]
+        if plan.company:
+            cover_name_parts.append(safe_filename_component(plan.company))
+        cover_name_parts.append(title)
+        cover_base_name = "_".join(cover_name_parts)
+        final_cover_data = destination / f"{cover_base_name}.json"
+        final_cover_docx = destination / f"{cover_base_name}.docx"
+        final_cover_pdf = (
+            destination / f"{cover_base_name}.pdf" if include_pdf else None
+        )
 
+    cover_render_report = None
     try:
         with tempfile.TemporaryDirectory(dir=str(destination), prefix=".forge-tailor-") as temp_dir:
             staging = Path(temp_dir)
@@ -302,6 +421,71 @@ def tailor_resume_with_openai(
             if final_pdf is not None:
                 staged_pdf = pdf_converter(staged_docx, staging / final_pdf.name)
 
+            staged_cover_data = None
+            staged_cover_docx = None
+            staged_cover_pdf = None
+            if (
+                generated_cover_letter is not None
+                and cover_values is not None
+                and final_cover_data is not None
+                and final_cover_docx is not None
+                and cover_template_path is not None
+            ):
+                staged_cover_data = write_json(
+                    staging / final_cover_data.name,
+                    generated_cover_letter,
+                )
+                staged_cover_docx = staging / final_cover_docx.name
+                cover_render_report = render_docx(
+                    cover_template_path,
+                    staged_cover_docx,
+                    cover_values,
+                    strict=True,
+                )
+                cover_document = generated_cover_letter["document"]
+                cover_application = cover_document["application"]
+                signature_name = cover_document["signature"]["name"]
+                metadata_target = cover_application["companyName"] or plan.job_title
+                metadata_subject = f"Application for {plan.job_title}"
+                if cover_application["companyName"]:
+                    metadata_subject += f" - {cover_application['companyName']}"
+                metadata_keywords = [plan.job_title]
+                if cover_application["companyName"]:
+                    metadata_keywords.append(cover_application["companyName"])
+                update_docx_core_properties(
+                    staged_cover_docx,
+                    {
+                        "title": f"{signature_name} - {metadata_target} Cover Letter",
+                        "subject": metadata_subject,
+                        "description": (
+                            f"Cover letter tailored for the {plan.job_title} position"
+                            + (
+                                f" at {cover_application['companyName']}."
+                                if cover_application["companyName"]
+                                else "."
+                            )
+                        ),
+                        "keywords": "; ".join(metadata_keywords),
+                    },
+                )
+                cover_render_report = RenderReport(
+                    output=cover_render_report.output,
+                    controls=cover_render_report.controls,
+                    changed_controls=cover_render_report.changed_controls,
+                    unchanged_controls=cover_render_report.unchanged_controls,
+                    changed_parts=tuple(
+                        dict.fromkeys(
+                            (*cover_render_report.changed_parts, "docProps/core.xml")
+                        )
+                    ),
+                    unused_values=cover_render_report.unused_values,
+                )
+                if final_cover_pdf is not None:
+                    staged_cover_pdf = pdf_converter(
+                        staged_cover_docx,
+                        staging / final_cover_pdf.name,
+                    )
+
             if staged_job_source is not None and final_job_source is not None:
                 os.replace(staged_job_source, final_job_source)
             if staged_context_selection is not None and final_context_selection is not None:
@@ -313,8 +497,16 @@ def tailor_resume_with_openai(
             os.replace(staged_docx, final_docx)
             if staged_pdf is not None and final_pdf is not None:
                 os.replace(staged_pdf, final_pdf)
+            if staged_cover_data is not None and final_cover_data is not None:
+                os.replace(staged_cover_data, final_cover_data)
+            if staged_cover_docx is not None and final_cover_docx is not None:
+                os.replace(staged_cover_docx, final_cover_docx)
+            if staged_cover_pdf is not None and final_cover_pdf is not None:
+                os.replace(staged_cover_pdf, final_cover_pdf)
     except OSError as exc:
-        raise TailoringError(f"Could not publish tailored resume artifacts: {exc}") from exc
+        raise TailoringError(
+            f"Could not publish tailored application artifacts: {exc}"
+        ) from exc
 
     published_report = RenderReport(
         output=final_docx,
@@ -324,6 +516,16 @@ def tailor_resume_with_openai(
         changed_parts=render_report.changed_parts,
         unused_values=render_report.unused_values,
     )
+    published_cover_report = None
+    if cover_render_report is not None and final_cover_docx is not None:
+        published_cover_report = RenderReport(
+            output=final_cover_docx,
+            controls=cover_render_report.controls,
+            changed_controls=cover_render_report.changed_controls,
+            unchanged_controls=cover_render_report.unchanged_controls,
+            changed_parts=cover_render_report.changed_parts,
+            unused_values=cover_render_report.unused_values,
+        )
     usage_summary = usage_store.summary(workflow_id=workflow_id)
     return TailoringResult(
         job_title=plan.job_title,
@@ -349,6 +551,11 @@ def tailor_resume_with_openai(
         data_output=final_data,
         docx_output=final_docx,
         pdf_output=final_pdf,
+        cover_letter_model=resolved_cover_letter_model,
+        cover_letter_data_output=final_cover_data,
+        cover_letter_docx_output=final_cover_docx,
+        cover_letter_pdf_output=final_cover_pdf,
         applied_operations=len(targets),
         render_report=published_report,
+        cover_letter_render_report=published_cover_report,
     )

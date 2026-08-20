@@ -1,6 +1,6 @@
 # Axelyn Forge
 
-Axelyn Forge validates canonical resume JSON, resolves semantic bindings, and replaces text inside Word Structured Document Tags (SDTs). The DOCX template remains the source of truth for presentation: Forge edits `w:t` payloads without rebuilding paragraphs, runs, tables, numbering, or document layout. Tailoring also creates a PDF derivative through headless LibreOffice for convenient delivery.
+Axelyn Forge validates canonical resume and cover-letter JSON, resolves semantic bindings, and replaces text inside Word Structured Document Tags (SDTs). DOCX templates remain the source of truth for presentation: Forge edits `w:t` payloads without rebuilding paragraphs, runs, tables, numbering, or document layout. Tailoring also creates PDF derivatives through headless LibreOffice for convenient delivery.
 
 ## Setup
 
@@ -98,6 +98,13 @@ Save or attach a JD as a UTF-8 text file, then run the complete workflow:
   --output-dir output
 ```
 
+Cover-letter generation is enabled by default. It uses
+`templates/Amin_Haiqal_Cover_Letter_SDT_Template.docx`, validates the generated
+semantic document with `schemas/cover-letter.schema.json`, and resolves
+`bindings/cover-letter.json`. Derived cover letters receive company- and role-specific
+document metadata so stale application details cannot leak from the source template.
+Add `--no-cover-letter` to emit only the resume.
+
 Alternatively, supply a public job-posting URL. Forge uses OpenAI web search to read the exact posting before context selection and tailoring:
 
 ```bash
@@ -112,7 +119,7 @@ Alternatively, supply a public job-posting URL. Forge uses OpenAI web search to 
 
 `--jd` and `--jd-url` are mutually exclusive. URL ingestion accepts only public HTTP(S) URLs, constrains search to the supplied hostname, and fails rather than substituting a different posting when the exact page is unavailable. The normalized job text and retrieved source URLs are saved in `Amin_Haiqal_Resume_[Job_Title].job-source.json`.
 
-The main tailoring model defaults to `gpt-5.6-terra`. The context selector and URL retriever default to `gpt-5.6-luna`. Override them independently with `OPENAI_MODEL` / `--model`, `OPENAI_CONTEXT_MODEL` / `--context-model`, and `OPENAI_WEB_MODEL` / `--web-model`; use pinned model snapshots when repeatable AI behavior matters. The validated renderer remains deterministic regardless of model choice.
+The main tailoring and cover-letter models default to `gpt-5.6-terra`. The context selector and URL retriever default to `gpt-5.6-luna`. Override them independently with `OPENAI_MODEL` / `--model`, `OPENAI_COVER_LETTER_MODEL` / `--cover-letter-model`, `OPENAI_CONTEXT_MODEL` / `--context-model`, and `OPENAI_WEB_MODEL` / `--web-model`; use pinned model snapshots when repeatable AI behavior matters. The validated renderer remains deterministic regardless of model choice.
 
 After resolving the JD input, `--context` adds a context-selection call before the main tailoring call. URL input adds one earlier web-search call:
 
@@ -121,8 +128,10 @@ After resolving the JD input, `--context` adds a context-selection call before t
 3. The selector reads stored chunks, receives the JD and chunk catalog, then returns ranked chunk IDs, role signals, and material gaps.
 4. Forge rejects unknown, duplicate, empty, or excessive selections and resolves accepted IDs from SQLite.
 5. The main tailoring call receives the canonical resume and only the selected context chunks verbatim.
-6. Protected-field checks, schema validation, binding, and deterministic DOCX rendering run locally.
-7. Headless LibreOffice converts the finished DOCX into a validated PDF; the DOCX remains untouched.
+6. Protected-field checks produce the validated tailored resume locally.
+7. When enabled, a separate structured call writes nine complete, evidence-referenced cover-letter paragraphs using the tailored resume and the same selected context.
+8. Forge assembles protected identity and application fields, validates both canonical documents, and renders both DOCX templates.
+9. Headless LibreOffice converts the finished DOCX files into validated PDFs; the DOCX files remain untouched.
 
 Index or refresh the database independently:
 
@@ -144,7 +153,7 @@ SQLite stores the schema version, source-document hashes and lengths, and each c
 
 ### OpenAI request costs in SQLite
 
-Every OpenAI call made by the `tailor` workflow creates an `llm_requests` ledger row before the request starts. URL retrieval, context selection, and main tailoring share one workflow ID but remain separate rows. Keyword extraction is part of the existing context-selection response, so alignment does not add another OpenAI request. Successful rows capture:
+Every OpenAI call made by the `tailor` workflow creates an `llm_requests` ledger row before the request starts. URL retrieval, context selection, main tailoring, and optional cover-letter generation share one workflow ID but remain separate rows. Keyword extraction is part of the existing context-selection response, so alignment does not add another OpenAI request. Disabling the cover letter skips its request entirely. Successful rows capture:
 
 - requested and actual model, service tier, response ID, response status, and duration;
 - input, ordinary input, cached input, cache-write, output, reasoning, and total tokens;
@@ -189,26 +198,30 @@ The command produces auditable files named from the model-extracted job title. U
 - `Amin_Haiqal_Resume_[Job_Title].json`
 - `Amin_Haiqal_Resume_[Job_Title].docx`
 - `Amin_Haiqal_Resume_[Job_Title].pdf`
+- `Amin_Haiqal_Cover_Letter_[Company]_[Job_Title].json`
+- `Amin_Haiqal_Cover_Letter_[Company]_[Job_Title].docx`
+- `Amin_Haiqal_Cover_Letter_[Company]_[Job_Title].pdf`
 
 The context-selection call sends the JD and full indexed context catalog to OpenAI. It also extracts concise employer terminology and classifies each term as required, preferred, or responsibility-level. Forge then deterministically checks those terms against canonical stable-ID entities and the selected verified context. Up to 12 supported terms become `mustSurface` guidance for the main call; unsupported terms remain explicit gaps and cannot become candidate claims. No-op rewrites are removed before operations are applied.
 
-The main call sends the JD, canonical resume, explicit editable-target catalog, selection signals, evidence-backed keyword guidance, and selected context excerpts. URL ingestion sends only the requested URL and retrieval instructions. All calls use `store=False`. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. After rendering values are resolved, the keyword-alignment audit reports exact before/after coverage, missing targeted terms, changed Word binding tags, and changed resume sections.
+The main call sends the JD, canonical resume, explicit editable-target catalog, selection signals, evidence-backed keyword guidance, and selected context excerpts. The cover-letter call receives the tailored resume and the same verified evidence, but returns complete prose instead of resume operations. Every paragraph must cite allowed resume or context IDs, with `job-description` used for employer-specific statements. URL ingestion sends only the requested URL and retrieval instructions. All calls use `store=False`. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. After rendering values are resolved, the keyword-alignment audit reports exact before/after coverage, missing targeted terms, changed Word binding tags, and changed resume sections.
 
 ## Discord bot
 
 Forge can run as a private Discord Gateway bot on a small VPS. It makes an outbound connection to Discord, so the VPS does not need a domain, TLS certificate, reverse proxy, or public application port.
 
-The bot registers one grouped slash command with three mutually exclusive input options:
+The bot registers one grouped slash command with three mutually exclusive JD inputs and an optional cover-letter switch:
 
 ```text
 /forge tailor jd:<job-description-text>
 /forge tailor file:<job-description.txt>
 /forge tailor url:<https://company.example/jobs/123>
+/forge tailor jd:<job-description-text> cover_letter:False
 ```
 
-Discord slash-command values are named options, so pasted text uses `jd:` rather than an unnamed positional argument. Forge requires exactly one of `jd`, `file`, or `url`. Direct `jd` input is limited by Discord to 6,000 characters. File input is limited to a non-empty UTF-8 `.txt` file; URL input passes through the same public-URL validation and OpenAI web-search ingestion as the CLI.
+Discord slash-command values are named options, so pasted text uses `jd:` rather than an unnamed positional argument. Forge requires exactly one of `jd`, `file`, or `url`. The optional `cover_letter` boolean defaults to `True`; setting it to `False` skips generation and its OpenAI cost. Direct `jd` input is limited by Discord to 6,000 characters. File input is limited to a non-empty UTF-8 `.txt` file; URL input passes through the same public-URL validation and OpenAI web-search ingestion as the CLI.
 
-The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with both the generated DOCX and PDF, request count, estimated OpenAI cost, evidence-backed keyword coverage, changed sections, and material-gap count. Only one request runs at a time. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
+The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with four attachments by default: resume DOCX/PDF and cover-letter DOCX/PDF. With `cover_letter:False`, it returns only the two resume files. The response includes request count, estimated OpenAI cost, evidence-backed keyword coverage, changed sections, and material-gap count. Only one request runs at a time. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
 
 Access is default-deny. `DISCORD_ALLOWED_USER_IDS` must contain at least one numeric user ID. No message-content or other privileged Gateway intent is used, and all command responses are ephemeral.
 
@@ -265,7 +278,7 @@ The GitHub `production` environment uses these repository secrets:
 
 If the production branch changes, update both the workflow trigger and `DEPLOY_BRANCH` in `scripts/vps-deploy.sh` together.
 
-Back up the `forge-state` volume regularly. SQLite, generated resume JSON, DOCX, and PDF files can contain personal information and should not be placed in a public directory.
+Back up the `forge-state` volume regularly. SQLite, generated resume and cover-letter JSON, DOCX, and PDF files can contain personal information and should not be placed in a public directory.
 
 ## Binding paths
 
@@ -277,4 +290,4 @@ A source beginning with `document` is an absolute semantic path, such as `docume
 .venv/bin/python -m unittest discover -v
 ```
 
-The suite covers schema failures, duplicate stable IDs, SDT discovery, complete binding coverage, identity rendering, multiple and Unicode replacements, preservation of paragraph/run properties, missing bindings, source-template protection, DOCX archive validity, atomic PDF conversion, and Discord dual-file delivery.
+The suite covers resume and cover-letter schema failures, duplicate stable IDs, SDT discovery, complete binding coverage, evidence-reference validation, protected identity assembly, multiple and Unicode replacements, preservation of paragraph/run properties, missing bindings, source-template protection, DOCX archive validity, atomic PDF conversion, and Discord two-file/four-file delivery.

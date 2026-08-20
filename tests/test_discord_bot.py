@@ -89,7 +89,7 @@ class DiscordBotConfigurationTests(unittest.TestCase):
                 }
             )
 
-    def test_single_grouped_tailor_command_has_jd_file_and_url_options(self):
+    def test_tailor_command_has_sources_and_default_on_cover_letter_option(self):
         client = ForgeDiscordClient(bot_config())
         self.assertTrue(client.intents.guilds)
         self.assertFalse(client.intents.members)
@@ -100,18 +100,24 @@ class DiscordBotConfigurationTests(unittest.TestCase):
         command = group.get_command("tailor")
         self.assertIsNotNone(command)
         parameters = {parameter.name: parameter for parameter in command.parameters}
-        self.assertEqual({"file", "url", "jd"}, set(parameters))
+        self.assertEqual({"file", "url", "jd", "cover_letter"}, set(parameters))
         self.assertEqual(discord.AppCommandOptionType.attachment, parameters["file"].type)
         self.assertEqual(discord.AppCommandOptionType.string, parameters["url"].type)
         self.assertEqual(discord.AppCommandOptionType.string, parameters["jd"].type)
+        self.assertEqual(
+            discord.AppCommandOptionType.boolean,
+            parameters["cover_letter"].type,
+        )
         self.assertFalse(parameters["file"].required)
         self.assertFalse(parameters["url"].required)
         self.assertFalse(parameters["jd"].required)
+        self.assertFalse(parameters["cover_letter"].required)
         command_payload = command.to_dict(client.tree)
         option_payloads = {
             option["name"]: option for option in command_payload["options"]
         }
         self.assertEqual(6000, option_payloads["jd"]["max_length"])
+        self.assertIn("default: Yes", option_payloads["cover_letter"]["description"])
 
 
 class DiscordTailorSourceTests(unittest.TestCase):
@@ -203,7 +209,26 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("Role requirements ✓", observed["jd_text"])
         self.assertIsNone(observed["job_description_url"])
         self.assertTrue(observed["include_pdf"])
+        self.assertTrue(observed["include_cover_letter"])
+        self.assertEqual(
+            Path("templates/Amin_Haiqal_Cover_Letter_SDT_Template.docx"),
+            observed["cover_letter_template"],
+        )
         self.assertFalse(observed["job_description"].exists())
+
+    async def test_cover_letter_false_is_forwarded_without_changing_jd_handling(self):
+        observed = {}
+        sentinel = object()
+
+        def tailor(**kwargs):
+            observed.update(kwargs)
+            return sentinel
+
+        runner = ForgeDiscordRunner(bot_config(), tailor=tailor)
+        result = await runner.run(jd="Role requirements", cover_letter=False)
+
+        self.assertIs(sentinel, result)
+        self.assertFalse(observed["include_cover_letter"])
 
     async def test_txt_attachment_becomes_existing_temporary_jd_for_forge(self):
         observed = {}
@@ -270,17 +295,23 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_authorized_request_is_deferred_privately_and_returns_docx_and_pdf(self):
+    async def test_default_request_returns_resume_and_cover_letter_docx_and_pdf(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "Amin_Haiqal_Resume_Engineer.docx"
             output.write_bytes(b"test-docx")
             pdf_output = output.with_suffix(".pdf")
             pdf_output.write_bytes(b"test-pdf")
+            cover_output = Path(temp_dir) / "Amin_Haiqal_Cover_Letter_Example_Engineer.docx"
+            cover_output.write_bytes(b"test-cover-docx")
+            cover_pdf_output = cover_output.with_suffix(".pdf")
+            cover_pdf_output.write_bytes(b"test-cover-pdf")
 
             def tailor(**kwargs):
                 return SimpleNamespace(
                     docx_output=output,
                     pdf_output=pdf_output,
+                    cover_letter_docx_output=cover_output,
+                    cover_letter_pdf_output=cover_pdf_output,
                     job_title="Engineer",
                     company="Example",
                     usage_summary={"requests": 2, "estimated_cost_usd": 0.0123},
@@ -306,9 +337,15 @@ class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([], interaction.response.messages)
             self.assertEqual(1, len(interaction.edits))
             self.assertEqual(
-                [output.name, pdf_output.name],
+                [
+                    output.name,
+                    pdf_output.name,
+                    cover_output.name,
+                    cover_pdf_output.name,
+                ],
                 interaction.edits[0]["attachment_names"],
             )
+            self.assertIn("Cover letter: included", interaction.edits[0]["content"])
             self.assertIn("Estimated OpenAI cost: USD 0.01230000", interaction.edits[0]["content"])
             self.assertIn(
                 "Evidence-backed keyword coverage: 10/12 (83.3%)",
@@ -318,6 +355,45 @@ class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
                 "Sections tailored: Summary, Experience, Projects",
                 interaction.edits[0]["content"],
             )
+
+    async def test_cover_letter_false_returns_only_resume_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "Amin_Haiqal_Resume_Engineer.docx"
+            output.write_bytes(b"test-docx")
+            pdf_output = output.with_suffix(".pdf")
+            pdf_output.write_bytes(b"test-pdf")
+            observed = {}
+
+            def tailor(**kwargs):
+                observed.update(kwargs)
+                return SimpleNamespace(
+                    docx_output=output,
+                    pdf_output=pdf_output,
+                    cover_letter_docx_output=None,
+                    cover_letter_pdf_output=None,
+                    job_title="Engineer",
+                    company="Example",
+                    usage_summary={"requests": 1, "estimated_cost_usd": 0.01},
+                    keyword_coverage=None,
+                    gaps=(),
+                )
+
+            client = ForgeDiscordClient(bot_config(), tailor=tailor)
+            interaction = FakeInteraction()
+            await client._handle_tailor(
+                interaction,
+                attachment=None,
+                url=None,
+                jd="Job requirements",
+                cover_letter=False,
+            )
+
+            self.assertFalse(observed["include_cover_letter"])
+            self.assertEqual(
+                [output.name, pdf_output.name],
+                interaction.edits[0]["attachment_names"],
+            )
+            self.assertIn("Cover letter: not requested", interaction.edits[0]["content"])
 
     async def test_unauthorized_or_ambiguous_request_never_runs_forge(self):
         calls = []

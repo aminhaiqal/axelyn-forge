@@ -47,20 +47,30 @@ def build_stable_id_index(resume: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     return _collect_ids(resume)
 
 
-def validate_resume(resume: Dict[str, Any], schema: Dict[str, Any]) -> None:
-    """Validate a canonical resume and its global stable-ID invariant."""
+def validate_document(
+    document: Dict[str, Any],
+    schema: Dict[str, Any],
+    *,
+    label: str = "Document",
+) -> None:
+    """Validate a canonical document and its global stable-ID invariant."""
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:
-        raise ResumeValidationError(f"Resume schema is invalid: {exc.message}") from exc
+        raise ResumeValidationError(f"{label} schema is invalid: {exc.message}") from exc
 
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
-    errors = sorted(validator.iter_errors(resume), key=_path_key)
+    errors = sorted(validator.iter_errors(document), key=_path_key)
     if errors:
         formatted = []
         for error in errors:
             path = _display_path(error.absolute_path)
             formatted.append(f"- {path}: {error.message}")
-        raise ResumeValidationError("Resume validation failed:\n" + "\n".join(formatted))
+        raise ResumeValidationError(f"{label} validation failed:\n" + "\n".join(formatted))
 
-    build_stable_id_index(resume)
+    build_stable_id_index(document)
+
+
+def validate_resume(resume: Dict[str, Any], schema: Dict[str, Any]) -> None:
+    """Validate a canonical resume and its global stable-ID invariant."""
+    validate_document(resume, schema, label="Resume")

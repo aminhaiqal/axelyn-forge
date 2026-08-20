@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "template": "cover-letter",
+  "bindings": {
+    "LEGAL_NAME": {
+      "source": "document.candidate.legalName"
+    },
+    "EMAIL": {
+      "source": "document.candidate.email"
+    },
+    "LOCATION": {
+      "source": "document.candidate.location"
+    },
+    "DATE": {
+      "source": "document.application.date"
+    },
+    "RECIPIENT": {
+      "source": "document.application.recipient"
+    },
+    "COMPANY_NAME": {
+      "source": "document.application.companyName"
+    },
+    "APPLICATION_SUBJECT": {
+      "source": "document.application.subject"
+    },
+    "SALUTATION": {
+      "source": "document.application.salutation"
+    },
+    "OPENING_PARAGRAPH": {
+      "source": "cover-opening.text"
+    },
+    "BACKGROUND_PARAGRAPH": {
+      "source": "cover-body-1.text"
+    },
+    "AI_SYSTEMS_PARAGRAPH": {
+      "source": "cover-body-2.text"
+    },
+    "TECHNICAL_DEPTH_PARAGRAPH": {
+      "source": "cover-body-3.text"
+    },
+    "COMPANY_FIT_PARAGRAPH": {
+      "source": "cover-body-4.text"
+    },
+    "OWNERSHIP_PARAGRAPH": {
+      "source": "cover-body-5.text"
+    },
+    "LEADERSHIP_PARAGRAPH": {
+      "source": "cover-body-6.text"
+    },
+    "VALUE_PROPOSITION_PARAGRAPH": {
+      "source": "cover-value-proposition.text"
+    },
+    "CLOSING_PARAGRAPH": {
+      "source": "cover-closing.text"
+    },
+    "SIGNATURE_NAME": {
+      "source": "document.signature.name"
+    }
+  }
+}

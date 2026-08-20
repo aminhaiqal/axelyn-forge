@@ -14,6 +14,15 @@ from .errors import DocxError, MissingTemplateBindingError
 PathLike = Union[str, Path]
 WORD_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace"
+CORE_PROPERTIES_PART = "docProps/core.xml"
+CORE_PROPERTIES = {
+    "title": "{http://purl.org/dc/elements/1.1/}title",
+    "subject": "{http://purl.org/dc/elements/1.1/}subject",
+    "description": "{http://purl.org/dc/elements/1.1/}description",
+    "keywords": (
+        "{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}keywords"
+    ),
+}
 NAMESPACES = {"w": WORD_NAMESPACE}
 W_SDT = f"{{{WORD_NAMESPACE}}}sdt"
 W_SDT_CONTENT = f"{{{WORD_NAMESPACE}}}sdtContent"
@@ -192,6 +201,59 @@ def _write_archive(
 def validate_docx_archive(path: PathLike) -> None:
     """Check ZIP integrity and required core DOCX parts."""
     _read_archive(Path(path))
+
+
+def update_docx_core_properties(
+    path: PathLike,
+    properties: Mapping[str, str],
+) -> None:
+    """Atomically update non-visual metadata on an already-rendered DOCX."""
+    target = Path(path)
+    unknown = sorted(set(properties).difference(CORE_PROPERTIES))
+    if unknown:
+        raise DocxError(f"Unknown DOCX core properties: {', '.join(unknown)}")
+    invalid = sorted(key for key, value in properties.items() if not isinstance(value, str))
+    if invalid:
+        raise DocxError(f"DOCX core properties must be strings: {', '.join(invalid)}")
+
+    infos, payloads, comment = _read_archive(target)
+    if CORE_PROPERTIES_PART not in payloads:
+        raise DocxError(f"DOCX archive is missing required part: {CORE_PROPERTIES_PART}")
+    try:
+        tree = etree.parse(BytesIO(payloads[CORE_PROPERTIES_PART]), _xml_parser())
+    except etree.XMLSyntaxError as exc:
+        raise DocxError(f"Invalid OOXML in {CORE_PROPERTIES_PART}: {exc}") from exc
+
+    root = tree.getroot()
+    for key, value in properties.items():
+        qualified_name = CORE_PROPERTIES[key]
+        node = root.find(qualified_name)
+        if node is None:
+            node = etree.SubElement(root, qualified_name)
+        node.text = value or None
+    payloads[CORE_PROPERTIES_PART] = _serialize_tree(tree)
+
+    temporary: Optional[Path] = None
+    try:
+        descriptor, temp_name = tempfile.mkstemp(
+            dir=str(target.parent),
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+        )
+        os.close(descriptor)
+        temporary = Path(temp_name)
+        _write_archive(temporary, infos, payloads, comment)
+        validate_docx_archive(temporary)
+        os.replace(temporary, target)
+        temporary = None
+    except OSError as exc:
+        raise DocxError(f"Could not update DOCX core properties for {target}: {exc}") from exc
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def render_docx(

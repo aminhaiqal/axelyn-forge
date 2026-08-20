@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.0.0",
+  "document": {
+    "id": "amin-haiqal-cover-letter",
+    "type": "cover-letter",
+    "locale": "en-MY",
+    "candidate": {
+      "legalName": "MUHAMMAD AMIN HAIQAL BIN ROSLEE",
+      "email": "aminhaiqal15@gmail.com",
+      "location": "Klang, Selangor"
+    },
+    "application": {
+      "date": "20 August 2026",
+      "recipient": "Hiring Team",
+      "companyName": "JOM",
+      "jobTitle": "Engineering Lead (AI Startup)",
+      "subject": "Application for Engineering Lead (AI Startup)",
+      "salutation": "Dear JOM Hiring Team,"
+    },
+    "paragraphs": [
+      {
+        "id": "cover-opening",
+        "purpose": "opening",
+        "text": "I am applying for the Engineering Lead position at JOM because the role closely resembles the kind of engineering ownership I have been developing through Axelyn Technologies: working from an ambiguous business problem, defining the technical approach, building the system, deploying it, and remaining responsible for what happens once it reaches production.",
+        "supportingEvidence": [
+          "job-description",
+          "experience-axelyn"
+        ]
+      },
+      {
+        "id": "cover-body-1",
+        "purpose": "experience",
+        "text": "My background is unconventional for a lead position. I have not spent several years progressing through engineering titles inside a large organization. Instead, through Axelyn, I have had to take ownership much earlier. I have worked directly with stakeholders, translated requirements into architecture and product decisions, designed APIs and data models, built backend and frontend systems, deployed containerized services, investigated production failures, and made technical trade-offs with limited resources. That experience has shaped me into an engineer who thinks about the outcome of a system rather than only the code required to implement it.",
+        "supportingEvidence": [
+          "experience-axelyn"
+        ]
+      },
+      {
+        "id": "cover-body-2",
+        "purpose": "experience",
+        "text": "A significant part of my recent work has involved production AI systems. I built ARIA, an autonomous regulatory intelligence agent that combines source ingestion, document processing, Retrieval-Augmented Generation, LLM analysis, evidence attribution, persistent execution records, and structured outputs. Because the output could influence how users interpret regulatory changes, reliability mattered. I implemented validation, duplicate detection, failure handling, evidence attribution, and auditable outputs rather than treating model responses as inherently trustworthy.",
+        "supportingEvidence": [
+          "project-aria",
+          "aria-highlight-1",
+          "aria-highlight-2"
+        ]
+      },
+      {
+        "id": "cover-body-3",
+        "purpose": "experience",
+        "text": "I have also worked on AI-assisted document processing for regulatory monitoring systems using OpenAI and Gemini, alongside conventional software engineering involving Python, TypeScript, React, FastAPI/Django, PostgreSQL, REST APIs, Docker, Kubernetes, AWS, CI/CD, testing, and production monitoring. More recently, I have gone deeper into model development by fine-tuning Qwen3-1.7B locally using PyTorch, Hugging Face Transformers, and QLoRA, which strengthened my understanding of evaluation, output consistency, model behaviour, and the limitations behind the API layer.",
+        "supportingEvidence": [
+          "project-aria",
+          "technical-skills",
+          "skills-ai"
+        ]
+      },
+      {
+        "id": "cover-body-4",
+        "purpose": "company-fit",
+        "text": "JOM's work on AI-generated scoring and coaching is particularly interesting to me. In systems like these, successfully calling an LLM is the easy part. The harder engineering problem is establishing whether the output is consistent, explainable enough for the use case, measurable, observable, and safe to depend on. I would approach prompt orchestration and model integration together with evaluation, structured outputs, failure handling, data design, and production observability rather than treating them as separate concerns.",
+        "supportingEvidence": [
+          "job-description",
+          "project-aria"
+        ]
+      },
+      {
+        "id": "cover-body-5",
+        "purpose": "experience",
+        "text": "I am also attracted to the product ownership expected in this role. Working directly with the founder and enterprise customers to understand requirements, challenge assumptions, make pragmatic architecture decisions, and balance immediate delivery against technical debt is the kind of environment in which I have learned to operate. I am comfortable owning ambiguity and explaining technical decisions in terms of business consequences rather than implementation details alone.",
+        "supportingEvidence": [
+          "job-description",
+          "experience-axelyn"
+        ]
+      },
+      {
+        "id": "cover-body-6",
+        "purpose": "motivation",
+        "text": "I recognise that this role also carries responsibility beyond individual contribution, particularly setting engineering standards and supporting a junior engineer. My approach would be to create enough structure that a small team can move quickly without depending on tribal knowledge: clear technical decisions, reviewable pull requests, automated testing where failure matters, useful observability, documented interfaces, and scoped work with explicit outcomes. I would also expect my own architectural decisions to be challenged when another engineer has better reasoning.",
+        "supportingEvidence": [
+          "job-description",
+          "experience-axelyn",
+          "engineering-practices"
+        ]
+      },
+      {
+        "id": "cover-value-proposition",
+        "purpose": "value-proposition",
+        "text": "I would bring JOM a combination of hands-on software engineering, practical AI development, production ownership, stakeholder experience, and the founder-level pragmatism that comes from having built systems under my own business. I am interested in taking that experience into a focused AI-native product team where the technical decisions I make can directly affect the product, customers, and engineering culture.",
+        "supportingEvidence": [
+          "job-description",
+          "experience-axelyn",
+          "project-aria"
+        ]
+      },
+      {
+        "id": "cover-closing",
+        "purpose": "closing",
+        "text": "I would welcome the opportunity to discuss JOM's current architecture, the reliability challenges around its voice-AI and scoring systems, and what you expect the Engineering Lead to own during the company's next stage of growth.",
+        "supportingEvidence": [
+          "job-description"
+        ]
+      }
+    ],
+    "signature": {
+      "name": "Amin Haiqal"
+    }
+  }
+}

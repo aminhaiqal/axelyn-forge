@@ -8,6 +8,10 @@ TEMPLATE = ROOT / "templates" / "Amin_Haiqal_Resume_Forge_SDT_Template.docx"
 DATA = ROOT / "data" / "profile.json"
 SCHEMA = ROOT / "schemas" / "profile.schema.json"
 BINDINGS = ROOT / "bindings" / "software-engineer.json"
+COVER_TEMPLATE = ROOT / "templates" / "Amin_Haiqal_Cover_Letter_SDT_Template.docx"
+COVER_DATA = ROOT / "data" / "cover_letter.json"
+COVER_SCHEMA = ROOT / "schemas" / "cover-letter.schema.json"
+COVER_BINDINGS = ROOT / "bindings" / "cover-letter.json"
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W}
 

@@ -1,16 +1,29 @@
 import tempfile
 import unittest
 import json
+import zipfile
+from datetime import date
 from pathlib import Path
 
 from forge.docx import inspect_docx, validate_docx_archive
 from forge.context_store import sync_context_database
+from forge.errors import TailoringError
 from forge.jsonio import load_json
 from forge.tailoring import safe_filename_component, tailor_resume_with_openai
 from forge.validation import validate_resume
 
 from .fakes import FakeOpenAIClient, FakeOpenAIResponse
-from .helpers import BINDINGS, DATA, SCHEMA, TEMPLATE
+from .helpers import (
+    BINDINGS,
+    COVER_BINDINGS,
+    COVER_DATA,
+    COVER_SCHEMA,
+    COVER_TEMPLATE,
+    DATA,
+    SCHEMA,
+    TEMPLATE,
+)
+from .test_cover_letter import valid_cover_letter_draft
 from .test_job_source import found_job, web_output, web_usage
 from .test_openai_provider import valid_plan
 
@@ -81,6 +94,143 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
                 "Full Stack Software Engineer | React, TypeScript & Python",
                 controls["profile.headline"],
             )
+
+    def test_cover_letter_reuses_tailored_resume_and_emits_docx_and_pdf(self):
+        client = FakeOpenAIClient(
+            [
+                FakeOpenAIResponse(valid_plan(), response_id="resp_tailoring"),
+                FakeOpenAIResponse(
+                    valid_cover_letter_draft(),
+                    response_id="resp_cover_letter",
+                ),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            jd = root / "jd.txt"
+            jd.write_text("Texas Instruments full-stack role", encoding="utf-8")
+            cover_template_before = COVER_TEMPLATE.read_bytes()
+            result = tailor_resume_with_openai(
+                template=TEMPLATE,
+                data=DATA,
+                schema=SCHEMA,
+                bindings=BINDINGS,
+                job_description=jd,
+                output_dir=root / "output",
+                usage_database=root / "usage.sqlite3",
+                model="gpt-resume-test",
+                include_pdf=True,
+                include_cover_letter=True,
+                cover_letter_template=COVER_TEMPLATE,
+                cover_letter_data=COVER_DATA,
+                cover_letter_schema=COVER_SCHEMA,
+                cover_letter_bindings=COVER_BINDINGS,
+                cover_letter_model="gpt-cover-test",
+                cover_letter_date=date(2026, 8, 20),
+                pdf_converter=fake_pdf_converter,
+                client=client,
+            )
+
+            cover_base = (
+                "Amin_Haiqal_Cover_Letter_Texas_Instruments_"
+                "Full_Stack_Software_Engineer"
+            )
+            self.assertEqual(2, len(client.responses.calls))
+            self.assertEqual("gpt-cover-test", client.responses.calls[1]["model"])
+            cover_payload = json.loads(client.responses.calls[1]["input"])
+            self.assertEqual(
+                "Full Stack Software Engineer | React, TypeScript & Python",
+                cover_payload["tailoredResume"]["document"]["profile"]["headline"],
+            )
+            self.assertEqual(f"{cover_base}.json", result.cover_letter_data_output.name)
+            self.assertEqual(f"{cover_base}.docx", result.cover_letter_docx_output.name)
+            self.assertEqual(f"{cover_base}.pdf", result.cover_letter_pdf_output.name)
+            self.assertEqual(VALID_PDF, result.cover_letter_pdf_output.read_bytes())
+            self.assertEqual("gpt-cover-test", result.cover_letter_model)
+            self.assertEqual(18, result.cover_letter_render_report.controls)
+            self.assertIn(
+                "docProps/core.xml",
+                result.cover_letter_render_report.changed_parts,
+            )
+            self.assertEqual(2, result.usage_summary["requests"])
+            self.assertEqual(cover_template_before, COVER_TEMPLATE.read_bytes())
+
+            cover_data = load_json(result.cover_letter_data_output)
+            validate_resume(cover_data, load_json(COVER_SCHEMA))
+            self.assertEqual(
+                result.workflow_id,
+                cover_data["document"]["metadata"]["workflowId"],
+            )
+            cover_controls = {
+                item.tag: item.current_text
+                for item in inspect_docx(result.cover_letter_docx_output)
+            }
+            self.assertEqual("Texas Instruments", cover_controls["COMPANY_NAME"])
+            self.assertEqual(
+                "Application for Full Stack Software Engineer",
+                cover_controls["APPLICATION_SUBJECT"],
+            )
+            self.assertEqual("20 August 2026", cover_controls["DATE"])
+            with zipfile.ZipFile(result.cover_letter_docx_output) as archive:
+                core_properties = archive.read("docProps/core.xml").decode("utf-8")
+            self.assertIn(
+                "Amin Haiqal - Texas Instruments Cover Letter",
+                core_properties,
+            )
+            self.assertIn(
+                "Application for Full Stack Software Engineer - Texas Instruments",
+                core_properties,
+            )
+            self.assertNotIn("Smart Manufacturing", core_properties)
+
+    def test_disabling_cover_letter_skips_its_openai_request(self):
+        client = FakeOpenAIClient(FakeOpenAIResponse(valid_plan()))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            jd = root / "jd.txt"
+            jd.write_text("Full-stack role", encoding="utf-8")
+            result = tailor_resume_with_openai(
+                template=TEMPLATE,
+                data=DATA,
+                schema=SCHEMA,
+                bindings=BINDINGS,
+                job_description=jd,
+                output_dir=root / "output",
+                usage_database=root / "usage.sqlite3",
+                include_cover_letter=False,
+                client=client,
+            )
+
+            self.assertEqual(1, len(client.responses.calls))
+            self.assertIsNone(result.cover_letter_data_output)
+            self.assertIsNone(result.cover_letter_docx_output)
+            self.assertIsNone(result.cover_letter_pdf_output)
+
+    def test_missing_cover_letter_asset_fails_before_openai(self):
+        client = FakeOpenAIClient(FakeOpenAIResponse(valid_plan()))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            jd = root / "jd.txt"
+            jd.write_text("Full-stack role", encoding="utf-8")
+
+            with self.assertRaisesRegex(TailoringError, "template does not exist"):
+                tailor_resume_with_openai(
+                    template=TEMPLATE,
+                    data=DATA,
+                    schema=SCHEMA,
+                    bindings=BINDINGS,
+                    job_description=jd,
+                    output_dir=root / "output",
+                    include_cover_letter=True,
+                    cover_letter_template=root / "missing.docx",
+                    cover_letter_data=COVER_DATA,
+                    cover_letter_schema=COVER_SCHEMA,
+                    cover_letter_bindings=COVER_BINDINGS,
+                    client=client,
+                )
+
+            self.assertEqual([], client.responses.calls)
+            self.assertFalse((root / "output").exists())
 
     def test_context_directory_is_selected_before_main_tailoring_call(self):
         selection_response = {

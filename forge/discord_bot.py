@@ -58,11 +58,19 @@ class DiscordBotConfig:
     data: Path = Path("data/profile.json")
     schema: Path = Path("schemas/profile.schema.json")
     bindings: Path = Path("bindings/software-engineer.json")
+    cover_letter_template: Path = Path(
+        "templates/Amin_Haiqal_Cover_Letter_SDT_Template.docx"
+    )
+    cover_letter_data: Path = Path("data/cover_letter.json")
+    cover_letter_schema: Path = Path("schemas/cover-letter.schema.json")
+    cover_letter_bindings: Path = Path("bindings/cover-letter.json")
     context: Path = Path("context")
     database: Path = Path("data/context.sqlite3")
     output_dir: Path = Path("output")
     filename_prefix: str = "Amin_Haiqal_Resume"
+    cover_letter_prefix: str = "Amin_Haiqal_Cover_Letter"
     model: str = DEFAULT_OPENAI_MODEL
+    cover_letter_model: str = DEFAULT_OPENAI_MODEL
     context_model: str = DEFAULT_CONTEXT_SELECTION_MODEL
     web_model: str = DEFAULT_WEB_SEARCH_MODEL
     max_txt_bytes: int = DEFAULT_MAX_TXT_BYTES
@@ -86,6 +94,10 @@ class DiscordBotConfig:
             values.get("FORGE_MAX_TXT_BYTES", str(DEFAULT_MAX_TXT_BYTES)).strip(),
             "FORGE_MAX_TXT_BYTES",
         )
+        model = values.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip() or DEFAULT_OPENAI_MODEL
+        cover_letter_model = (
+            values.get("OPENAI_COVER_LETTER_MODEL", model).strip() or model
+        )
         return cls(
             token=token,
             allowed_user_ids=allowed_user_ids,
@@ -101,6 +113,27 @@ class DiscordBotConfig:
             bindings=Path(
                 values.get("FORGE_BINDINGS", "bindings/software-engineer.json")
             ),
+            cover_letter_template=Path(
+                values.get(
+                    "FORGE_COVER_LETTER_TEMPLATE",
+                    "templates/Amin_Haiqal_Cover_Letter_SDT_Template.docx",
+                )
+            ),
+            cover_letter_data=Path(
+                values.get("FORGE_COVER_LETTER_DATA", "data/cover_letter.json")
+            ),
+            cover_letter_schema=Path(
+                values.get(
+                    "FORGE_COVER_LETTER_SCHEMA",
+                    "schemas/cover-letter.schema.json",
+                )
+            ),
+            cover_letter_bindings=Path(
+                values.get(
+                    "FORGE_COVER_LETTER_BINDINGS",
+                    "bindings/cover-letter.json",
+                )
+            ),
             context=Path(values.get("FORGE_CONTEXT", "context")),
             database=Path(values.get("FORGE_DATABASE", "data/context.sqlite3")),
             output_dir=Path(values.get("FORGE_OUTPUT_DIR", "output")),
@@ -108,8 +141,12 @@ class DiscordBotConfig:
                 "FORGE_FILENAME_PREFIX", "Amin_Haiqal_Resume"
             ).strip()
             or "Amin_Haiqal_Resume",
-            model=values.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip()
-            or DEFAULT_OPENAI_MODEL,
+            cover_letter_prefix=values.get(
+                "FORGE_COVER_LETTER_PREFIX", "Amin_Haiqal_Cover_Letter"
+            ).strip()
+            or "Amin_Haiqal_Cover_Letter",
+            model=model,
+            cover_letter_model=cover_letter_model,
             context_model=values.get(
                 "OPENAI_CONTEXT_MODEL", DEFAULT_CONTEXT_SELECTION_MODEL
             ).strip()
@@ -125,6 +162,10 @@ class DiscordBotConfig:
             "resume data": self.data,
             "schema": self.schema,
             "bindings": self.bindings,
+            "cover-letter template": self.cover_letter_template,
+            "cover-letter data": self.cover_letter_data,
+            "cover-letter schema": self.cover_letter_schema,
+            "cover-letter bindings": self.cover_letter_bindings,
         }
         missing = [f"{label}: {path}" for label, path in assets.items() if not path.is_file()]
         if not self.context.exists():
@@ -207,6 +248,7 @@ class ForgeDiscordRunner:
         attachment: Optional[discord.Attachment] = None,
         url: Optional[str] = None,
         jd: Optional[str] = None,
+        cover_letter: bool = True,
     ) -> TailoringResult:
         source = validate_tailor_source(
             attachment_name=attachment.filename if attachment is not None else None,
@@ -217,7 +259,7 @@ class ForgeDiscordRunner:
         )
         if self._busy:
             raise DiscordBotBusyError(
-                "Forge is already tailoring another resume; try again when it finishes"
+                "Forge is already tailoring another application; try again when it finishes"
             )
 
         self._busy = True
@@ -265,6 +307,13 @@ class ForgeDiscordRunner:
                     context_selection_model=self.config.context_model,
                     web_search_model=self.config.web_model,
                     include_pdf=True,
+                    include_cover_letter=cover_letter,
+                    cover_letter_template=self.config.cover_letter_template,
+                    cover_letter_data=self.config.cover_letter_data,
+                    cover_letter_schema=self.config.cover_letter_schema,
+                    cover_letter_bindings=self.config.cover_letter_bindings,
+                    cover_letter_prefix=self.config.cover_letter_prefix,
+                    cover_letter_model=self.config.cover_letter_model,
                 )
         finally:
             self._busy = False
@@ -301,6 +350,8 @@ def _success_message(result: TailoringResult) -> str:
         )
     return (
         f"Resume tailored for {result.job_title}{company}.\n"
+        f"Cover letter: "
+        f"{'included' if getattr(result, 'cover_letter_docx_output', None) else 'not requested'}\n"
         f"OpenAI requests: {request_count}\n"
         f"Estimated OpenAI cost: USD {cost:.8f}{coverage_note}{gap_note}"
     )
@@ -323,17 +374,18 @@ class ForgeDiscordClient(discord.Client):
         )
         self.forge_group = app_commands.Group(
             name="forge",
-            description="Tailor and render an Axelyn Forge resume",
+            description="Tailor and render Axelyn Forge application documents",
         )
 
         @self.forge_group.command(
             name="tailor",
-            description="Tailor a resume from pasted text, a .txt file, or a job-posting URL",
+            description="Tailor a resume and cover letter from text, a file, or a job URL",
         )
         @app_commands.describe(
             file="UTF-8 .txt job description",
             url="Public job-posting URL",
             jd="Job-description text, up to 6,000 characters",
+            cover_letter="Also generate a tailored cover letter (default: Yes)",
         )
         async def tailor_command(
             interaction: discord.Interaction,
@@ -342,8 +394,15 @@ class ForgeDiscordClient(discord.Client):
             jd: Optional[
                 app_commands.Range[str, 1, DISCORD_MAX_STRING_OPTION_LENGTH]
             ] = None,
+            cover_letter: bool = True,
         ) -> None:
-            await self._handle_tailor(interaction, attachment=file, url=url, jd=jd)
+            await self._handle_tailor(
+                interaction,
+                attachment=file,
+                url=url,
+                jd=jd,
+                cover_letter=cover_letter,
+            )
 
         self.tree.add_command(self.forge_group, guild=self.command_guild)
 
@@ -363,6 +422,7 @@ class ForgeDiscordClient(discord.Client):
         attachment: Optional[discord.Attachment],
         url: Optional[str],
         jd: Optional[str] = None,
+        cover_letter: bool = True,
     ) -> None:
         if interaction.user.id not in self.config.allowed_user_ids:
             await interaction.response.send_message(
@@ -392,7 +452,7 @@ class ForgeDiscordClient(discord.Client):
 
         if self.runner.busy:
             await interaction.response.send_message(
-                "Forge is already tailoring another resume. Try again when it finishes.",
+                "Forge is already tailoring another application. Try again when it finishes.",
                 ephemeral=True,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
@@ -400,13 +460,38 @@ class ForgeDiscordClient(discord.Client):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            result = await self.runner.run(attachment=attachment, url=url, jd=jd)
+            result = await self.runner.run(
+                attachment=attachment,
+                url=url,
+                jd=jd,
+                cover_letter=cover_letter,
+            )
             if result.pdf_output is None:
                 raise DiscordBotError("Forge did not produce the expected PDF output")
             uploads = [
                 discord.File(str(result.docx_output), filename=result.docx_output.name),
                 discord.File(str(result.pdf_output), filename=result.pdf_output.name),
             ]
+            if cover_letter:
+                if (
+                    result.cover_letter_docx_output is None
+                    or result.cover_letter_pdf_output is None
+                ):
+                    raise DiscordBotError(
+                        "Forge did not produce the expected cover-letter outputs"
+                    )
+                uploads.extend(
+                    [
+                        discord.File(
+                            str(result.cover_letter_docx_output),
+                            filename=result.cover_letter_docx_output.name,
+                        ),
+                        discord.File(
+                            str(result.cover_letter_pdf_output),
+                            filename=result.cover_letter_pdf_output.name,
+                        ),
+                    ]
+                )
             try:
                 await interaction.edit_original_response(
                     content=_success_message(result),
@@ -418,7 +503,7 @@ class ForgeDiscordClient(discord.Client):
                     upload.close()
         except ForgeError as exc:
             await interaction.edit_original_response(
-                content=f"Forge could not tailor the resume: {_display_error(exc)}",
+                content=f"Forge could not tailor the application: {_display_error(exc)}",
                 attachments=[],
                 allowed_mentions=discord.AllowedMentions.none(),
             )
