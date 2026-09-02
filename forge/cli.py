@@ -41,7 +41,7 @@ def _parser() -> argparse.ArgumentParser:
 
     context_index = subcommands.add_parser(
         "context-index",
-        help="parse verified Markdown context into a SQLite chunk database",
+        help="parse verified Markdown and JSON context into a SQLite chunk database",
     )
     context_index.add_argument("--context", required=True, type=Path)
     context_index.add_argument("--database", required=True, type=Path)

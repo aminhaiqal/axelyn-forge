@@ -123,7 +123,7 @@ The main tailoring and cover-letter models default to `gpt-5.6-terra`. The conte
 
 After resolving the JD input, `--context` adds a context-selection call before the main tailoring call. URL input adds one earlier web-search call:
 
-1. Forge locally splits the Markdown file or directory into source-aware, stable context chunks.
+1. Forge locally splits Markdown documents and JSON evidence records into source-aware, stable context chunks.
 2. The complete chunk snapshot is transactionally synchronized to SQLite (`data/context.sqlite3` by default).
 3. The selector reads stored chunks, receives the JD and chunk catalog, then returns ranked chunk IDs, role signals, and material gaps.
 4. Forge rejects unknown, duplicate, empty, or excessive selections and resolves accepted IDs from SQLite.
@@ -149,7 +149,7 @@ Inspect the persisted chunks:
 
 To tailor from an existing database without reparsing Markdown, omit `--context` and supply `--context-db data/context.sqlite3`. When `--context context/` is supplied without `--context-db`, the CLI automatically uses `data/context.sqlite3`.
 
-SQLite stores the schema version, source-document hashes and lengths, and each chunk's stable ID, source path, ordinal, heading hierarchy, verbatim content, and content hash. Synchronization replaces the previous snapshot inside one transaction; Markdown remains the editable source of truth.
+SQLite stores the schema version, source-document hashes and lengths, and each chunk's stable ID, source path, ordinal, heading hierarchy, content, and content hash. Synchronization replaces the previous snapshot inside one transaction; Markdown documents and JSON evidence files remain the editable sources of truth.
 
 ### OpenAI request costs in SQLite
 

@@ -77,31 +77,51 @@
       "name": "Pastelocity",
       "category": [
         "business-systems",
+        "backend",
         "ecommerce",
         "client-delivery"
       ],
       "strongFor": [
+        "software-engineer",
+        "backend-engineer",
         "technical-business-analyst",
         "systems-analyst",
-        "solutions-engineer",
-        "software-engineer"
+        "solutions-engineer"
       ],
       "facts": [
-        "Built for a client",
-        "Covers products, customers, orders, payments and receipts",
-        "Supports daily operational workflows",
-        "Includes e-commerce foundations",
-        "Consolidated business processes into a unified software system",
-        "Required business process understanding, requirements translation, data modelling and implementation"
+        "Designed and deployed a commerce operations platform for a retail client",
+        "Translated the owner's operational requirements into system workflows, data models and administrative interfaces",
+        "Built a three-service architecture consisting of a Next.js storefront and admin system, a Go booking service and a Go payment service",
+        "Unified product management, order capture, inventory reservation, payment verification, fulfilment and invoice delivery",
+        "Implemented reservation-based inventory control with auditable stock changes",
+        "Implemented payment-proof submission, administrative review and controlled order-status transitions",
+        "Built transactional email processing with deduplication, retries and failure recovery",
+        "Implemented automated invoice generation and delivery",
+        "Owned delivery from requirements and system design through implementation, deployment and stakeholder handoff",
+        "The client reported that the system made daily order handling noticeably faster"
       ],
-      "positioning": "Treat as a business operations system, not simply an online store.",
-      "preferredDescription": "Designed and built a business operations system that unified product, customer, order, payment, receipt and e-commerce workflows.",
+      "technologies": [
+        "Next.js",
+        "React",
+        "TypeScript",
+        "Go",
+        "PostgreSQL",
+        "Redis",
+        "REST APIs",
+        "Docker",
+        "Docker Swarm",
+        "Traefik",
+        "Cloudflare R2",
+        "GitHub Actions"
+      ],
+      "positioning": "Treat as a deployed client business system demonstrating multi-service engineering, operational workflow design and end-to-end ownership—not simply an online store.",
+      "preferredDescription": "Designed and deployed a multi-service commerce operations platform for a retail client, unifying product, order, inventory, payment, fulfilment and invoicing workflows.",
       "constraints": [
         "Do not invent revenue metrics",
         "Do not invent conversion improvements",
-        "Do not invent user counts",
-        "Do not invent sales growth",
-        "Do not invent order volume"
+        "Do not headline the current low-volume usage counts",
+        "Do not claim a measured amount of time saved",
+        "Describe the client's efficiency improvement qualitatively unless formally measured"
       ]
     },
     {

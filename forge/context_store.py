@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,7 @@ from .errors import ContextStoreError
 
 PathLike = Union[str, Path]
 CONTEXT_DB_SCHEMA_VERSION = "1"
+SUPPORTED_CONTEXT_SUFFIXES = {".json", ".md"}
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS context_meta (
@@ -62,16 +64,113 @@ def _read_utf8(path: Path) -> str:
     return value
 
 
+def _humanize_json_key(value: str) -> str:
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", value)
+    return spaced.replace("_", " ").replace("-", " ").strip().title() or "Context"
+
+
+def _json_item_title(value: object, index: int) -> str:
+    if isinstance(value, dict):
+        organization = value.get("organization")
+        role = value.get("role")
+        if isinstance(organization, str) and organization.strip():
+            title = organization.strip()
+            if isinstance(role, str) and role.strip():
+                title += f" — {role.strip()}"
+            return title
+
+        institution = value.get("institution")
+        qualification = value.get("qualification")
+        if isinstance(institution, str) and institution.strip():
+            title = institution.strip()
+            if isinstance(qualification, str) and qualification.strip():
+                title += f" — {qualification.strip()}"
+            return title
+
+        for key in ("name", "language", "id"):
+            label = value.get(key)
+            if isinstance(label, str) and label.strip():
+                return label.strip()
+    elif isinstance(value, str) and value.strip():
+        return value.strip()
+    return f"Item {index + 1}"
+
+
+def _json_context_as_markdown(value: object, *, source: str) -> str:
+    """Render structured evidence as deterministic Markdown-sized entity chunks."""
+    lines: List[str] = []
+
+    def add_heading(level: int, title: str) -> None:
+        lines.extend((f"{'#' * level} {title}", ""))
+
+    def add_payload(payload: object) -> None:
+        lines.extend((json.dumps(payload, ensure_ascii=False, indent=2), ""))
+
+    def add_group(title: str, group: object) -> None:
+        if isinstance(group, list):
+            if not group:
+                return
+            add_heading(1, title)
+            for index, item in enumerate(group):
+                add_heading(2, _json_item_title(item, index))
+                add_payload(item)
+            return
+
+        if isinstance(group, dict):
+            if not group:
+                return
+            add_heading(1, title)
+            for key, item in group.items():
+                add_heading(2, _humanize_json_key(str(key)))
+                add_payload(item)
+            return
+
+        add_heading(1, title)
+        add_payload(group)
+
+    if isinstance(value, dict):
+        for key, group in value.items():
+            add_group(_humanize_json_key(str(key)), group)
+    elif isinstance(value, list):
+        add_group(_humanize_json_key(Path(source).stem), value)
+    else:
+        add_group(_humanize_json_key(Path(source).stem), value)
+
+    return "\n".join(lines).strip()
+
+
+def _parse_context_document(content: str, *, source: str) -> List[ContextChunk]:
+    if Path(source).suffix.lower() != ".json":
+        return parse_markdown_context(content, source=source)
+
+    try:
+        value = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ContextStoreError(
+            f"Candidate context JSON file is invalid: {source}: {exc}"
+        ) from exc
+    markdown = _json_context_as_markdown(value, source=source)
+    if not markdown:
+        raise ContextStoreError(
+            f"Candidate context JSON file contains no indexable evidence: {source}"
+        )
+    return parse_markdown_context(markdown, source=source)
+
+
 def read_context_source(path: PathLike) -> Tuple[List[Tuple[str, str]], List[ContextChunk]]:
-    """Read a Markdown file/directory and produce source-aware deterministic chunks."""
+    """Read Markdown/JSON evidence and produce source-aware deterministic chunks."""
     source = Path(path)
     if source.is_file():
         documents = [(source.name, _read_utf8(source))]
     elif source.is_dir():
-        files = sorted(item for item in source.rglob("*.md") if item.is_file())
+        files = sorted(
+            item
+            for item in source.rglob("*")
+            if item.is_file() and item.suffix.lower() in SUPPORTED_CONTEXT_SUFFIXES
+        )
         if not files:
             raise ContextStoreError(
-                f"Candidate context directory contains no Markdown files: {source}"
+                f"Candidate context directory contains no Markdown or JSON files: {source}"
             )
         documents = [(item.relative_to(source).as_posix(), _read_utf8(item)) for item in files]
     else:
@@ -79,7 +178,7 @@ def read_context_source(path: PathLike) -> Tuple[List[Tuple[str, str]], List[Con
 
     chunks: List[ContextChunk] = []
     for document_source, content in documents:
-        chunks.extend(parse_markdown_context(content, source=document_source))
+        chunks.extend(_parse_context_document(content, source=document_source))
     if not chunks:
         raise ContextStoreError(f"Candidate context contains no indexable chunks: {source}")
     return documents, chunks

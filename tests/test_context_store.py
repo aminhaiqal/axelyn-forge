@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -49,6 +50,68 @@ class SQLiteContextStoreTests(unittest.TestCase):
             self.assertEqual(64, len(document[0]))
             self.assertGreater(document[1], 0)
             self.assertEqual(64, len(stored_chunk[0]))
+
+    def test_sync_indexes_json_evidence_as_entity_scoped_chunks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            context = root / "context"
+            evidence = context / "evidence"
+            evidence.mkdir(parents=True)
+            (context / "candidate.md").write_text(
+                "# Candidate\nCore evidence.",
+                encoding="utf-8",
+            )
+            (evidence / "projects.json").write_text(
+                json.dumps(
+                    {
+                        "projects": [
+                            {
+                                "id": "project-one",
+                                "name": "Project One",
+                                "facts": ["Built a Python API"],
+                            },
+                            {
+                                "id": "project-two",
+                                "name": "Project Two",
+                                "facts": ["Built a Go service"],
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            database = root / "context.sqlite3"
+
+            report = sync_context_database(context, database)
+            chunks = SQLiteContextStore(database).load_chunks()
+
+            self.assertEqual(2, report.documents)
+            self.assertEqual(3, report.chunks)
+            self.assertEqual(
+                [
+                    "candidate-md--candidate",
+                    "evidence-projects-json--projects-project-one",
+                    "evidence-projects-json--projects-project-two",
+                ],
+                [chunk.chunk_id for chunk in chunks],
+            )
+            project_one = chunks[1]
+            self.assertEqual("evidence/projects.json", project_one.source)
+            self.assertEqual(("Projects", "Project One"), project_one.heading_path)
+            self.assertIn('"Built a Python API"', project_one.content)
+
+    def test_sync_rejects_invalid_json_evidence(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            context = root / "context"
+            context.mkdir()
+            (context / "evidence.json").write_text("{invalid", encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ContextStoreError,
+                "Candidate context JSON file is invalid",
+            ):
+                sync_context_database(context, root / "context.sqlite3")
 
     def test_resync_atomically_replaces_stale_sources(self):
         with tempfile.TemporaryDirectory() as temp_dir:
