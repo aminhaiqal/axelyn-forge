@@ -2,6 +2,12 @@
 
 Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR.MINOR.PATCH` format.
 
+## Unreleased
+
+### Added
+
+- Added an ephemeral `/forge whoami` command so prospective users can retrieve their own Discord ID without enabling Developer Mode or having prior Forge authorization.
+
 ## 0.2.0 — 2026-09-08
 
 ### Added

@@ -624,6 +624,13 @@ class ForgeDiscordClient(discord.Client):
                 cover_letter=cover_letter,
             )
 
+        @self.forge_group.command(
+            name="whoami",
+            description="Show your Discord user ID for Forge onboarding",
+        )
+        async def whoami_command(interaction: discord.Interaction) -> None:
+            await self._handle_whoami(interaction)
+
         self.tree.add_command(self.forge_group, guild=self.command_guild)
 
     async def setup_hook(self) -> None:
@@ -634,6 +641,14 @@ class ForgeDiscordClient(discord.Client):
     async def on_ready(self) -> None:
         if self.user is not None:
             LOGGER.info("Forge Discord bot connected as %s (%s)", self.user, self.user.id)
+
+    async def _handle_whoami(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
+            f"Your Discord user ID is `{interaction.user.id}`.\n"
+            "Send this ID to the Forge administrator to be added to a candidate profile.",
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
     async def _handle_tailor(
         self,

@@ -209,6 +209,9 @@ class DiscordBotConfigurationTests(unittest.TestCase):
         self.assertFalse(client.intents.presences)
         group = client.tree.get_command("forge")
         self.assertIsNotNone(group)
+        whoami_command = group.get_command("whoami")
+        self.assertIsNotNone(whoami_command)
+        self.assertEqual([], whoami_command.parameters)
         command = group.get_command("tailor")
         self.assertIsNotNone(command)
         parameters = {parameter.name: parameter for parameter in command.parameters}
@@ -471,6 +474,24 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_whoami_returns_unauthorized_callers_id_privately(self):
+        calls = []
+        client = ForgeDiscordClient(
+            bot_config(),
+            tailor=lambda **kwargs: calls.append(kwargs),
+        )
+        interaction = FakeInteraction(user_id=99)
+
+        await client._handle_whoami(interaction)
+
+        self.assertEqual(1, len(interaction.response.messages))
+        content, options = interaction.response.messages[0]
+        self.assertIn("`99`", content)
+        self.assertIn("Forge administrator", content)
+        self.assertTrue(options["ephemeral"])
+        self.assertIsInstance(options["allowed_mentions"], discord.AllowedMentions)
+        self.assertEqual([], calls)
+
     async def test_default_request_returns_resume_and_cover_letter_docx_and_pdf(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "Amin_Haiqal_Resume_Engineer.docx"

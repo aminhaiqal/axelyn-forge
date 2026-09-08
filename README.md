@@ -212,9 +212,10 @@ The main call sends the JD, canonical resume, explicit editable-target catalog, 
 
 Forge can run as a private Discord Gateway bot on a small VPS. It makes an outbound connection to Discord, so the VPS does not need a domain, TLS certificate, reverse proxy, or public application port.
 
-The bot registers one grouped slash command with three mutually exclusive JD inputs and an optional cover-letter switch:
+The bot registers two grouped slash commands. `/forge whoami` privately shows the caller's Discord user ID for onboarding. `/forge tailor` accepts three mutually exclusive JD inputs and an optional cover-letter switch:
 
 ```text
+/forge whoami
 /forge tailor jd:<job-description-text>
 /forge tailor file:<job-description.txt>
 /forge tailor url:<https://company.example/jobs/123>
@@ -225,7 +226,7 @@ Discord slash-command values are named options, so pasted text uses `jd:` rather
 
 The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with four attachments by default: resume DOCX/PDF and cover-letter DOCX/PDF. With `cover_letter:False`, it returns only the two resume files. The response identifies the selected candidate profile and includes request count, estimated OpenAI cost, evidence-backed keyword coverage, changed sections, and material-gap count. Only one request runs at a time across all profiles. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
 
-Access is default-deny. In the original single-profile mode, `DISCORD_ALLOWED_USER_IDS` must contain at least one numeric user ID and every allowed user runs the same candidate profile. In multi-profile mode, the profile manifest's `discordUsers` mapping is the allowlist and each ID is routed to its configured candidate. No message-content or other privileged Gateway intent is used, and all command responses are ephemeral.
+Access to tailoring is default-deny. In the original single-profile mode, `DISCORD_ALLOWED_USER_IDS` must contain at least one numeric user ID and every allowed user runs the same candidate profile. In multi-profile mode, the profile manifest's `discordUsers` mapping is the allowlist and each ID is routed to its configured candidate. `/forge whoami` remains available to unauthorized users so they can provide their ID for onboarding; it reveals only the caller's own ID. No message-content or other privileged Gateway intent is used, and all command responses are ephemeral.
 
 ### Multiple candidate profiles
 
@@ -282,7 +283,7 @@ Replace the example Discord IDs with the real numeric IDs. Keep the manifest and
 1. Create an application in the Discord Developer Portal and add a bot.
 2. Keep all privileged Gateway intents disabled.
 3. Install the app in a private test server with the `bot` and `applications.commands` scopes. Grant only the permissions needed to use commands, send messages, and attach files.
-4. Enable Developer Mode in Discord, then copy your user ID and test-server ID.
+4. Run `/forge whoami` to obtain your user ID. Enable Developer Mode only if you need to copy the test-server ID manually.
 5. Copy `.env.example` to `.env` and replace the placeholder values. Never commit `.env` or paste either token into chat.
 
 Setting `DISCORD_GUILD_ID` keeps the command scoped to one server and makes command updates appear immediately during development. If it is omitted, Forge registers the command globally while still enforcing the user allowlist.
