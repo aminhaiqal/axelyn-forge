@@ -1,4 +1,5 @@
 import asyncio
+import json
 import tempfile
 import threading
 import unittest
@@ -8,6 +9,7 @@ from types import SimpleNamespace
 import discord
 
 from forge.discord_bot import (
+    CandidateProfile,
     DiscordBotConfig,
     ForgeDiscordClient,
     ForgeDiscordRunner,
@@ -16,10 +18,38 @@ from forge.discord_bot import (
 from forge.errors import DiscordBotBusyError, DiscordBotError
 
 
+def candidate_profile(**changes):
+    values = {
+        "profile_id": "amin",
+        "display_name": "Muhammad Amin Haiqal",
+    }
+    values.update(changes)
+    return CandidateProfile(**values)
+
+
+def manifest_profile(profile_id):
+    return {
+        "displayName": profile_id.title(),
+        "template": f"{profile_id}/resume.docx",
+        "data": f"{profile_id}/resume.json",
+        "schema": "shared/resume.schema.json",
+        "bindings": f"{profile_id}/resume-bindings.json",
+        "coverLetterTemplate": f"{profile_id}/cover-letter.docx",
+        "coverLetterData": f"{profile_id}/cover-letter.json",
+        "coverLetterSchema": "shared/cover-letter.schema.json",
+        "coverLetterBindings": f"{profile_id}/cover-letter-bindings.json",
+        "context": f"{profile_id}/context",
+        "database": f"{profile_id}/context.sqlite3",
+        "outputDir": f"{profile_id}/output",
+        "filenamePrefix": f"{profile_id.title()}_Resume",
+        "coverLetterPrefix": f"{profile_id.title()}_Cover_Letter",
+    }
+
+
 def bot_config(**changes):
     values = {
         "token": "discord-secret-token",
-        "allowed_user_ids": frozenset({42}),
+        "user_profiles": {42: candidate_profile()},
         "max_txt_bytes": 1024,
     }
     values.update(changes)
@@ -79,6 +109,88 @@ class DiscordBotConfigurationTests(unittest.TestCase):
         self.assertEqual(frozenset({42, 84}), config.allowed_user_ids)
         self.assertEqual(123, config.guild_id)
         self.assertNotIn("secret", repr(config))
+        self.assertIs(config.profile_for_user(42), config.profile_for_user(84))
+
+    def test_profile_manifest_maps_users_to_isolated_candidate_assets(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            manifest = root / "profiles.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "1",
+                        "profiles": {
+                            "amin": manifest_profile("amin"),
+                            "sara": manifest_profile("sara"),
+                        },
+                        "discordUsers": {"42": "amin", "84": "sara"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = DiscordBotConfig.from_environ(
+                {
+                    "DISCORD_BOT_TOKEN": "secret",
+                    "FORGE_PROFILES_FILE": str(manifest),
+                }
+            )
+
+            self.assertEqual(frozenset({42, 84}), config.allowed_user_ids)
+            self.assertEqual("amin", config.profile_for_user(42).profile_id)
+            self.assertEqual("sara", config.profile_for_user(84).profile_id)
+            self.assertEqual(
+                root / "sara" / "resume.json",
+                config.profile_for_user(84).data,
+            )
+            self.assertEqual(
+                root / "sara" / "context.sqlite3",
+                config.profile_for_user(84).database,
+            )
+
+    def test_profile_manifest_rejects_unknown_profile_mapping(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest = Path(temp_dir) / "profiles.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "1",
+                        "profiles": {"amin": manifest_profile("amin")},
+                        "discordUsers": {"42": "missing"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(DiscordBotError, "unknown Forge profile"):
+                DiscordBotConfig.from_environ(
+                    {
+                        "DISCORD_BOT_TOKEN": "secret",
+                        "FORGE_PROFILES_FILE": str(manifest),
+                    }
+                )
+
+    def test_prepare_rejects_storage_shared_by_distinct_profiles(self):
+        first = candidate_profile(
+            profile_id="first",
+            display_name="First",
+            data=Path("first/resume.json"),
+            cover_letter_data=Path("first/cover-letter.json"),
+            context=Path("first/context"),
+            output_dir=Path("first/output"),
+        )
+        second = candidate_profile(
+            profile_id="second",
+            display_name="Second",
+            data=Path("second/resume.json"),
+            cover_letter_data=Path("second/cover-letter.json"),
+            context=Path("second/context"),
+            output_dir=Path("second/output"),
+        )
+        config = bot_config(user_profiles={42: first, 84: second})
+
+        with self.assertRaisesRegex(DiscordBotError, "share the same database"):
+            config.prepare()
 
     def test_invalid_integer_configuration_is_rejected(self):
         with self.assertRaisesRegex(DiscordBotError, "positive integer"):
@@ -210,6 +322,37 @@ class DiscordTailorSourceTests(unittest.TestCase):
 
 
 class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_user_id_selects_the_matching_candidate_profile(self):
+        observed = {}
+        sentinel = object()
+        second = candidate_profile(
+            profile_id="sara",
+            display_name="Sara",
+            data=Path("profiles/sara/resume.json"),
+            context=Path("profiles/sara/context"),
+            database=Path("profiles/sara/context.sqlite3"),
+            output_dir=Path("profiles/sara/output"),
+            filename_prefix="Sara_Resume",
+        )
+
+        def tailor(**kwargs):
+            observed.update(kwargs)
+            return sentinel
+
+        runner = ForgeDiscordRunner(
+            bot_config(user_profiles={42: candidate_profile(), 84: second}),
+            tailor=tailor,
+        )
+        result = await runner.run(user_id=84, jd="Role requirements")
+
+        self.assertIs(sentinel, result)
+        self.assertEqual(second.data, observed["data"])
+        self.assertEqual(second.context, observed["candidate_context"])
+        self.assertEqual(second.database, observed["context_database"])
+        self.assertEqual(second.database, observed["usage_database"])
+        self.assertEqual(second.output_dir, observed["output_dir"])
+        self.assertEqual("Sara_Resume", observed["candidate_prefix"])
+
     async def test_direct_jd_becomes_existing_temporary_jd_for_forge(self):
         observed = {}
         sentinel = object()
@@ -223,7 +366,7 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
             return sentinel
 
         runner = ForgeDiscordRunner(bot_config(), tailor=tailor)
-        result = await runner.run(jd="  Role\u200b requirements ✓  ")
+        result = await runner.run(user_id=42, jd="  Role\u200b requirements ✓  ")
 
         self.assertIs(sentinel, result)
         self.assertEqual("Role requirements ✓", observed["jd_text"])
@@ -245,7 +388,11 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
             return sentinel
 
         runner = ForgeDiscordRunner(bot_config(), tailor=tailor)
-        result = await runner.run(jd="Role requirements", cover_letter=False)
+        result = await runner.run(
+            user_id=42,
+            jd="Role requirements",
+            cover_letter=False,
+        )
 
         self.assertIs(sentinel, result)
         self.assertFalse(observed["include_cover_letter"])
@@ -262,6 +409,7 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
 
         runner = ForgeDiscordRunner(bot_config(), tailor=tailor)
         result = await runner.run(
+            user_id=42,
             attachment=FakeAttachment("job.txt", "Role requirements ✓".encode("utf-8"))
         )
 
@@ -280,7 +428,10 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
             return sentinel
 
         runner = ForgeDiscordRunner(bot_config(), tailor=tailor)
-        result = await runner.run(url="HTTPS://Careers.Example.com/jobs/1#apply")
+        result = await runner.run(
+            user_id=42,
+            url="HTTPS://Careers.Example.com/jobs/1#apply",
+        )
 
         self.assertIs(sentinel, result)
         self.assertIsNone(observed["job_description"])
@@ -292,7 +443,10 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_utf8_is_rejected(self):
         runner = ForgeDiscordRunner(bot_config(), tailor=lambda **kwargs: None)
         with self.assertRaisesRegex(DiscordBotError, "UTF-8"):
-            await runner.run(attachment=FakeAttachment("job.txt", b"\xff\xfe"))
+            await runner.run(
+                user_id=42,
+                attachment=FakeAttachment("job.txt", b"\xff\xfe"),
+            )
 
     async def test_concurrent_request_is_rejected_instead_of_queued(self):
         started = threading.Event()
@@ -304,11 +458,13 @@ class DiscordRunnerTests(unittest.IsolatedAsyncioTestCase):
             return object()
 
         runner = ForgeDiscordRunner(bot_config(), tailor=tailor)
-        first = asyncio.create_task(runner.run(url="https://example.com/jobs/1"))
+        first = asyncio.create_task(
+            runner.run(user_id=42, url="https://example.com/jobs/1")
+        )
         await asyncio.to_thread(started.wait, 1)
         try:
             with self.assertRaises(DiscordBotBusyError):
-                await runner.run(url="https://example.com/jobs/2")
+                await runner.run(user_id=42, url="https://example.com/jobs/2")
         finally:
             release.set()
         await first
@@ -366,6 +522,10 @@ class DiscordInteractionTests(unittest.IsolatedAsyncioTestCase):
                 interaction.edits[0]["attachment_names"],
             )
             self.assertIn("Cover letter: included", interaction.edits[0]["content"])
+            self.assertIn(
+                "Profile: Muhammad Amin Haiqal",
+                interaction.edits[0]["content"],
+            )
             self.assertIn("Estimated OpenAI cost: USD 0.01230000", interaction.edits[0]["content"])
             self.assertIn(
                 "Evidence-backed keyword coverage: 10/12 (83.3%)",

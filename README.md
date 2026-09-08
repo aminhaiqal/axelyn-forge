@@ -2,6 +2,8 @@
 
 Axelyn Forge validates canonical resume and cover-letter JSON, resolves semantic bindings, and replaces text inside Word Structured Document Tags (SDTs). DOCX templates remain the source of truth for presentation: Forge edits `w:t` payloads without rebuilding paragraphs, runs, tables, numbering, or document layout. Tailoring also creates PDF derivatives through headless LibreOffice for convenient delivery.
 
+Current version: `0.2.0`. Releases follow semantic versioning and are recorded in `CHANGELOG.md` and Git tags.
+
 ## Setup
 
 Python 3.9 or newer is required.
@@ -221,9 +223,59 @@ The bot registers one grouped slash command with three mutually exclusive JD inp
 
 Discord slash-command values are named options, so pasted text uses `jd:` rather than an unnamed positional argument. Forge requires exactly one of `jd`, `file`, or `url`. The optional `cover_letter` boolean defaults to `True`; setting it to `False` skips generation and its OpenAI cost. Forge accepts up to 6,000 normalized characters in direct `jd` input and removes common invisible clipboard artifacts before counting them. If the normalized input is still too long, the error reports the exact count; use a non-empty UTF-8 `.txt` file for longer descriptions. URL input passes through the same public-URL validation and OpenAI web-search ingestion as the CLI.
 
-The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with four attachments by default: resume DOCX/PDF and cover-letter DOCX/PDF. With `cover_letter:False`, it returns only the two resume files. The response includes request count, estimated OpenAI cost, evidence-backed keyword coverage, changed sections, and material-gap count. Only one request runs at a time. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
+The command acknowledges the interaction privately, runs the blocking Forge workflow outside Discord's event loop, and edits the private response with four attachments by default: resume DOCX/PDF and cover-letter DOCX/PDF. With `cover_letter:False`, it returns only the two resume files. The response identifies the selected candidate profile and includes request count, estimated OpenAI cost, evidence-backed keyword coverage, changed sections, and material-gap count. Only one request runs at a time across all profiles. A concurrent request receives a private busy response instead of waiting behind an expiring Discord interaction.
 
-Access is default-deny. `DISCORD_ALLOWED_USER_IDS` must contain at least one numeric user ID. No message-content or other privileged Gateway intent is used, and all command responses are ephemeral.
+Access is default-deny. In the original single-profile mode, `DISCORD_ALLOWED_USER_IDS` must contain at least one numeric user ID and every allowed user runs the same candidate profile. In multi-profile mode, the profile manifest's `discordUsers` mapping is the allowlist and each ID is routed to its configured candidate. No message-content or other privileged Gateway intent is used, and all command responses are ephemeral.
+
+### Multiple candidate profiles
+
+Set `FORGE_PROFILES_FILE` to a private JSON manifest to enable multi-profile mode. Relative asset paths are resolved from the manifest's directory. Every candidate has isolated resume data, cover-letter data, context, SQLite context/usage database, and output directory; Forge refuses to start if distinct profiles share any of those paths. Templates, schemas, and bindings may be shared when their structures are compatible.
+
+```json
+{
+  "schemaVersion": "1",
+  "profiles": {
+    "amin": {
+      "displayName": "Muhammad Amin Haiqal",
+      "template": "/app/templates/Amin_Haiqal_Resume_Forge_SDT_Template.docx",
+      "data": "/app/data/profile.json",
+      "schema": "/app/schemas/profile.schema.json",
+      "bindings": "/app/bindings/software-engineer.json",
+      "coverLetterTemplate": "/app/templates/Amin_Haiqal_Cover_Letter_SDT_Template.docx",
+      "coverLetterData": "/app/data/cover_letter.json",
+      "coverLetterSchema": "/app/schemas/cover-letter.schema.json",
+      "coverLetterBindings": "/app/bindings/cover-letter.json",
+      "context": "/app/context",
+      "database": "/state/profiles/amin/context.sqlite3",
+      "outputDir": "/state/profiles/amin/output",
+      "filenamePrefix": "Amin_Haiqal_Resume",
+      "coverLetterPrefix": "Amin_Haiqal_Cover_Letter"
+    },
+    "second-candidate": {
+      "displayName": "Second Candidate",
+      "template": "/state/profiles/second-candidate/resume.docx",
+      "data": "/state/profiles/second-candidate/resume.json",
+      "schema": "/app/schemas/profile.schema.json",
+      "bindings": "/state/profiles/second-candidate/resume-bindings.json",
+      "coverLetterTemplate": "/state/profiles/second-candidate/cover-letter.docx",
+      "coverLetterData": "/state/profiles/second-candidate/cover-letter.json",
+      "coverLetterSchema": "/app/schemas/cover-letter.schema.json",
+      "coverLetterBindings": "/state/profiles/second-candidate/cover-letter-bindings.json",
+      "context": "/state/profiles/second-candidate/context",
+      "database": "/state/profiles/second-candidate/context.sqlite3",
+      "outputDir": "/state/profiles/second-candidate/output",
+      "filenamePrefix": "Second_Candidate_Resume",
+      "coverLetterPrefix": "Second_Candidate_Cover_Letter"
+    }
+  },
+  "discordUsers": {
+    "111111111111111111": "amin",
+    "222222222222222222": "second-candidate"
+  }
+}
+```
+
+Replace the example Discord IDs with the real numeric IDs. Keep the manifest and the second candidate's personal files out of Git. In the Docker deployment, store them under the persistent `/state` volume, set `FORGE_PROFILES_FILE=/state/profiles.json`, and restart the bot. Adding `FORGE_PROFILES_FILE` switches authorization to the manifest; the legacy `DISCORD_ALLOWED_USER_IDS` value is ignored.
 
 ### Discord application setup
 

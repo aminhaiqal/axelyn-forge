@@ -1,8 +1,10 @@
-"""Private Discord application-command adapter for Axelyn Forge."""
+"""Private, multi-profile Discord application-command adapter for Axelyn Forge."""
 
 import asyncio
+import json
 import logging
 import os
+import re
 import sys
 import tempfile
 import unicodedata
@@ -22,6 +24,29 @@ from .tailoring import TailoringResult, tailor_resume_with_openai
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MAX_TXT_BYTES = 512 * 1024
 MAX_PASTED_JD_LENGTH = 6000
+PROFILE_MANIFEST_SCHEMA_VERSION = "1"
+PROFILE_PATH_FIELDS = {
+    "template": "template",
+    "data": "data",
+    "schema": "schema",
+    "bindings": "bindings",
+    "coverLetterTemplate": "cover_letter_template",
+    "coverLetterData": "cover_letter_data",
+    "coverLetterSchema": "cover_letter_schema",
+    "coverLetterBindings": "cover_letter_bindings",
+    "context": "context",
+    "database": "database",
+    "outputDir": "output_dir",
+}
+PROFILE_REQUIRED_FIELDS = frozenset(
+    {
+        "displayName",
+        "filenamePrefix",
+        "coverLetterPrefix",
+        *PROFILE_PATH_FIELDS,
+    }
+)
+PROFILE_ALLOWED_FIELDS = PROFILE_REQUIRED_FIELDS
 _PASTED_TEXT_IGNORABLES = str.maketrans(
     {
         "\u00ad": None,  # Soft hyphen copied from wrapped web content.
@@ -59,10 +84,9 @@ def _id_set(value: str, name: str) -> FrozenSet[int]:
 
 
 @dataclass(frozen=True)
-class DiscordBotConfig:
-    token: str = field(repr=False)
-    allowed_user_ids: FrozenSet[int]
-    guild_id: Optional[int] = None
+class CandidateProfile:
+    profile_id: str
+    display_name: str
     template: Path = Path("templates/Amin_Haiqal_Resume_Forge_SDT_Template.docx")
     data: Path = Path("data/profile.json")
     schema: Path = Path("schemas/profile.schema.json")
@@ -78,92 +102,6 @@ class DiscordBotConfig:
     output_dir: Path = Path("output")
     filename_prefix: str = "Amin_Haiqal_Resume"
     cover_letter_prefix: str = "Amin_Haiqal_Cover_Letter"
-    model: str = DEFAULT_OPENAI_MODEL
-    cover_letter_model: str = DEFAULT_OPENAI_MODEL
-    context_model: str = DEFAULT_CONTEXT_SELECTION_MODEL
-    web_model: str = DEFAULT_WEB_SEARCH_MODEL
-    max_txt_bytes: int = DEFAULT_MAX_TXT_BYTES
-
-    @classmethod
-    def from_environ(
-        cls,
-        environ: Optional[Mapping[str, str]] = None,
-    ) -> "DiscordBotConfig":
-        values = os.environ if environ is None else environ
-        token = _required_text(values, "DISCORD_BOT_TOKEN")
-        allowed_user_ids = _id_set(
-            _required_text(values, "DISCORD_ALLOWED_USER_IDS"),
-            "DISCORD_ALLOWED_USER_IDS",
-        )
-        guild_value = values.get("DISCORD_GUILD_ID", "").strip()
-        guild_id = (
-            _positive_integer(guild_value, "DISCORD_GUILD_ID") if guild_value else None
-        )
-        max_txt_bytes = _positive_integer(
-            values.get("FORGE_MAX_TXT_BYTES", str(DEFAULT_MAX_TXT_BYTES)).strip(),
-            "FORGE_MAX_TXT_BYTES",
-        )
-        model = values.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip() or DEFAULT_OPENAI_MODEL
-        cover_letter_model = (
-            values.get("OPENAI_COVER_LETTER_MODEL", model).strip() or model
-        )
-        return cls(
-            token=token,
-            allowed_user_ids=allowed_user_ids,
-            guild_id=guild_id,
-            template=Path(
-                values.get(
-                    "FORGE_TEMPLATE",
-                    "templates/Amin_Haiqal_Resume_Forge_SDT_Template.docx",
-                )
-            ),
-            data=Path(values.get("FORGE_DATA", "data/profile.json")),
-            schema=Path(values.get("FORGE_SCHEMA", "schemas/profile.schema.json")),
-            bindings=Path(
-                values.get("FORGE_BINDINGS", "bindings/software-engineer.json")
-            ),
-            cover_letter_template=Path(
-                values.get(
-                    "FORGE_COVER_LETTER_TEMPLATE",
-                    "templates/Amin_Haiqal_Cover_Letter_SDT_Template.docx",
-                )
-            ),
-            cover_letter_data=Path(
-                values.get("FORGE_COVER_LETTER_DATA", "data/cover_letter.json")
-            ),
-            cover_letter_schema=Path(
-                values.get(
-                    "FORGE_COVER_LETTER_SCHEMA",
-                    "schemas/cover-letter.schema.json",
-                )
-            ),
-            cover_letter_bindings=Path(
-                values.get(
-                    "FORGE_COVER_LETTER_BINDINGS",
-                    "bindings/cover-letter.json",
-                )
-            ),
-            context=Path(values.get("FORGE_CONTEXT", "context")),
-            database=Path(values.get("FORGE_DATABASE", "data/context.sqlite3")),
-            output_dir=Path(values.get("FORGE_OUTPUT_DIR", "output")),
-            filename_prefix=values.get(
-                "FORGE_FILENAME_PREFIX", "Amin_Haiqal_Resume"
-            ).strip()
-            or "Amin_Haiqal_Resume",
-            cover_letter_prefix=values.get(
-                "FORGE_COVER_LETTER_PREFIX", "Amin_Haiqal_Cover_Letter"
-            ).strip()
-            or "Amin_Haiqal_Cover_Letter",
-            model=model,
-            cover_letter_model=cover_letter_model,
-            context_model=values.get(
-                "OPENAI_CONTEXT_MODEL", DEFAULT_CONTEXT_SELECTION_MODEL
-            ).strip()
-            or DEFAULT_CONTEXT_SELECTION_MODEL,
-            web_model=values.get("OPENAI_WEB_MODEL", DEFAULT_WEB_SEARCH_MODEL).strip()
-            or DEFAULT_WEB_SEARCH_MODEL,
-            max_txt_bytes=max_txt_bytes,
-        )
 
     def prepare(self) -> None:
         assets = {
@@ -180,12 +118,270 @@ class DiscordBotConfig:
         if not self.context.exists():
             missing.append(f"context: {self.context}")
         if missing:
-            raise DiscordBotError("Missing Forge runtime assets:\n- " + "\n- ".join(missing))
+            raise DiscordBotError(
+                f"Missing Forge runtime assets for profile '{self.profile_id}':\n- "
+                + "\n- ".join(missing)
+            )
         try:
             self.database.parent.mkdir(parents=True, exist_ok=True)
             self.output_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise DiscordBotError(f"Could not prepare persistent Forge directories: {exc}") from exc
+            raise DiscordBotError(
+                f"Could not prepare persistent directories for profile "
+                f"'{self.profile_id}': {exc}"
+            ) from exc
+
+
+def _manifest_text(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise DiscordBotError(
+            f"Profile manifest field {field_name} must be a non-empty string"
+        )
+    return value.strip()
+
+
+def _manifest_path(value: object, field_name: str, manifest: Path) -> Path:
+    configured = Path(_manifest_text(value, field_name))
+    if configured.is_absolute():
+        return configured
+    return manifest.parent / configured
+
+
+def _load_profile_manifest(manifest: Path) -> Mapping[int, CandidateProfile]:
+    try:
+        raw = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise DiscordBotError(f"Could not read Forge profile manifest {manifest}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise DiscordBotError("Forge profile manifest must be a JSON object")
+    expected_top_level = {"schemaVersion", "profiles", "discordUsers"}
+    unknown_top_level = sorted(set(raw) - expected_top_level)
+    missing_top_level = sorted(expected_top_level - set(raw))
+    if unknown_top_level or missing_top_level:
+        details = []
+        if missing_top_level:
+            details.append("missing: " + ", ".join(missing_top_level))
+        if unknown_top_level:
+            details.append("unknown: " + ", ".join(unknown_top_level))
+        raise DiscordBotError("Invalid Forge profile manifest fields (" + "; ".join(details) + ")")
+    if raw["schemaVersion"] != PROFILE_MANIFEST_SCHEMA_VERSION:
+        raise DiscordBotError(
+            f"Unsupported Forge profile manifest schema version "
+            f"{raw['schemaVersion']!r}; expected {PROFILE_MANIFEST_SCHEMA_VERSION!r}"
+        )
+
+    raw_profiles = raw["profiles"]
+    if not isinstance(raw_profiles, dict) or not raw_profiles:
+        raise DiscordBotError("Forge profile manifest profiles must be a non-empty object")
+    profiles = {}
+    for raw_profile_id, raw_profile in raw_profiles.items():
+        profile_id = _manifest_text(raw_profile_id, "profiles.<id>")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", profile_id):
+            raise DiscordBotError(
+                f"Invalid Forge profile ID {profile_id!r}; use 1-64 letters, numbers, "
+                "underscores, or hyphens"
+            )
+        if not isinstance(raw_profile, dict):
+            raise DiscordBotError(f"Forge profile {profile_id!r} must be an object")
+        missing_fields = sorted(PROFILE_REQUIRED_FIELDS - set(raw_profile))
+        unknown_fields = sorted(set(raw_profile) - PROFILE_ALLOWED_FIELDS)
+        if missing_fields or unknown_fields:
+            details = []
+            if missing_fields:
+                details.append("missing: " + ", ".join(missing_fields))
+            if unknown_fields:
+                details.append("unknown: " + ", ".join(unknown_fields))
+            raise DiscordBotError(
+                f"Invalid fields for Forge profile {profile_id!r} ("
+                + "; ".join(details)
+                + ")"
+            )
+        path_values = {
+            attribute: _manifest_path(
+                raw_profile[field_name],
+                f"profiles.{profile_id}.{field_name}",
+                manifest,
+            )
+            for field_name, attribute in PROFILE_PATH_FIELDS.items()
+        }
+        profiles[profile_id] = CandidateProfile(
+            profile_id=profile_id,
+            display_name=_manifest_text(
+                raw_profile["displayName"],
+                f"profiles.{profile_id}.displayName",
+            ),
+            filename_prefix=_manifest_text(
+                raw_profile["filenamePrefix"],
+                f"profiles.{profile_id}.filenamePrefix",
+            ),
+            cover_letter_prefix=_manifest_text(
+                raw_profile["coverLetterPrefix"],
+                f"profiles.{profile_id}.coverLetterPrefix",
+            ),
+            **path_values,
+        )
+
+    raw_users = raw["discordUsers"]
+    if not isinstance(raw_users, dict) or not raw_users:
+        raise DiscordBotError("Forge profile manifest discordUsers must be a non-empty object")
+    user_profiles = {}
+    for raw_user_id, raw_profile_id in raw_users.items():
+        user_id = _positive_integer(str(raw_user_id).strip(), "discordUsers user ID")
+        if user_id in user_profiles:
+            raise DiscordBotError(
+                f"Forge profile manifest contains duplicate Discord user ID {user_id}"
+            )
+        profile_id = _manifest_text(
+            raw_profile_id,
+            f"discordUsers.{raw_user_id}",
+        )
+        if profile_id not in profiles:
+            raise DiscordBotError(
+                f"Discord user {user_id} references unknown Forge profile {profile_id!r}"
+            )
+        user_profiles[user_id] = profiles[profile_id]
+    return user_profiles
+
+
+def _legacy_profile(values: Mapping[str, str]) -> CandidateProfile:
+    return CandidateProfile(
+        profile_id="default",
+        display_name=values.get(
+            "FORGE_PROFILE_DISPLAY_NAME", "Muhammad Amin Haiqal"
+        ).strip()
+        or "Muhammad Amin Haiqal",
+        template=Path(
+            values.get(
+                "FORGE_TEMPLATE",
+                "templates/Amin_Haiqal_Resume_Forge_SDT_Template.docx",
+            )
+        ),
+        data=Path(values.get("FORGE_DATA", "data/profile.json")),
+        schema=Path(values.get("FORGE_SCHEMA", "schemas/profile.schema.json")),
+        bindings=Path(values.get("FORGE_BINDINGS", "bindings/software-engineer.json")),
+        cover_letter_template=Path(
+            values.get(
+                "FORGE_COVER_LETTER_TEMPLATE",
+                "templates/Amin_Haiqal_Cover_Letter_SDT_Template.docx",
+            )
+        ),
+        cover_letter_data=Path(
+            values.get("FORGE_COVER_LETTER_DATA", "data/cover_letter.json")
+        ),
+        cover_letter_schema=Path(
+            values.get("FORGE_COVER_LETTER_SCHEMA", "schemas/cover-letter.schema.json")
+        ),
+        cover_letter_bindings=Path(
+            values.get("FORGE_COVER_LETTER_BINDINGS", "bindings/cover-letter.json")
+        ),
+        context=Path(values.get("FORGE_CONTEXT", "context")),
+        database=Path(values.get("FORGE_DATABASE", "data/context.sqlite3")),
+        output_dir=Path(values.get("FORGE_OUTPUT_DIR", "output")),
+        filename_prefix=values.get(
+            "FORGE_FILENAME_PREFIX", "Amin_Haiqal_Resume"
+        ).strip()
+        or "Amin_Haiqal_Resume",
+        cover_letter_prefix=values.get(
+            "FORGE_COVER_LETTER_PREFIX", "Amin_Haiqal_Cover_Letter"
+        ).strip()
+        or "Amin_Haiqal_Cover_Letter",
+    )
+
+
+@dataclass(frozen=True)
+class DiscordBotConfig:
+    token: str = field(repr=False)
+    user_profiles: Mapping[int, CandidateProfile] = field(repr=False)
+    guild_id: Optional[int] = None
+    model: str = DEFAULT_OPENAI_MODEL
+    cover_letter_model: str = DEFAULT_OPENAI_MODEL
+    context_model: str = DEFAULT_CONTEXT_SELECTION_MODEL
+    web_model: str = DEFAULT_WEB_SEARCH_MODEL
+    max_txt_bytes: int = DEFAULT_MAX_TXT_BYTES
+
+    @classmethod
+    def from_environ(
+        cls,
+        environ: Optional[Mapping[str, str]] = None,
+    ) -> "DiscordBotConfig":
+        values = os.environ if environ is None else environ
+        token = _required_text(values, "DISCORD_BOT_TOKEN")
+        profile_manifest_value = values.get("FORGE_PROFILES_FILE", "").strip()
+        if profile_manifest_value:
+            user_profiles = _load_profile_manifest(Path(profile_manifest_value))
+        else:
+            allowed_user_ids = _id_set(
+                _required_text(values, "DISCORD_ALLOWED_USER_IDS"),
+                "DISCORD_ALLOWED_USER_IDS",
+            )
+            profile = _legacy_profile(values)
+            user_profiles = {user_id: profile for user_id in allowed_user_ids}
+        guild_value = values.get("DISCORD_GUILD_ID", "").strip()
+        guild_id = (
+            _positive_integer(guild_value, "DISCORD_GUILD_ID") if guild_value else None
+        )
+        max_txt_bytes = _positive_integer(
+            values.get("FORGE_MAX_TXT_BYTES", str(DEFAULT_MAX_TXT_BYTES)).strip(),
+            "FORGE_MAX_TXT_BYTES",
+        )
+        model = values.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip() or DEFAULT_OPENAI_MODEL
+        cover_letter_model = (
+            values.get("OPENAI_COVER_LETTER_MODEL", model).strip() or model
+        )
+        return cls(
+            token=token,
+            user_profiles=user_profiles,
+            guild_id=guild_id,
+            model=model,
+            cover_letter_model=cover_letter_model,
+            context_model=values.get(
+                "OPENAI_CONTEXT_MODEL", DEFAULT_CONTEXT_SELECTION_MODEL
+            ).strip()
+            or DEFAULT_CONTEXT_SELECTION_MODEL,
+            web_model=values.get("OPENAI_WEB_MODEL", DEFAULT_WEB_SEARCH_MODEL).strip()
+            or DEFAULT_WEB_SEARCH_MODEL,
+            max_txt_bytes=max_txt_bytes,
+        )
+
+    @property
+    def allowed_user_ids(self) -> FrozenSet[int]:
+        return frozenset(self.user_profiles)
+
+    def profile_for_user(self, user_id: int) -> Optional[CandidateProfile]:
+        return self.user_profiles.get(user_id)
+
+    def prepare(self) -> None:
+        if not self.user_profiles:
+            raise DiscordBotError("Forge has no authorized Discord profile mappings")
+        profiles = {}
+        for profile in self.user_profiles.values():
+            existing = profiles.get(profile.profile_id)
+            if existing is not None and existing != profile:
+                raise DiscordBotError(
+                    f"Forge profile ID {profile.profile_id!r} has conflicting configurations"
+                )
+            profiles[profile.profile_id] = profile
+
+        for field_name in (
+            "data",
+            "cover_letter_data",
+            "context",
+            "database",
+            "output_dir",
+        ):
+            owners = {}
+            for profile in profiles.values():
+                path = getattr(profile, field_name).resolve()
+                other = owners.get(path)
+                if other is not None:
+                    raise DiscordBotError(
+                        f"Forge profiles {other!r} and {profile.profile_id!r} share "
+                        f"the same {field_name.replace('_', ' ')}: {path}"
+                    )
+                owners[path] = profile.profile_id
+
+        for profile in profiles.values():
+            profile.prepare()
 
 
 @dataclass(frozen=True)
@@ -266,11 +462,15 @@ class ForgeDiscordRunner:
     async def run(
         self,
         *,
+        user_id: int,
         attachment: Optional[discord.Attachment] = None,
         url: Optional[str] = None,
         jd: Optional[str] = None,
         cover_letter: bool = True,
     ) -> TailoringResult:
+        profile = self.config.profile_for_user(user_id)
+        if profile is None:
+            raise DiscordBotError("You are not authorized to use this Forge bot")
         source = validate_tailor_source(
             attachment_name=attachment.filename if attachment is not None else None,
             attachment_size=attachment.size if attachment is not None else None,
@@ -313,27 +513,27 @@ class ForgeDiscordRunner:
 
                 return await asyncio.to_thread(
                     self._tailor,
-                    template=self.config.template,
-                    data=self.config.data,
-                    schema=self.config.schema,
-                    bindings=self.config.bindings,
+                    template=profile.template,
+                    data=profile.data,
+                    schema=profile.schema,
+                    bindings=profile.bindings,
                     job_description=job_description,
                     job_description_url=job_description_url,
-                    candidate_context=self.config.context,
-                    context_database=self.config.database,
-                    usage_database=self.config.database,
-                    output_dir=self.config.output_dir,
-                    candidate_prefix=self.config.filename_prefix,
+                    candidate_context=profile.context,
+                    context_database=profile.database,
+                    usage_database=profile.database,
+                    output_dir=profile.output_dir,
+                    candidate_prefix=profile.filename_prefix,
                     model=self.config.model,
                     context_selection_model=self.config.context_model,
                     web_search_model=self.config.web_model,
                     include_pdf=True,
                     include_cover_letter=cover_letter,
-                    cover_letter_template=self.config.cover_letter_template,
-                    cover_letter_data=self.config.cover_letter_data,
-                    cover_letter_schema=self.config.cover_letter_schema,
-                    cover_letter_bindings=self.config.cover_letter_bindings,
-                    cover_letter_prefix=self.config.cover_letter_prefix,
+                    cover_letter_template=profile.cover_letter_template,
+                    cover_letter_data=profile.cover_letter_data,
+                    cover_letter_schema=profile.cover_letter_schema,
+                    cover_letter_bindings=profile.cover_letter_bindings,
+                    cover_letter_prefix=profile.cover_letter_prefix,
                     cover_letter_model=self.config.cover_letter_model,
                 )
         finally:
@@ -347,7 +547,7 @@ def _display_error(exc: BaseException) -> str:
     return message[:1500]
 
 
-def _success_message(result: TailoringResult) -> str:
+def _success_message(result: TailoringResult, profile: CandidateProfile) -> str:
     summary = result.usage_summary
     cost = float(summary.get("estimated_cost_usd", 0.0))
     request_count = int(summary.get("requests", 0))
@@ -370,6 +570,7 @@ def _success_message(result: TailoringResult) -> str:
             f"({percentage:.1f}%){section_note}"
         )
     return (
+        f"Profile: {profile.display_name}\n"
         f"Resume tailored for {result.job_title}{company}.\n"
         f"Cover letter: "
         f"{'included' if getattr(result, 'cover_letter_docx_output', None) else 'not requested'}\n"
@@ -443,7 +644,8 @@ class ForgeDiscordClient(discord.Client):
         jd: Optional[str] = None,
         cover_letter: bool = True,
     ) -> None:
-        if interaction.user.id not in self.config.allowed_user_ids:
+        profile = self.config.profile_for_user(interaction.user.id)
+        if profile is None:
             await interaction.response.send_message(
                 "You are not authorized to use this Forge bot.",
                 ephemeral=True,
@@ -480,6 +682,7 @@ class ForgeDiscordClient(discord.Client):
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             result = await self.runner.run(
+                user_id=interaction.user.id,
                 attachment=attachment,
                 url=url,
                 jd=jd,
@@ -513,7 +716,7 @@ class ForgeDiscordClient(discord.Client):
                 )
             try:
                 await interaction.edit_original_response(
-                    content=_success_message(result),
+                    content=_success_message(result, profile),
                     attachments=uploads,
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
