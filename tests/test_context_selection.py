@@ -1,6 +1,8 @@
 import json
 import unittest
 
+from jsonschema import Draft202012Validator
+
 from forge.context_selection import (
     CONTEXT_SELECTION_SCHEMA,
     parse_markdown_context,
@@ -71,9 +73,50 @@ class ContextSelectionTests(unittest.TestCase):
         self.assertEqual("gpt-context-test", call["model"])
         self.assertEqual("default", call["service_tier"])
         self.assertFalse(call["store"])
-        self.assertEqual(CONTEXT_SELECTION_SCHEMA, call["text"]["format"]["schema"])
+        response_schema = call["text"]["format"]["schema"]
+        self.assertEqual(
+            [chunk.chunk_id for chunk in self.chunks],
+            response_schema["properties"]["selectedChunkIds"]["items"]["enum"],
+        )
+        self.assertEqual(
+            100,
+            response_schema["properties"]["jobKeywords"]["items"]["properties"][
+                "phrase"
+            ]["maxLength"],
+        )
         payload = json.loads(call["input"])
         self.assertEqual(3, len(payload["candidateContextChunks"]))
+
+    def test_request_schema_rejects_unknown_ids_and_overly_long_keywords(self):
+        client = FakeOpenAIClient(
+            FakeOpenAIResponse(selection_plan([self.chunks[0].chunk_id]))
+        )
+        select_context_with_openai(
+            job_description="JD",
+            chunks=self.chunks,
+            client=client,
+        )
+        schema = client.responses.calls[0]["text"]["format"]["schema"]
+
+        unknown_id = selection_plan(["invented-id"])
+        unknown_errors = list(Draft202012Validator(schema).iter_errors(unknown_id))
+        self.assertTrue(
+            any("is not one of" in error.message for error in unknown_errors),
+            unknown_errors,
+        )
+
+        long_keyword = selection_plan([self.chunks[0].chunk_id])
+        long_keyword["jobKeywords"][0]["phrase"] = "x" * 101
+        keyword_errors = list(Draft202012Validator(schema).iter_errors(long_keyword))
+        self.assertTrue(
+            any("is too long" in error.message for error in keyword_errors),
+            keyword_errors,
+        )
+
+        self.assertNotIn(
+            "enum",
+            CONTEXT_SELECTION_SCHEMA["properties"]["selectedChunkIds"]["items"],
+        )
 
     def test_selector_rejects_duplicate_job_keywords(self):
         plan = selection_plan([self.chunks[0].chunk_id])

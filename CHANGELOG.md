@@ -8,6 +8,10 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 - Added an ephemeral `/forge whoami` command so prospective users can retrieve their own Discord ID without enabling Developer Mode or having prior Forge authorization.
 
+### Fixed
+
+- Constrained OpenAI context selection to valid candidate chunk IDs and bounded keyword lengths so harmless model formatting drift no longer aborts tailoring.
+
 ## 0.2.0 — 2026-09-08
 
 ### Added

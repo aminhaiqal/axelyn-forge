@@ -1,5 +1,6 @@
 """First-pass OpenAI selection of relevant, verbatim candidate-context chunks."""
 
+import copy
 import json
 import re
 import unicodedata
@@ -16,6 +17,7 @@ from .usage_store import OpenAIUsageStore
 DEFAULT_CONTEXT_SELECTION_MODEL = "gpt-5.6-luna"
 MAX_SELECTED_CONTEXT_CHUNKS = 12
 MAX_EXTRACTED_JOB_KEYWORDS = 24
+MAX_JOB_KEYWORD_LENGTH = 100
 
 CONTEXT_SELECTION_SCHEMA: Dict[str, Any] = {
     "type": "object",
@@ -37,12 +39,18 @@ CONTEXT_SELECTION_SCHEMA: Dict[str, Any] = {
         },
         "jobKeywords": {
             "type": "array",
+            "minItems": 1,
+            "maxItems": MAX_EXTRACTED_JOB_KEYWORDS,
             "items": {
                 "type": "object",
                 "additionalProperties": False,
                 "required": ["phrase", "priority", "category"],
                 "properties": {
-                    "phrase": {"type": "string"},
+                    "phrase": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": MAX_JOB_KEYWORD_LENGTH,
+                    },
                     "priority": {
                         "type": "string",
                         "enum": ["required", "preferred", "responsibility"],
@@ -62,6 +70,8 @@ CONTEXT_SELECTION_SCHEMA: Dict[str, Any] = {
         },
         "selectedChunkIds": {
             "type": "array",
+            "minItems": 1,
+            "maxItems": MAX_SELECTED_CONTEXT_CHUNKS,
             "items": {"type": "string"},
         },
         "gaps": {
@@ -70,6 +80,16 @@ CONTEXT_SELECTION_SCHEMA: Dict[str, Any] = {
         },
     },
 }
+
+
+def _selection_schema_for_chunks(chunks: Sequence["ContextChunk"]) -> Dict[str, Any]:
+    """Constrain model-selected IDs to the exact IDs supplied in this request."""
+    schema = copy.deepcopy(CONTEXT_SELECTION_SCHEMA)
+    schema["properties"]["selectedChunkIds"]["items"]["enum"] = [
+        chunk.chunk_id for chunk in chunks
+    ]
+    return schema
+
 
 SELECTION_INSTRUCTIONS = """You are the context-selection stage for Axelyn Forge.
 
@@ -261,6 +281,7 @@ def select_context_with_openai(
         },
         ensure_ascii=False,
     )
+    response_schema = _selection_schema_for_chunks(chunks)
     if client is None:
         try:
             from openai import OpenAI
@@ -290,7 +311,7 @@ def select_context_with_openai(
                     "type": "json_schema",
                     "name": "resume_context_selection",
                     "description": "Relevant verified context IDs for a supplied job description",
-                    "schema": CONTEXT_SELECTION_SCHEMA,
+                    "schema": response_schema,
                     "strict": True,
                 },
                 "verbosity": "low",
@@ -331,7 +352,7 @@ def select_context_with_openai(
         phrase = item["phrase"].strip()
         if not phrase:
             raise ProviderError("OpenAI context selection returned an empty job keyword")
-        if len(phrase) > 100:
+        if len(phrase) > MAX_JOB_KEYWORD_LENGTH:
             raise ProviderError("OpenAI context selection returned an overly long job keyword")
         normalized = normalize_keyword(phrase)
         if normalized in used_keywords:
