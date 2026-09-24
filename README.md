@@ -90,6 +90,17 @@ docker compose -f infra/compose.yaml up --build
 
 Open `http://localhost:8080`. Only the web container publishes a host port; Nginx proxies `/api` to the private API service.
 
+For a single-host production deployment behind a dedicated Cloudflare Tunnel, use the published images and mount the tunnel token from a root-readable file:
+
+```bash
+FORGE_API_IMAGE=ghcr.io/aminhaiqal/axelyn-forge-api:sha-<commit> \
+FORGE_WEB_IMAGE=ghcr.io/aminhaiqal/axelyn-forge-web:sha-<commit> \
+CLOUDFLARE_TUNNEL_TOKEN_FILE=/run/secrets/axelyn-forge-tunnel \
+docker compose -f infra/compose.production.yaml up -d
+```
+
+The production stack does not publish a host port. Cloudflare Tunnel connects directly to the internal `web:8080` service, while the API and its SQLite volume stay private.
+
 ## Document engine
 
 The core package retains the deterministic document pipeline. DOCX templates control presentation, canonical JSON controls facts and document structure, and AI output is limited to validated semantic rewrite operations.

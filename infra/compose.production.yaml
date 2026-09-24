@@ -1,0 +1,87 @@
+name: axelyn-forge
+
+x-runtime-security: &runtime-security
+  restart: unless-stopped
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  api:
+    <<: *runtime-security
+    image: ${FORGE_API_IMAGE:-ghcr.io/aminhaiqal/axelyn-forge-api:latest}
+    environment:
+      FORGE_ENVIRONMENT: production
+      FORGE_DATABASE: /state/context.sqlite3
+      FORGE_CORS_ORIGINS: https://forge.axelyn.com
+    volumes:
+      - forge-state:/state
+    cpus: 1.0
+    mem_limit: 1g
+    pids_limit: 128
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  web:
+    <<: *runtime-security
+    image: ${FORGE_WEB_IMAGE:-ghcr.io/aminhaiqal/axelyn-forge-web:latest}
+    depends_on:
+      api:
+        condition: service_healthy
+    cpus: 0.5
+    mem_limit: 256m
+    pids_limit: 64
+    tmpfs:
+      - /var/cache/nginx:size=16m,mode=0755,uid=101,gid=101
+      - /var/run:size=1m,mode=0755,uid=101,gid=101
+      - /tmp:size=8m,mode=1777
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  tunnel:
+    <<: *runtime-security
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2026.9.1}
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token-file
+      - /run/secrets/cloudflare-tunnel-token
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-./secrets/cloudflare-tunnel-token}
+        target: /run/secrets/cloudflare-tunnel-token
+        read_only: true
+    cpus: 0.25
+    mem_limit: 256m
+    pids_limit: 100
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+
+volumes:
+  forge-state:
