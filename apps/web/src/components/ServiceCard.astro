@@ -1,0 +1,26 @@
+---
+interface Props {
+  index: string;
+  id: string;
+  name: string;
+  summary: string;
+  deliverables: string[];
+}
+
+const { index, id, name, summary, deliverables } = Astro.props;
+---
+
+<article class="service-card" data-service-card={id}>
+  <div class="service-heading">
+    <span class="service-index">{index}</span>
+    <h3>{name}</h3>
+  </div>
+  <p>{summary}</p>
+  <ul>
+    {deliverables.map((item) => <li>{item}</li>)}
+  </ul>
+  <button class="service-link" type="button" data-select-service={id}>
+    Request this service
+    <span aria-hidden="true">↗</span>
+  </button>
+</article>

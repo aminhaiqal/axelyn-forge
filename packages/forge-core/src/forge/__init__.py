@@ -10,4 +10,4 @@ __all__ = [
     "tailor_resume_with_openai",
     "validate_resume_file",
 ]
-__version__ = "0.2.0"
+__version__ = "0.3.0"

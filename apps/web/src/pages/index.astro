@@ -1,0 +1,185 @@
+---
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import ServiceCard from "../components/ServiceCard.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const services = [
+  {
+    id: "resume-tailoring",
+    name: "Resume tailoring",
+    summary: "One focused resume for one real opportunity, shaped around the role while staying true to your experience.",
+    deliverables: ["Role-aligned resume", "Editable DOCX", "Ready-to-send PDF", "Change and keyword audit"],
+  },
+  {
+    id: "application-kit",
+    name: "Complete application kit",
+    summary: "A coordinated resume and cover letter built from the same verified source material.",
+    deliverables: ["Role-aligned resume", "Tailored cover letter", "DOCX and PDF files", "Evidence and keyword audit"],
+  },
+  {
+    id: "resume-system",
+    name: "Reusable resume system",
+    summary: "A structured career profile and Word template that make future applications faster and more consistent.",
+    deliverables: ["Structured career profile", "Tagged Word template", "Reusable content library", "One launch-ready kit"],
+  },
+];
+const apiBase = import.meta.env.PUBLIC_API_BASE_URL ?? "";
+---
+
+<BaseLayout
+  title="Axelyn Forge — Career documents built from verified experience"
+  description="Focused resumes, cover letters, and reusable application systems built from your real experience."
+>
+  <div id="top" class="page-shell">
+    <Header />
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> Career document engineering</p>
+          <h1 id="hero-title">Your experience,<br /><em>forged for the role.</em></h1>
+          <p class="hero-intro">
+            We turn verified career history into focused resumes and cover letters.
+            Clear positioning, precise language, and no invented claims.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#request">Start a service request</a>
+            <a class="text-link" href="#process">See how it works <span aria-hidden="true">↓</span></a>
+          </div>
+          <ul class="trust-line" aria-label="Service principles">
+            <li>Evidence bound</li>
+            <li>Word native</li>
+            <li>Built for review</li>
+          </ul>
+        </div>
+
+        <div class="hero-artifact" aria-label="An example application brief moving through the Forge process">
+          <div class="artifact-shadow artifact-shadow-one"></div>
+          <div class="artifact-shadow artifact-shadow-two"></div>
+          <div class="artifact-page">
+            <div class="artifact-topline">
+              <span>AF / 001</span>
+              <span class="status-dot">Brief ready</span>
+            </div>
+            <p class="artifact-kicker">Application brief</p>
+            <h2>Senior backend<br />engineer</h2>
+            <dl>
+              <div><dt>Source</dt><dd>Verified history</dd></div>
+              <div><dt>Target</dt><dd>One specific role</dd></div>
+              <div><dt>Format</dt><dd>DOCX + PDF</dd></div>
+            </dl>
+            <div class="artifact-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <div class="artifact-stamp">Facts only</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="services" class="services-section section-pad" aria-labelledby="services-title">
+        <div class="section-intro">
+          <p class="eyebrow"><span></span> Services</p>
+          <h2 id="services-title">Choose the amount of structure you need.</h2>
+          <p>Start with one application or build a repeatable system for every role that follows.</p>
+        </div>
+        <div class="service-grid">
+          {services.map((service, index) => (
+            <ServiceCard {...service} index={String(index + 1).padStart(2, "0")} />
+          ))}
+        </div>
+      </section>
+
+      <section id="process" class="process-section section-pad" aria-labelledby="process-title">
+        <div class="section-intro process-intro">
+          <p class="eyebrow eyebrow-light"><span></span> The forge sequence</p>
+          <h2 id="process-title">A careful process, with your facts at the center.</h2>
+        </div>
+        <ol class="process-list">
+          <li>
+            <span class="process-number">01</span>
+            <div><h3>Send the brief</h3><p>Choose a service and share the role, context, and result you need.</p></div>
+          </li>
+          <li>
+            <span class="process-number">02</span>
+            <div><h3>Verify the evidence</h3><p>Your real experience becomes the boundary for every edit and recommendation.</p></div>
+          </li>
+          <li>
+            <span class="process-number">03</span>
+            <div><h3>Forge the documents</h3><p>Content is aligned, checked, and delivered in editable and ready-to-send formats.</p></div>
+          </li>
+        </ol>
+      </section>
+
+      <section id="request" class="request-section section-pad" aria-labelledby="request-title">
+        <div class="request-copy">
+          <p class="eyebrow"><span></span> Start a request</p>
+          <h2 id="request-title">Tell us what you’re working toward.</h2>
+          <p>
+            A short brief is enough to start. We’ll review it and reply by email with
+            the right scope and next step.
+          </p>
+          <div class="request-note">
+            <span aria-hidden="true">↳</span>
+            <p>Your details are used only to review and respond to this request.</p>
+          </div>
+        </div>
+
+        <form class="request-form" id="service-request-form" data-api-base={apiBase}>
+          <div class="form-row">
+            <label>
+              <span>Full name</span>
+              <input name="full_name" autocomplete="name" minlength="2" maxlength="120" required />
+            </label>
+            <label>
+              <span>Email address</span>
+              <input name="email" type="email" autocomplete="email" maxlength="254" required />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              <span>Service</span>
+              <select name="service_id" required>
+                <option value="">Choose a service</option>
+                {services.map((service) => <option value={service.id}>{service.name}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Company <small>Optional</small></span>
+              <input name="company" autocomplete="organization" maxlength="160" />
+            </label>
+          </div>
+          <label>
+            <span>What do you need?</span>
+            <textarea
+              name="project_summary"
+              rows="6"
+              minlength="30"
+              maxlength="4000"
+              placeholder="Share the role you are targeting, where you are in the process, and what would make this useful."
+              required></textarea>
+          </label>
+          <div class="form-row">
+            <label>
+              <span>Job posting URL <small>Optional</small></span>
+              <input name="job_posting_url" type="url" inputmode="url" placeholder="https://" />
+            </label>
+            <label>
+              <span>Timeline <small>Optional</small></span>
+              <input name="timeline" maxlength="120" placeholder="For example, within two weeks" />
+            </label>
+          </div>
+          <label class="consent-row">
+            <input name="consent" type="checkbox" required />
+            <span>I agree that Axelyn Forge may use these details to respond to my request.</span>
+          </label>
+          <div class="form-submit-row">
+            <button class="button button-primary" type="submit">Send service request</button>
+            <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <Footer />
+  </div>
+
+</BaseLayout>

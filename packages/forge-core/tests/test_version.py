@@ -5,12 +5,12 @@ from pathlib import Path
 from forge import __version__
 
 
-ROOT = Path(__file__).resolve().parents[1]
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 class VersionTests(unittest.TestCase):
     def test_package_versions_match(self):
-        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        pyproject = (PACKAGE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         match = re.search(r'^version = "([^"]+)"$', pyproject, flags=re.MULTILINE)
 
         self.assertIsNotNone(match)

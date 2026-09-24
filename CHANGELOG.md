@@ -4,13 +4,28 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ## Unreleased
 
+## 0.3.0 — 2026-09-25
+
 ### Added
 
-- Added an ephemeral `/forge whoami` command so prospective users can retrieve their own Discord ID without enabling Developer Mode or having prior Forge authorization.
+- Added an Astro and Tailwind public service website with a responsive service catalog, process explanation, and accessible request form.
+- Added a versioned FastAPI service with health, service-catalog, and service-request endpoints.
+- Added validated SQLite persistence for customer service briefs with opaque public references.
+- Added separate API, web, and document-core container images, an Nginx reverse proxy, intake rate limiting, and container health checks.
+- Added CI for backend tests, frontend checks, and container builds, plus GHCR publishing for `main` and version tags.
+
+### Changed
+
+- Reorganized the repository into `apps`, `packages`, and `infra` boundaries while retaining the existing Forge CLI and document engine.
+- Moved document-engine tests away from the private candidate resume template by generating a deterministic test-only DOCX fixture.
 
 ### Fixed
 
 - Constrained OpenAI context selection to valid candidate chunk IDs and bounded keyword lengths so harmless model formatting drift no longer aborts tailoring.
+
+### Removed
+
+- Removed the Discord bot adapter, Discord dependency, and Discord-specific VPS deployment workflow.
 
 ## 0.2.0 — 2026-09-08
 
