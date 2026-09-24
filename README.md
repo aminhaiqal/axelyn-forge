@@ -101,6 +101,12 @@ docker compose -f infra/compose.production.yaml up -d
 
 The production stack does not publish a host port. Cloudflare Tunnel connects directly to the internal `web:8080` service, while the API and its SQLite volume stay private.
 
+`infra/cloudflare/` contains the edge proxy for `forge.axelyn.com`. Its Worker custom domain creates the public hostname and forwards requests through a Workers VPC binding to the dedicated Forge tunnel:
+
+```bash
+npx wrangler deploy --config infra/cloudflare/wrangler.jsonc
+```
+
 ## Document engine
 
 The core package retains the deterministic document pipeline. DOCX templates control presentation, canonical JSON controls facts and document structure, and AI output is limited to validated semantic rewrite operations.

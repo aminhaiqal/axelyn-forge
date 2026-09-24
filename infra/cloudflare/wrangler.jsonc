@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "axelyn-forge-edge",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-24",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "forge.axelyn.com",
+      "custom_domain": true
+    }
+  ],
+  "vpc_networks": [
+    {
+      "binding": "FORGE_ORIGIN",
+      "tunnel_id": "239adbf1-0d61-4e1a-af4a-06cfe82abe99"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
