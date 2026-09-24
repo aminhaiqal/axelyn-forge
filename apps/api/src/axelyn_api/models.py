@@ -2,7 +2,7 @@
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, field_validator
 
 
 class Service(BaseModel):
@@ -37,3 +37,41 @@ class HealthResponse(BaseModel):
     status: Literal["ok"]
     service: Literal["axelyn-forge-api"]
     version: str
+
+
+ForgeOutput = Literal["resume", "cover-letter"]
+
+
+class ForgeBriefCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    target_role: str = Field(min_length=2, max_length=160)
+    company: Optional[str] = Field(default=None, max_length=160)
+    job_description: str = Field(min_length=100, max_length=20000)
+    career_evidence: str = Field(min_length=100, max_length=30000)
+    outputs: List[ForgeOutput] = Field(min_length=1, max_length=2)
+    consent: Literal[True]
+
+    @field_validator("outputs")
+    @classmethod
+    def outputs_are_unique(cls, value: List[ForgeOutput]) -> List[ForgeOutput]:
+        if len(value) != len(set(value)):
+            raise ValueError("outputs must not contain duplicates")
+        return value
+
+
+class ForgeBriefAnalysis(BaseModel):
+    coverage_score: int = Field(ge=0, le=100)
+    matched_keywords: List[str]
+    gap_keywords: List[str]
+    evidence_highlights: List[str]
+    recommendations: List[str]
+
+
+class ForgeBriefAccepted(ForgeBriefAnalysis):
+    id: str
+    status: Literal["ready"]
+    created_at: str
+    target_role: str
+    company: Optional[str]
+    outputs: List[ForgeOutput]

@@ -9,10 +9,13 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
+from .analysis import analyze_forge_brief
 from .catalog import SERVICE_IDS, SERVICES
 from .config import Settings
 from .models import (
     HealthResponse,
+    ForgeBriefAccepted,
+    ForgeBriefCreate,
     Service,
     ServiceRequestAccepted,
     ServiceRequestCreate,
@@ -31,7 +34,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     app = FastAPI(
         title="Axelyn Forge API",
-        summary="Public service catalog and project intake for Axelyn Forge.",
+        summary="Service intake and evidence alignment for Axelyn Forge.",
         version=__version__,
         docs_url=(
             None
@@ -84,6 +87,22 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 detail="Unknown service_id. Choose a service returned by /api/v1/services.",
             )
         return request.app.state.service_request_store.create(payload)
+
+    @app.post(
+        "/api/v1/forge-briefs",
+        response_model=ForgeBriefAccepted,
+        status_code=status.HTTP_201_CREATED,
+        tags=["forge"],
+    )
+    def create_forge_brief(
+        payload: ForgeBriefCreate,
+        request: Request,
+    ) -> ForgeBriefAccepted:
+        analysis = analyze_forge_brief(payload)
+        return request.app.state.service_request_store.create_forge_brief(
+            payload,
+            analysis,
+        )
 
     return app
 

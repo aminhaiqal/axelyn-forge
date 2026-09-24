@@ -1,6 +1,6 @@
 # Axelyn Forge
 
-Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The public web app is built with Astro and Tailwind CSS. A FastAPI service exposes the catalog and accepts customer briefs, while the existing Python document engine continues to provide validated JSON, DOCX rendering, PDF conversion, evidence selection, and OpenAI-assisted tailoring.
+Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The public web app is built with Astro and Tailwind CSS. Its `/app` workspace turns a target role and verified career history into an evidence-alignment brief. A FastAPI service powers the workspace, exposes the catalog, and accepts customer briefs, while the existing Python document engine continues to provide validated JSON, DOCX rendering, PDF conversion, evidence selection, and OpenAI-assisted tailoring.
 
 The active product no longer depends on Discord.
 
@@ -59,6 +59,7 @@ The first public contract is versioned under `/api/v1`.
 | `GET` | `/api/v1/health` | Check API and SQLite availability. |
 | `GET` | `/api/v1/services` | Return the public service catalog. |
 | `POST` | `/api/v1/service-requests` | Validate and store a customer service brief. |
+| `POST` | `/api/v1/forge-briefs` | Analyze verified evidence against a target role for the `/app` workspace. |
 
 Example request:
 
@@ -77,7 +78,7 @@ curl http://localhost:8000/api/v1/service-requests \
   }'
 ```
 
-Submissions receive an opaque `req_…` reference and are stored in the SQLite database configured by `FORGE_DATABASE`. No public endpoint exposes submitted customer details.
+Service submissions receive an opaque `req_…` reference. Forge workspace briefs receive an opaque `frg_…` reference and a deterministic analysis of supported language, evidence gaps, and the strongest source passages. Both are stored in the SQLite database configured by `FORGE_DATABASE`; no public endpoint exposes submitted customer details or career evidence.
 
 ## Containers
 

@@ -80,6 +80,57 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(422, response.status_code)
 
+    def test_forge_brief_aligns_evidence_and_is_persisted(self):
+        response = self.client.post(
+            "/api/v1/forge-briefs",
+            json={
+                "target_role": "Senior backend engineer",
+                "company": "Example Systems",
+                "job_description": (
+                    "Build Python APIs and distributed systems for a cloud platform. "
+                    "Own service reliability, PostgreSQL performance, observability, "
+                    "and collaboration across product and infrastructure teams."
+                ),
+                "career_evidence": (
+                    "Built Python APIs for an internal cloud platform used by five teams. "
+                    "Improved PostgreSQL query performance and added service observability. "
+                    "Partnered with product managers to deliver reliable backend services."
+                ),
+                "outputs": ["resume", "cover-letter"],
+                "consent": True,
+            },
+        )
+
+        self.assertEqual(201, response.status_code)
+        body = response.json()
+        self.assertTrue(body["id"].startswith("frg_"))
+        self.assertEqual("ready", body["status"])
+        self.assertGreater(body["coverage_score"], 0)
+        self.assertIn("python", body["matched_keywords"])
+        self.assertIn("reliable", body["matched_keywords"])
+        self.assertTrue(body["evidence_highlights"])
+
+        with sqlite3.connect(self.database) as connection:
+            row = connection.execute(
+                "SELECT target_role, status FROM forge_briefs WHERE id = ?",
+                (body["id"],),
+            ).fetchone()
+        self.assertEqual(("Senior backend engineer", "ready"), row)
+
+    def test_forge_brief_requires_substantive_source_material(self):
+        response = self.client.post(
+            "/api/v1/forge-briefs",
+            json={
+                "target_role": "Engineer",
+                "job_description": "Too short",
+                "career_evidence": "Also too short",
+                "outputs": ["resume"],
+                "consent": True,
+            },
+        )
+
+        self.assertEqual(422, response.status_code)
+
 
 if __name__ == "__main__":
     unittest.main()
