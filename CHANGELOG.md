@@ -32,6 +32,7 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ### Fixed
 
+- Prevented long user-entered skills and other resume content from widening the authenticated workspace beyond the viewport.
 - Bundled the resume builder interaction script with a content-hashed URL so newly deployed controls cannot run against a stale browser-cached script.
 
 ### Removed

@@ -27,8 +27,8 @@
 }
 
 * { box-sizing: border-box; }
-html { background: var(--color-paper); }
-body { margin: 0; min-width: 320px; }
+html { max-width: 100%; overflow-x: hidden; overflow-x: clip; background: var(--color-paper); }
+body { width: 100%; max-width: 100%; margin: 0; min-width: 320px; overflow-x: hidden; overflow-x: clip; }
 button, input, select, textarea { font: inherit; }
 a { color: inherit; text-decoration: none; }
 ::selection { color: white; background: var(--color-blueprint); }

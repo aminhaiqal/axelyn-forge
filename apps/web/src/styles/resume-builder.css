@@ -9,7 +9,7 @@
   background: #fff;
 }
 .builder-page > .workspace-sidebar { grid-column: 1; grid-row: 1; }
-.builder-main { grid-column: 2; min-width: 0; }
+.builder-main { grid-column: 2; min-width: 0; max-width: 100%; overflow-x: hidden; overflow-x: clip; }
 .builder-header { min-height: 390px; display: grid; grid-template-columns: minmax(0,1.2fr) minmax(300px,.8fr); align-items: end; gap: clamp(45px,9vw,160px); padding: clamp(60px,8vw,115px) clamp(24px,5vw,82px) 65px; border-bottom: 1px solid var(--builder-line); }
 .builder-back { display: inline-block; margin-bottom: 35px; color: #718188; border-bottom: 1px solid #bfc8cb; font-size: .65rem; font-weight: 750; }
 .builder-kicker { display: flex; align-items: center; gap: 11px; margin: 0 0 22px; color: #718188; font: .58rem var(--font-mono); letter-spacing: .14em; text-transform: uppercase; }
@@ -20,8 +20,17 @@
 .builder-intro > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
 .builder-intro span { padding: 7px 9px; border: 1px solid #c7d0d3; font: .52rem var(--font-mono); text-transform: uppercase; }
 
-.resume-builder-form { max-width: 1450px; margin-inline: auto; }
+.resume-builder-form { width: 100%; max-width: 1450px; margin-inline: auto; }
 .builder-section { display: grid; gap: 23px; padding: 64px clamp(24px,6vw,95px) 74px; border-bottom: 1px solid var(--builder-line); }
+.builder-section > *,
+.builder-section-heading > *,
+.builder-fields > *,
+.work-experience-card,
+.education-card,
+.project-card,
+.skill-category-card,
+.skill-category-fields > *,
+.custom-section-card > * { min-width: 0; max-width: 100%; }
 .builder-section-heading { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 18px; align-items: start; margin-bottom: 10px; }
 .builder-section-heading > span { margin-top: 8px; color: var(--color-copper); font: .58rem var(--font-mono); }
 .builder-section-heading h2 { margin: 0; font: 620 clamp(1.75rem,2.5vw,2.8rem) var(--font-display); letter-spacing: -.05em; }
@@ -90,8 +99,9 @@
 .skill-editor > small { color: #819096; font-size: .54rem; line-height: 1.45; }
 .skill-chips { min-height: 45px; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; border: 1px solid #bac5c8; padding: 7px; background: white; }
 .skill-chips:empty::before { content: "No skills added yet"; padding-left: 5px; color: #98a4a8; font-size: .6rem; }
-.skill-chips > span { display: inline-flex; align-items: center; gap: 8px; min-height: 29px; padding: 4px 7px 4px 10px; color: var(--builder-ink); background: #edf1f2; font-size: .61rem; font-weight: 700; }
-.skill-chips > span button { width: 20px; height: 20px; display: grid; place-items: center; border: 0; padding: 0; color: #6d7d83; background: white; font-size: .8rem; line-height: 1; cursor: pointer; }
+.skill-chips > span { max-width: 100%; display: inline-flex; align-items: center; gap: 8px; min-height: 29px; padding: 4px 7px 4px 10px; color: var(--builder-ink); background: #edf1f2; font-size: .61rem; font-weight: 700; }
+.skill-chips > span > span { min-width: 0; overflow-wrap: anywhere; }
+.skill-chips > span button { width: 20px; height: 20px; flex: 0 0 20px; display: grid; place-items: center; border: 0; padding: 0; color: #6d7d83; background: white; font-size: .8rem; line-height: 1; cursor: pointer; }
 .skill-entry-row { display: grid; grid-template-columns: minmax(0,1fr) auto; }
 .skill-entry-row input { min-width: 0; }
 .skill-entry-row button { min-width: 105px; border: 1px solid var(--builder-ink); border-left: 0; padding: 0 14px; color: white; background: var(--builder-ink); font-size: .58rem; font-weight: 800; cursor: pointer; }

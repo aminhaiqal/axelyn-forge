@@ -1,5 +1,9 @@
 [data-workspace-shell] {
   --workspace-sidebar-width: 264px;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 [data-workspace-shell][data-sidebar-collapsed="true"] {
@@ -22,6 +26,10 @@
   background: #fff;
   transition: width 220ms cubic-bezier(.2,.75,.2,1);
 }
+
+.sidebar-content,
+.sidebar-nav,
+.sidebar-footer { min-width: 0; max-width: 100%; }
 
 .sidebar-head {
   display: flex;
@@ -124,7 +132,7 @@
     align-items: center;
     gap: 10px;
     padding: 9px 14px;
-    overflow: visible;
+    overflow: hidden;
     border-right: 0;
     border-bottom: 1px solid #e1e5e6;
     box-shadow: 0 8px 24px rgba(17,38,50,.045);

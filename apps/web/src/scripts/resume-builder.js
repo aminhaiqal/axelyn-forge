@@ -264,7 +264,9 @@ if (builderPage instanceof HTMLElement) {
     const chip = document.createElement("span");
     chip.dataset.skillChip = value;
     chip.setAttribute("role", "listitem");
-    chip.append(document.createTextNode(value));
+    const label = document.createElement("span");
+    label.textContent = value;
+    chip.append(label);
     const remove = document.createElement("button");
     remove.type = "button";
     remove.dataset.removeSkill = "";
