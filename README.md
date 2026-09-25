@@ -69,7 +69,6 @@ The first public contract is versioned under `/api/v1`.
 | `GET` | `/api/v1/services` | Return the public service catalog. |
 | `GET` | `/api/v1/me` | Return the authenticated Clerk user ID. |
 | `POST` | `/api/v1/service-requests` | Validate and store a customer service brief. |
-| `POST` | `/api/v1/forge-briefs` | Analyze evidence for the signed-in user's `/app` workspace. |
 | `GET` | `/api/v1/resumes` | List resume sources owned by the signed-in user. |
 | `POST` | `/api/v1/resumes` | Create a private resume source from structured form content. |
 | `GET` | `/api/v1/resume-templates` | List the available ATS-friendly layouts. |
@@ -103,7 +102,7 @@ curl http://localhost:8000/api/v1/service-requests \
   }'
 ```
 
-Service submissions receive an opaque `req_…` reference. Forge workspace briefs require a valid Clerk session and are stored with the authenticated Clerk user ID. They receive an opaque `frg_…` reference and a deterministic analysis of supported language, evidence gaps, and the strongest source passages. Both are stored in the SQLite database configured by `FORGE_DATABASE`; no public endpoint exposes submitted customer details or career evidence.
+Service submissions receive an opaque `req_…` reference and are stored in the SQLite database configured by `FORGE_DATABASE`. Private resume and job-match operations require a valid Clerk session and remain scoped to the authenticated user.
 
 ## Containers
 

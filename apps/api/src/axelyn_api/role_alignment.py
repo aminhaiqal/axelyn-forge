@@ -1,10 +1,10 @@
-"""Deterministic evidence-to-role alignment for the public Forge workspace."""
+"""Deterministic resume-to-role alignment used by job matching."""
 
 import re
 from collections import Counter
 from typing import Iterable, List, Sequence
 
-from .models import ForgeBriefAnalysis, ForgeBriefCreate
+from .models import RoleAlignmentAnalysis, RoleAlignmentInput
 
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+#.-]{2,}")
@@ -124,8 +124,8 @@ def _select_evidence(value: str, matched_terms: Sequence[str]) -> List[str]:
     return [passage for _, _, passage in selected]
 
 
-def analyze_forge_brief(payload: ForgeBriefCreate) -> ForgeBriefAnalysis:
-    """Build a bounded, factual alignment brief without generating new claims."""
+def analyze_role_alignment(payload: RoleAlignmentInput) -> RoleAlignmentAnalysis:
+    """Measure factual resume coverage without generating new claims."""
     target_terms = _ranked_terms(payload.job_description)
     evidence_terms = set(_tokens(payload.career_evidence))
     matched_terms = [term for term in target_terms if term in evidence_terms]
@@ -149,12 +149,8 @@ def analyze_forge_brief(payload: ForgeBriefCreate) -> ForgeBriefAnalysis:
     recommendations.append(
         "Keep employer names, titles, dates, education, and metrics unchanged during tailoring."
     )
-    if "cover-letter" in payload.outputs:
-        recommendations.append(
-            "Use the cover letter to connect one evidence passage to the employer's immediate need."
-        )
 
-    return ForgeBriefAnalysis(
+    return RoleAlignmentAnalysis(
         coverage_score=coverage_score,
         matched_keywords=matched_terms[:10],
         gap_keywords=missing_terms[:8],

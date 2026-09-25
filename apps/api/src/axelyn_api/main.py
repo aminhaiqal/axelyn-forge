@@ -15,7 +15,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 from . import __version__
-from .analysis import analyze_forge_brief
 from .auth import ClerkAuthenticator, UserAuthenticator
 from .catalog import SERVICE_IDS, SERVICES
 from .config import Settings
@@ -36,8 +35,6 @@ from .job_match import (
 from .models import (
     HealthResponse,
     AuthenticatedUser,
-    ForgeBriefAccepted,
-    ForgeBriefCreate,
     GeneratedDocumentBundle,
     GeneratedDocumentSummary,
     JobMatchAnalysis,
@@ -180,7 +177,7 @@ def create_app(
 
     app = FastAPI(
         title="Axelyn Forge API",
-        summary="Service intake and evidence alignment for Axelyn Forge.",
+        summary="Service intake and private resume workflows for Axelyn Forge.",
         version=__version__,
         docs_url=(
             None
@@ -242,24 +239,6 @@ def create_app(
                 detail="Unknown service_id. Choose a service returned by /api/v1/services.",
             )
         return request.app.state.service_request_store.create(payload)
-
-    @app.post(
-        "/api/v1/forge-briefs",
-        response_model=ForgeBriefAccepted,
-        status_code=status.HTTP_201_CREATED,
-        tags=["forge"],
-    )
-    def create_forge_brief(
-        payload: ForgeBriefCreate,
-        request: Request,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> ForgeBriefAccepted:
-        analysis = analyze_forge_brief(payload)
-        return request.app.state.service_request_store.create_forge_brief(
-            payload,
-            analysis,
-            user_id,
-        )
 
     @app.get(
         "/api/v1/resumes",

@@ -7,8 +7,8 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-from .analysis import analyze_forge_brief
-from .models import ForgeBriefCreate, JobMatchAnalysis
+from .models import JobMatchAnalysis, RoleAlignmentInput
+from .role_alignment import analyze_role_alignment
 from .resume_import import ResumeImportError, extract_resume
 
 
@@ -92,17 +92,15 @@ def analyze_job_match(
     job_description: str,
     resume_text: str,
 ) -> JobMatchAnalysis:
-    brief = analyze_forge_brief(
-        ForgeBriefCreate(
+    alignment = analyze_role_alignment(
+        RoleAlignmentInput(
             target_role=target_role,
             company=company,
             job_description=job_description,
             career_evidence=resume_text,
-            outputs=["resume"],
-            consent=True,
         )
     )
-    score = brief.coverage_score
+    score = alignment.coverage_score
     if score >= 70:
         match_state = "match"
         label = "Match"
@@ -126,17 +124,21 @@ def analyze_job_match(
         )
 
     reasons = [lead]
-    if brief.matched_keywords:
+    if alignment.matched_keywords:
         reasons.append(
-            "Supported by current evidence: " + ", ".join(brief.matched_keywords[:6]) + "."
+            "Supported by current evidence: "
+            + ", ".join(alignment.matched_keywords[:6])
+            + "."
         )
-    if brief.gap_keywords:
+    if alignment.gap_keywords:
         reasons.append(
-            "Missing from the selected resume: " + ", ".join(brief.gap_keywords[:6]) + "."
+            "Missing from the selected resume: "
+            + ", ".join(alignment.gap_keywords[:6])
+            + "."
         )
 
     recommendations: list[str] = []
-    for keyword in brief.gap_keywords[:5]:
+    for keyword in alignment.gap_keywords[:5]:
         recommendations.append(
             f"Add {keyword} only if you can support it with a concrete project, responsibility, or result."
         )
@@ -153,9 +155,9 @@ def analyze_job_match(
         match_percentage=score,
         match_state=match_state,
         match_label=label,
-        matched_keywords=brief.matched_keywords,
-        missing_keywords=brief.gap_keywords,
-        evidence_highlights=brief.evidence_highlights,
+        matched_keywords=alignment.matched_keywords,
+        missing_keywords=alignment.gap_keywords,
+        evidence_highlights=alignment.evidence_highlights,
         reasons=reasons,
         recommendations=recommendations,
         can_generate=match_state != "no_match",

@@ -39,9 +39,8 @@ flowchart LR
 
 1. Public visitors can submit `POST /api/v1/service-requests`; FastAPI validates the brief and writes it to SQLite with an opaque reference.
 2. A visitor entering `/app` without a valid Clerk session is redirected to the same-origin sign-in route.
-3. The browser submits the Clerk session cookie with `POST /api/v1/forge-briefs`.
-4. FastAPI verifies the session, allowed party, and token type before associating the new brief with the Clerk user ID.
-5. The caller receives an opaque brief reference and no private data is made queryable through a public endpoint.
+3. FastAPI verifies the session, allowed party, and token type before any private resume or job-match operation.
+4. Every private query includes the authenticated Clerk user ID, and no private data is made queryable through a public endpoint.
 
 ## Resume library flow
 
