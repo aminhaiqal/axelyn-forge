@@ -8,12 +8,19 @@ services:
     image: axelyn-forge-api:local
     restart: unless-stopped
     env_file:
-      - path: ${FORGE_ENV_FILE:-../.env}
+      - path: ../.env
+        required: false
+      - path: ../.env.local
         required: false
     environment:
       FORGE_ENVIRONMENT: production
       FORGE_DATABASE: /state/context.sqlite3
+      FORGE_STORAGE_PATH: /state/objects
+      FORGE_STORAGE_ENDPOINT: ${FORGE_STORAGE_ENDPOINT:-}
+      FORGE_STORAGE_TOKEN: ${FORGE_STORAGE_TOKEN:-}
+      FORGE_RESUME_TEMPLATE: /app/templates/Axelyn_Standard_Resume_v1.docx
       FORGE_CORS_ORIGINS: ${FORGE_CORS_ORIGINS:-http://localhost:8080}
+      CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-http://localhost:8080,http://127.0.0.1:8080}
     volumes:
       - forge-state:/state
     cpus: 1.0
@@ -21,7 +28,7 @@ services:
     pids_limit: 128
     read_only: true
     tmpfs:
-      - /tmp:size=32m,mode=1777
+      - /tmp:size=64m,mode=1777
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -43,16 +50,54 @@ services:
       retries: 5
       start_period: 10s
 
+  frontend:
+    build:
+      context: ..
+      dockerfile: infra/docker/frontend.Dockerfile
+      args:
+        PUBLIC_API_BASE_URL: ""
+        PUBLIC_CLERK_PUBLISHABLE_KEY: ${PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_Zm9vLmNsZXJrLmFjY291bnRzLmRldiQ=}
+    image: axelyn-forge-frontend:local
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: ../.env.local
+        required: false
+      - path: ../apps/web/.env
+        required: false
+    cpus: 0.5
+    mem_limit: 512m
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4321/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   web:
     build:
       context: ..
       dockerfile: infra/docker/web.Dockerfile
-      args:
-        PUBLIC_API_BASE_URL: ""
     image: axelyn-forge-web:local
     restart: unless-stopped
     depends_on:
       api:
+        condition: service_healthy
+      frontend:
         condition: service_healthy
     ports:
       - "${FORGE_WEB_PORT:-8080}:8080"
@@ -69,7 +114,7 @@ services:
     cap_drop:
       - ALL
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
       interval: 15s
       timeout: 5s
       retries: 5

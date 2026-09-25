@@ -62,6 +62,16 @@ class ServiceRequestStore:
                 )
                 """
             )
+            forge_columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(forge_briefs)")
+            }
+            if "user_id" not in forge_columns:
+                connection.execute("ALTER TABLE forge_briefs ADD COLUMN user_id TEXT")
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS forge_briefs_user_id_created_at "
+                "ON forge_briefs (user_id, created_at DESC)"
+            )
 
     def ping(self) -> None:
         with self._connect() as connection:
@@ -118,6 +128,7 @@ class ServiceRequestStore:
         self,
         payload: ForgeBriefCreate,
         analysis: ForgeBriefAnalysis,
+        user_id: str,
     ) -> ForgeBriefAccepted:
         brief_id = "frg_" + uuid.uuid4().hex
         created_at = (
@@ -131,6 +142,7 @@ class ServiceRequestStore:
                 """
                 INSERT INTO forge_briefs (
                     id,
+                    user_id,
                     target_role,
                     company,
                     job_description,
@@ -140,10 +152,11 @@ class ServiceRequestStore:
                     consented_at,
                     status,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     brief_id,
+                    user_id,
                     payload.target_role,
                     payload.company,
                     payload.job_description,

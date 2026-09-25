@@ -8,5 +8,8 @@
     "dev:web": "npm run dev --workspace @axelyn/web",
     "check:web": "npm run check --workspace @axelyn/web",
     "build:web": "npm run build --workspace @axelyn/web"
+  },
+  "devDependencies": {
+    "wrangler": "^4.140.0"
   }
 }

@@ -10,6 +10,8 @@
     "preview": "astro preview"
   },
   "dependencies": {
+    "@astrojs/node": "^11.1.6",
+    "@clerk/astro": "^4.1.6",
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@fontsource-variable/manrope": "5.3.0",
     "@fontsource/ibm-plex-mono": "5.3.0",

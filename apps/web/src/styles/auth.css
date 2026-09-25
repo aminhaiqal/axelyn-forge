@@ -1,0 +1,88 @@
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(360px, .9fr) minmax(440px, 1.1fr);
+  grid-template-rows: auto 1fr;
+  gap: 0 7vw;
+  padding: 34px max(28px, calc((100vw - 1240px) / 2)) 60px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, transparent 49.9%, rgba(23, 50, 77, .1) 50%, transparent 50.1%),
+    var(--color-paper);
+}
+
+.auth-brand { grid-column: 1 / -1; width: fit-content; }
+
+.auth-copy {
+  align-self: center;
+  max-width: 590px;
+  padding-block: 70px;
+}
+
+.auth-copy h1 {
+  max-width: 580px;
+  margin: 0;
+  color: var(--color-ink-deep);
+  font-family: var(--font-display);
+  font-size: clamp(3.6rem, 6vw, 6.8rem);
+  font-weight: 630;
+  letter-spacing: -.075em;
+  line-height: .91;
+}
+
+.auth-copy > p:not(.eyebrow) {
+  max-width: 510px;
+  margin: 30px 0 0;
+  color: var(--color-steel);
+  line-height: 1.75;
+}
+
+.auth-copy > a {
+  display: inline-block;
+  margin-top: 38px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--color-copper);
+  font-size: .78rem;
+  font-weight: 720;
+}
+
+.auth-panel {
+  min-width: 0;
+  min-height: 650px;
+  display: grid;
+  place-items: center;
+  padding: 56px 34px;
+  position: relative;
+}
+
+.auth-panel::before,
+.auth-panel::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  border: 1px solid rgba(23, 50, 77, .18);
+  background: var(--color-mist);
+}
+
+.auth-panel::before { width: 360px; height: 490px; transform: translate(-20px, 18px) rotate(-4deg); }
+.auth-panel::after { width: 350px; height: 480px; background: var(--color-blueprint); transform: translate(22px, 5px) rotate(3deg); }
+.auth-panel > * { position: relative; z-index: 1; max-width: 100%; }
+
+@media (max-width: 860px) {
+  .auth-page { grid-template-columns: 1fr; background: var(--color-paper); }
+  .auth-brand { grid-column: 1; }
+  .auth-copy { padding-block: 70px 24px; }
+  .auth-copy h1 { font-size: clamp(3.5rem, 13vw, 5.5rem); }
+  .auth-panel { min-height: 600px; padding-inline: 10px; }
+}
+
+@media (max-width: 500px) {
+  .auth-page { padding: 24px 16px 42px; }
+  .auth-copy { padding-block: 54px 18px; }
+  .auth-copy h1 { font-size: clamp(3rem, 15vw, 4.4rem); }
+  .auth-copy > p:not(.eyebrow) { margin-top: 22px; }
+  .auth-copy > a { margin-top: 28px; }
+  .auth-panel { min-height: 560px; padding-inline: 0; }
+  .auth-panel::before { width: min(300px, 88vw); }
+  .auth-panel::after { width: min(294px, 86vw); }
+}

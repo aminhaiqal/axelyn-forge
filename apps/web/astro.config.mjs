@@ -1,8 +1,12 @@
+import clerk from "@clerk/astro";
+import node from "@astrojs/node";
 import { defineConfig } from "astro/config";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  output: "static",
+  adapter: node({ mode: "standalone" }),
+  integrations: [clerk()],
+  output: "server",
   vite: {
     plugins: [tailwindcss()],
     server: {

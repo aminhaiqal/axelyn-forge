@@ -1,8 +1,11 @@
 import sqlite3
 import tempfile
 import unittest
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
 from axelyn_api.config import Settings
@@ -10,16 +13,62 @@ from axelyn_api.main import create_app
 
 
 class ApiTests(unittest.TestCase):
+    @staticmethod
+    def authenticate_user(request: Request) -> str:
+        sessions = {
+            "Bearer test-session": "user_test_123",
+            "Bearer other-session": "user_other_456",
+        }
+        user_id = sessions.get(request.headers.get("authorization", ""))
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Valid authentication is required.")
+        return user_id
+
+    @staticmethod
+    def resume_docx() -> bytes:
+        content_types = b"""<?xml version="1.0" encoding="UTF-8"?>
+        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+          <Default Extension="xml" ContentType="application/xml"/>
+        </Types>"""
+        document = b"""<?xml version="1.0" encoding="UTF-8"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p><w:r><w:t>Taylor Example</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Backend Engineer</w:t></w:r></w:p>
+            <w:p><w:r><w:t>taylor@example.com | +1 555 123 4567</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Summary</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Builds reliable Python services for cloud platforms.</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Experience</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Senior Engineer | Example Systems</w:t></w:r></w:p>
+            <w:p><w:r><w:t>2022 - Present</w:t></w:r></w:p>
+            <w:p><w:pPr><w:numPr/></w:pPr><w:r><w:t>Built production APIs.</w:t></w:r></w:p>
+          </w:body>
+        </w:document>"""
+        output = BytesIO()
+        with zipfile.ZipFile(output, "w") as archive:
+            archive.writestr("[Content_Types].xml", content_types)
+            archive.writestr("word/document.xml", document)
+        return output.getvalue()
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.database = Path(self.temp_dir.name) / "forge.sqlite3"
+        self.storage = Path(self.temp_dir.name) / "objects"
+        self.template = (
+            Path(__file__).resolve().parents[3]
+            / "templates"
+            / "Axelyn_Standard_Resume_v1.docx"
+        )
         app = create_app(
             Settings(
                 environment="test",
                 database_path=self.database,
+                storage_path=self.storage,
+                resume_template_path=self.template,
                 cors_origins=(),
-            )
+            ),
+            authenticate_user=self.authenticate_user,
         )
         self.client_context = TestClient(app)
         self.client = self.client_context.__enter__()
@@ -83,6 +132,7 @@ class ApiTests(unittest.TestCase):
     def test_forge_brief_aligns_evidence_and_is_persisted(self):
         response = self.client.post(
             "/api/v1/forge-briefs",
+            headers={"Authorization": "Bearer test-session"},
             json={
                 "target_role": "Senior backend engineer",
                 "company": "Example Systems",
@@ -112,14 +162,41 @@ class ApiTests(unittest.TestCase):
 
         with sqlite3.connect(self.database) as connection:
             row = connection.execute(
-                "SELECT target_role, status FROM forge_briefs WHERE id = ?",
+                "SELECT user_id, target_role, status FROM forge_briefs WHERE id = ?",
                 (body["id"],),
             ).fetchone()
-        self.assertEqual(("Senior backend engineer", "ready"), row)
+        self.assertEqual(
+            ("user_test_123", "Senior backend engineer", "ready"),
+            row,
+        )
+
+    def test_forge_brief_requires_authentication(self):
+        response = self.client.post(
+            "/api/v1/forge-briefs",
+            json={
+                "target_role": "Senior backend engineer",
+                "job_description": "A" * 120,
+                "career_evidence": "B" * 120,
+                "outputs": ["resume"],
+                "consent": True,
+            },
+        )
+
+        self.assertEqual(401, response.status_code)
+
+    def test_current_user_returns_authenticated_subject(self):
+        response = self.client.get(
+            "/api/v1/me",
+            headers={"Authorization": "Bearer test-session"},
+        )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual({"user_id": "user_test_123"}, response.json())
 
     def test_forge_brief_requires_substantive_source_material(self):
         response = self.client.post(
             "/api/v1/forge-briefs",
+            headers={"Authorization": "Bearer test-session"},
             json={
                 "target_role": "Engineer",
                 "job_description": "Too short",
@@ -130,6 +207,91 @@ class ApiTests(unittest.TestCase):
         )
 
         self.assertEqual(422, response.status_code)
+
+    def test_private_resume_import_review_render_and_download(self):
+        headers = {"Authorization": "Bearer test-session"}
+        imported = self.client.post(
+            "/api/v1/resumes/imports",
+            headers=headers,
+            data={"target_role": "Backend Engineer"},
+            files=[
+                (
+                    "files",
+                    (
+                        "backend-resume.docx",
+                        self.resume_docx(),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
+                )
+            ],
+        )
+
+        self.assertEqual(201, imported.status_code, imported.text)
+        item = imported.json()["items"][0]
+        self.assertEqual("stored", item["status"])
+        source_id = item["source"]["id"]
+        self.assertEqual("needs_review", item["source"]["status"])
+
+        owner_list = self.client.get("/api/v1/resumes", headers=headers)
+        other_list = self.client.get(
+            "/api/v1/resumes",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        other_read = self.client.get(
+            f"/api/v1/resumes/{source_id}",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        self.assertEqual(1, len(owner_list.json()))
+        self.assertEqual([], other_list.json())
+        self.assertEqual(404, other_read.status_code)
+
+        detail = self.client.get(f"/api/v1/resumes/{source_id}", headers=headers)
+        self.assertEqual(200, detail.status_code)
+        source = detail.json()
+        self.assertEqual("Taylor Example", source["draft"]["full_name"])
+        accepted = self.client.post(
+            f"/api/v1/resumes/{source_id}/accept",
+            headers=headers,
+            json={
+                **source["draft"],
+                "display_name": "Backend resume",
+                "target_role": "Backend Engineer",
+                "variant_name": "Backend Engineer - Master",
+            },
+        )
+        self.assertEqual(200, accepted.status_code, accepted.text)
+        variant_id = accepted.json()["id"]
+
+        rendered = self.client.post(
+            f"/api/v1/resume-variants/{variant_id}/render",
+            headers=headers,
+        )
+        self.assertEqual(201, rendered.status_code, rendered.text)
+        document_id = rendered.json()["id"]
+        download = self.client.get(
+            f"/api/v1/documents/{document_id}/download",
+            headers=headers,
+        )
+        other_download = self.client.get(
+            f"/api/v1/documents/{document_id}/download",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        self.assertEqual(200, download.status_code)
+        self.assertTrue(download.content.startswith(b"PK"))
+        self.assertIn("attachment", download.headers["content-disposition"])
+        self.assertEqual(404, other_download.status_code)
+
+    def test_resume_import_rejects_unsupported_files_and_requires_auth(self):
+        unsupported = self.client.post(
+            "/api/v1/resumes/imports",
+            headers={"Authorization": "Bearer test-session"},
+            files=[("files", ("resume.txt", b"plain text", "text/plain"))],
+        )
+        unauthenticated = self.client.get("/api/v1/resumes")
+
+        self.assertEqual(201, unsupported.status_code)
+        self.assertEqual("rejected", unsupported.json()["items"][0]["status"])
+        self.assertEqual(401, unauthenticated.status_code)
 
 
 if __name__ == "__main__":

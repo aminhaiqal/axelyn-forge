@@ -13,6 +13,12 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 - Added validated SQLite persistence for customer service briefs with opaque public references.
 - Added separate API, web, and document-core container images, an Nginx reverse proxy, intake rate limiting, and container health checks.
 - Added CI for backend tests, frontend checks, and container builds, plus GHCR publishing for `main` and version tags.
+- Added Clerk sign-in, sign-up, signed-in user controls, and route protection for the Astro workspace.
+- Added Clerk session verification to the FastAPI Forge endpoint and associated stored briefs with the authenticated user ID.
+- Added a dedicated Astro SSR container behind the Nginx gateway.
+- Added a private resume library with batch PDF/DOCX import, extraction review, named role versions, and owner-scoped access.
+- Added standard-template DOCX rendering and authenticated document downloads.
+- Added a server-only Cloudflare Worker gateway for the private `axelyn-forge-private` R2 bucket.
 
 ### Changed
 

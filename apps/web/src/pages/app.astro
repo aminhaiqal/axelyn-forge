@@ -1,16 +1,22 @@
 ---
+import { UserButton } from "@clerk/astro/components";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import "../styles/app.css";
+import "../styles/resume-library.css";
 
 const apiBase = import.meta.env.PUBLIC_API_BASE_URL ?? "";
+const { isAuthenticated, redirectToSignIn } = Astro.locals.auth();
+
+if (!isAuthenticated) {
+  return redirectToSignIn();
+}
 ---
 
 <BaseLayout
-  title="Forge workspace — Align your evidence to the role"
-  description="Build an evidence-backed role alignment brief from a job description and your verified career history."
+  title="Resume library — Axelyn Forge"
+  description="Keep private resume versions, review imported content, and render the Axelyn standard resume."
 >
-  <div class="forge-app-page" id="top">
-    <header class="app-header">
+  <div class="library-page" data-api-base={apiBase}>
+    <header class="library-header">
       <a class="brand" href="/" aria-label="Axelyn Forge home">
         <svg aria-hidden="true" viewBox="0 0 38 38" class="brand-mark">
           <path d="M5 3h21l7 7v25H5z" fill="currentColor"></path>
@@ -19,167 +25,125 @@ const apiBase = import.meta.env.PUBLIC_API_BASE_URL ?? "";
         </svg>
         <span>Axelyn <strong>Forge</strong></span>
       </a>
-      <div class="app-header-actions">
-        <span class="system-status"><i></i> Workspace ready</span>
-        <a href="/">Back to services</a>
-      </div>
+      <nav aria-label="Workspace navigation">
+        <a aria-current="page" href="/app">Resumes</a>
+        <a href="/app/forge">Evidence brief</a>
+        <UserButton />
+      </nav>
     </header>
 
-    <div class="app-frame">
-      <aside class="app-rail" aria-label="Forge progress">
+    <main class="library-shell">
+      <section class="library-intro">
         <div>
-          <p class="rail-label">New forge</p>
-          <h1>Evidence brief</h1>
+          <p class="library-kicker"><span></span> Private workspace</p>
+          <h1>Your resume<br /><em>source library.</em></h1>
         </div>
-        <ol class="rail-steps">
-          <li data-step="target" data-state="current">
-            <span>01</span>
-            <div><strong>Target</strong><small>Role and requirements</small></div>
-          </li>
-          <li data-step="evidence">
-            <span>02</span>
-            <div><strong>Evidence</strong><small>Your verified history</small></div>
-          </li>
-          <li data-step="brief">
-            <span>03</span>
-            <div><strong>Brief</strong><small>Alignment and gaps</small></div>
-          </li>
-        </ol>
-        <div class="rail-progress" aria-hidden="true"><i id="rail-progress-fill"></i></div>
-        <p class="rail-note">
-          Forge maps language to evidence. It does not invent titles, dates, metrics, or experience.
-        </p>
-      </aside>
-
-      <main class="workspace-main">
-        <div class="workspace-heading">
-          <p class="eyebrow"><span></span> Working surface</p>
-          <h2>Build a truthful role-alignment brief.</h2>
-          <p>Paste the role and the career evidence you can prove. Forge will show what is supported and what still needs verification.</p>
+        <div class="intro-copy">
+          <p>Keep one trusted source for every direction you pursue. Import an existing resume, review what Forge found, then shape it through the Axelyn standard.</p>
+          <div class="privacy-note">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3m-11 0h12v10H6z" /></svg>
+            <span><strong>Private by default.</strong> Only your signed-in account can read these files.</span>
+          </div>
         </div>
+      </section>
 
-        <form id="forge-brief-form" class="forge-form" data-api-base={apiBase}>
-          <fieldset id="target-inputs">
-            <legend><span>01</span> Target</legend>
-            <div class="app-form-row">
-              <label>
-                <span>Target role</span>
-                <input name="target_role" minlength="2" maxlength="160" placeholder="Senior backend engineer" required />
-              </label>
-              <label>
-                <span>Company <small>Optional</small></span>
-                <input name="company" maxlength="160" placeholder="Company or team" />
-              </label>
-            </div>
-            <label>
-              <span class="field-heading">Job description <small><output id="jd-count">0</output> / 20,000</small></span>
-              <textarea
-                name="job_description"
-                rows="10"
-                minlength="100"
-                maxlength="20000"
-                placeholder="Paste the full job description. Include responsibilities, requirements, and the language the employer uses."
-                required></textarea>
+      <section class="library-grid">
+        <div class="library-primary">
+          <div class="section-heading">
+            <div><span>01</span><h2>Resume sources</h2></div>
+            <p id="source-count">Loading your library…</p>
+          </div>
+
+          <form class="upload-panel" id="resume-upload-form">
+            <label class="drop-zone" id="resume-drop-zone" for="resume-files">
+              <input id="resume-files" name="files" type="file" accept=".docx,.pdf" multiple required />
+              <span class="upload-mark" aria-hidden="true">+</span>
+              <span class="upload-copy">
+                <strong>Bring in your resume files</strong>
+                <small>Drop up to 5 DOCX or PDF files here, or choose files · 10 MB each</small>
+              </span>
+              <span class="choose-files">Choose files</span>
             </label>
-          </fieldset>
-
-          <fieldset id="evidence-inputs">
-            <legend><span>02</span> Evidence</legend>
-            <label>
-              <span class="field-heading">Verified career history <small><output id="evidence-count">0</output> / 30,000</small></span>
-              <textarea
-                name="career_evidence"
-                rows="12"
-                minlength="100"
-                maxlength="30000"
-                placeholder="Paste your current resume, project notes, or factual work history. Keep employers, dates, technologies, outcomes, and metrics exactly as you can verify them."
-                required></textarea>
-            </label>
-            <p class="field-note"><span>Evidence boundary</span> Forge only marks a requirement as supported when its language appears in the history you provide.</p>
-          </fieldset>
-
-          <fieldset id="output-inputs">
-            <legend><span>03</span> Output focus</legend>
-            <div class="output-options">
-              <label class="output-option">
-                <input type="checkbox" name="outputs" value="resume" checked />
-                <span><strong>Resume</strong><small>Positioning, evidence order, and keyword gaps</small></span>
+            <div class="upload-options">
+              <label>
+                <span>Shared target role <small>optional</small></span>
+                <input name="target_role" type="text" maxlength="160" placeholder="e.g. Frontend Engineer" />
               </label>
-              <label class="output-option">
-                <input type="checkbox" name="outputs" value="cover-letter" />
-                <span><strong>Cover letter</strong><small>Evidence to connect with the employer’s need</small></span>
-              </label>
+              <button class="primary-button" type="submit">Import resumes <span aria-hidden="true">→</span></button>
             </div>
-          </fieldset>
+            <div class="file-selection" id="file-selection" hidden></div>
+            <p class="form-status" id="upload-status" aria-live="polite"></p>
+          </form>
 
-          <label class="app-consent">
-            <input type="checkbox" name="consent" required />
-            <span>I confirm this is my information and agree to its private processing for this Forge brief.</span>
-          </label>
-
-          <div class="forge-submit-row">
-            <button class="button button-primary" type="submit">
-              <span>Build evidence brief</span><b aria-hidden="true">→</b>
-            </button>
-            <p id="forge-form-status" role="status" aria-live="polite">No claims are generated at this step.</p>
-          </div>
-        </form>
-      </main>
-
-      <aside class="brief-inspector" aria-label="Forge brief result">
-        <div class="inspector-topline">
-          <span>Live brief</span>
-          <span id="brief-state">Waiting for evidence</span>
+          <div class="source-list" id="resume-source-list" aria-live="polite"></div>
         </div>
 
-        <div class="brief-empty" id="brief-empty">
-          <div class="empty-mark" aria-hidden="true"><i></i><i></i><i></i></div>
-          <h2>Your brief appears here.</h2>
-          <p>Complete the target and evidence fields, then build the brief to see supported language, gaps, and the strongest source passages.</p>
+        <aside class="standard-panel">
+          <p class="panel-index">The standard / v1</p>
+          <div class="template-sheet" aria-hidden="true">
+            <span></span><i></i><i></i><b></b><i></i><i></i><b></b><i></i><i></i>
+          </div>
+          <h2>One clean structure.<br />Every career direction.</h2>
+          <p>Your uploaded resume supplies the facts. The Axelyn standard supplies the hierarchy, spacing, and reliable DOCX output.</p>
+          <ul>
+            <li><span>01</span> Import the source</li>
+            <li><span>02</span> Review extracted facts</li>
+            <li><span>03</span> Name the role version</li>
+            <li><span>04</span> Generate standard DOCX</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="variant-section">
+        <div class="section-heading inverse">
+          <div><span>02</span><h2>Ready to forge</h2></div>
+          <p>Approved resume versions</p>
         </div>
+        <div class="variant-list" id="resume-variant-list"></div>
+      </section>
+    </main>
 
-        <section class="brief-result" id="brief-result" hidden>
-          <div class="score-block">
-            <p>Evidence coverage</p>
-            <div><strong id="brief-score">0</strong><span>%</span></div>
-            <i><b id="brief-score-fill"></b></i>
-            <small id="brief-score-label">Alignment measured</small>
-          </div>
+    <dialog class="review-dialog" id="resume-review-dialog">
+      <form method="dialog" class="dialog-close-form"><button aria-label="Close resume review">×</button></form>
+      <div class="review-heading">
+        <p><span></span> Review import</p>
+        <h2>Confirm the facts before they enter your library.</h2>
+        <p>Extraction can miss layout details. Edit anything that needs correction; Forge will only render what you approve here.</p>
+      </div>
+      <form class="review-form" id="resume-review-form">
+        <input name="source_id" type="hidden" />
+        <div class="review-fields two-up">
+          <label><span>Library name</span><input name="display_name" maxlength="160" required /></label>
+          <label><span>Target role</span><input name="target_role" maxlength="160" /></label>
+          <label><span>Full name</span><input name="full_name" maxlength="160" /></label>
+          <label><span>Professional headline</span><input name="headline" maxlength="200" /></label>
+        </div>
+        <label><span>Contact line</span><input name="contact_line" maxlength="300" /></label>
+        <label><span>Professional summary</span><textarea name="summary" rows="5" maxlength="2000"></textarea></label>
+        <label>
+          <span>Extracted resume text <small>Used to map experience, projects, education, and skills</small></span>
+          <textarea name="extracted_text" rows="16" maxlength="100000" required></textarea>
+        </label>
+        <label class="variant-name"><span>Version name</span><input name="variant_name" maxlength="160" placeholder="e.g. Frontend Engineer — Master" required /></label>
+        <p class="form-status" id="review-status" aria-live="polite"></p>
+        <div class="review-actions">
+          <button class="secondary-button" id="save-draft" type="button">Save review</button>
+          <button class="primary-button" type="submit">Approve version <span aria-hidden="true">→</span></button>
+        </div>
+      </form>
+    </dialog>
 
-          <div class="result-section">
-            <h3>Supported language</h3>
-            <ul class="keyword-list matched" id="matched-keywords"></ul>
-          </div>
+    <template id="empty-sources-template">
+      <div class="empty-library">
+        <span>00</span>
+        <div><strong>No resume sources yet.</strong><p>Your first imported file will appear here for review.</p></div>
+      </div>
+    </template>
 
-          <div class="result-section">
-            <h3>Needs verification</h3>
-            <ul class="keyword-list gaps" id="gap-keywords"></ul>
-          </div>
-
-          <div class="result-section">
-            <h3>Evidence to lead with</h3>
-            <ol class="evidence-list" id="evidence-highlights"></ol>
-          </div>
-
-          <div class="result-section">
-            <h3>Document direction</h3>
-            <ul class="direction-list" id="brief-recommendations"></ul>
-          </div>
-
-          <div class="brief-actions">
-            <button type="button" id="download-brief">Download brief <span aria-hidden="true">↓</span></button>
-            <button type="button" id="start-new-brief">Start again</button>
-          </div>
-          <p class="brief-reference">Reference <code id="brief-reference"></code></p>
-        </section>
-      </aside>
-    </div>
-
-    <footer class="app-footer">
-      <span>Evidence stays private to the Forge service.</span>
-      <span>Axelyn Forge / workspace v0.2</span>
+    <footer class="library-footer">
+      <span>Axelyn Forge / private document system</span>
+      <a href="/">Return to axelyn.com</a>
     </footer>
   </div>
-
-  <script is:inline src="/scripts/app.js" defer></script>
+  <script is:inline src="/scripts/library.js" defer></script>
 </BaseLayout>

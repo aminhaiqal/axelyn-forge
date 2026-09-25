@@ -50,7 +50,28 @@ jobs:
         run: npm ci
 
       - name: Type-check and build the web app
+        env:
+          PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Zm9vLmNsZXJrLmFjY291bnRzLmRldiQ=
+          CLERK_SECRET_KEY: sk_test_ci_placeholder
         run: npm run build:web
+
+  edge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Validate private storage Worker
+        run: npx wrangler deploy --dry-run --config infra/cloudflare/storage.wrangler.jsonc
 
   containers:
     needs: [backend, frontend]
@@ -64,6 +85,8 @@ jobs:
             dockerfile: infra/docker/core.Dockerfile
           - name: web
             dockerfile: infra/docker/web.Dockerfile
+          - name: frontend
+            dockerfile: infra/docker/frontend.Dockerfile
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
@@ -73,7 +96,7 @@ jobs:
 
   publish:
     if: github.event_name == 'push'
-    needs: [backend, frontend, containers]
+    needs: [backend, frontend, edge, containers]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -87,6 +110,8 @@ jobs:
             dockerfile: infra/docker/core.Dockerfile
           - name: web
             dockerfile: infra/docker/web.Dockerfile
+          - name: frontend
+            dockerfile: infra/docker/frontend.Dockerfile
     steps:
       - name: Check out the tested commit
         uses: actions/checkout@v7

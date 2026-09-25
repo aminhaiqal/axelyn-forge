@@ -1,0 +1,30 @@
+---
+import { SignUp } from "@clerk/astro/components";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import "../styles/auth.css";
+---
+
+<BaseLayout
+  title="Create your Forge account — Axelyn Forge"
+  description="Create a private account for your Axelyn Forge workspace."
+>
+  <main class="auth-page">
+    <a class="auth-brand brand" href="/" aria-label="Axelyn Forge home">
+      <svg aria-hidden="true" viewBox="0 0 38 38" class="brand-mark">
+        <path d="M5 3h21l7 7v25H5z" fill="currentColor"></path>
+        <path d="M26 3v8h7" fill="none" stroke="var(--color-copper)" stroke-width="3"></path>
+        <path d="M11 25h16M14 19h10M17 13h7" fill="none" stroke="white" stroke-width="2.4"></path>
+      </svg>
+      <span>Axelyn <strong>Forge</strong></span>
+    </a>
+    <section class="auth-copy">
+      <p class="eyebrow"><span></span> Begin securely</p>
+      <h1>Create your private workspace.</h1>
+      <p>Use Forge with an identity-backed account so every brief belongs only to you.</p>
+      <a href="/">← Back to Axelyn Forge</a>
+    </section>
+    <section class="auth-panel" aria-label="Create account">
+      <SignUp fallbackRedirectUrl="/app" signInUrl="/sign-in" />
+    </section>
+  </main>
+</BaseLayout>

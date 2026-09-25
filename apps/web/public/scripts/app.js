@@ -118,6 +118,10 @@ if (forgeForm instanceof HTMLFormElement) {
         body: JSON.stringify(payload),
       });
       const result = await response.json().catch(() => null);
+      if (response.status === 401) {
+        window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
       if (!response.ok) {
         const detail = Array.isArray(result?.detail)
           ? result.detail[0]?.msg

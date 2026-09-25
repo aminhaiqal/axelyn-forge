@@ -39,6 +39,10 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class AuthenticatedUser(BaseModel):
+    user_id: str
+
+
 ForgeOutput = Literal["resume", "cover-letter"]
 
 
@@ -75,3 +79,74 @@ class ForgeBriefAccepted(ForgeBriefAnalysis):
     target_role: str
     company: Optional[str]
     outputs: List[ForgeOutput]
+
+
+ResumeSourceStatus = Literal["needs_review", "needs_ocr", "ready"]
+
+
+class ResumeDraft(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    full_name: str = Field(default="", max_length=160)
+    headline: str = Field(default="", max_length=200)
+    contact_line: str = Field(default="", max_length=300)
+    summary: str = Field(default="", max_length=2_000)
+    extracted_text: str = Field(default="", max_length=100_000)
+    sections: dict[str, List[str]] = Field(default_factory=dict)
+
+
+class ResumeSourceSummary(BaseModel):
+    id: str
+    display_name: str
+    target_role: Optional[str]
+    original_filename: str
+    media_type: str
+    byte_size: int
+    status: ResumeSourceStatus
+    warning: Optional[str]
+    created_at: str
+    updated_at: str
+
+
+class ResumeSourceDetail(ResumeSourceSummary):
+    draft: ResumeDraft
+
+
+class ResumeImportItem(BaseModel):
+    filename: str
+    status: Literal["stored", "rejected"]
+    source: Optional[ResumeSourceSummary] = None
+    error: Optional[str] = None
+
+
+class ResumeImportResponse(BaseModel):
+    items: List[ResumeImportItem]
+
+
+class ResumeDraftUpdate(ResumeDraft):
+    display_name: str = Field(min_length=1, max_length=160)
+    target_role: Optional[str] = Field(default=None, max_length=160)
+
+
+class ResumeAcceptRequest(ResumeDraftUpdate):
+    variant_name: str = Field(min_length=1, max_length=160)
+
+
+class ResumeVariantSummary(BaseModel):
+    id: str
+    source_id: str
+    name: str
+    target_role: Optional[str]
+    status: Literal["ready"]
+    created_at: str
+    updated_at: str
+
+
+class GeneratedDocumentSummary(BaseModel):
+    id: str
+    variant_id: str
+    filename: str
+    media_type: str
+    template_id: str
+    template_version: str
+    created_at: str

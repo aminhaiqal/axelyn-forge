@@ -7,11 +7,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+COPY packages/forge-core ./packages/forge-core
 COPY apps/api ./apps/api
-RUN python -m pip install ./apps/api
+COPY templates ./templates
+RUN python -m pip install ./packages/forge-core ./apps/api
 
 RUN useradd --create-home --uid 10001 forge \
-    && mkdir -p /state \
+    && mkdir -p /state/objects \
     && chown -R forge:forge /state
 
 USER forge

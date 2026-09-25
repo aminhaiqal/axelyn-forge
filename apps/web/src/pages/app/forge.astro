@@ -1,0 +1,192 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { UserButton } from "@clerk/astro/components";
+import "../../styles/app.css";
+
+const apiBase = import.meta.env.PUBLIC_API_BASE_URL ?? "";
+const { isAuthenticated, redirectToSignIn } = Astro.locals.auth();
+
+if (!isAuthenticated) {
+  return redirectToSignIn();
+}
+---
+
+<BaseLayout
+  title="Forge workspace — Align your evidence to the role"
+  description="Build an evidence-backed role alignment brief from a job description and your verified career history."
+>
+  <div class="forge-app-page" id="top">
+    <header class="app-header">
+      <a class="brand" href="/" aria-label="Axelyn Forge home">
+        <svg aria-hidden="true" viewBox="0 0 38 38" class="brand-mark">
+          <path d="M5 3h21l7 7v25H5z" fill="currentColor"></path>
+          <path d="M26 3v8h7" fill="none" stroke="var(--color-copper)" stroke-width="3"></path>
+          <path d="M11 25h16M14 19h10M17 13h7" fill="none" stroke="white" stroke-width="2.4"></path>
+        </svg>
+        <span>Axelyn <strong>Forge</strong></span>
+      </a>
+      <div class="app-header-actions">
+        <span class="system-status"><i></i> Workspace ready</span>
+        <a href="/app">Resume library</a>
+        <UserButton />
+      </div>
+    </header>
+
+    <div class="app-frame">
+      <aside class="app-rail" aria-label="Forge progress">
+        <div>
+          <p class="rail-label">New forge</p>
+          <h1>Evidence brief</h1>
+        </div>
+        <ol class="rail-steps">
+          <li data-step="target" data-state="current">
+            <span>01</span>
+            <div><strong>Target</strong><small>Role and requirements</small></div>
+          </li>
+          <li data-step="evidence">
+            <span>02</span>
+            <div><strong>Evidence</strong><small>Your verified history</small></div>
+          </li>
+          <li data-step="brief">
+            <span>03</span>
+            <div><strong>Brief</strong><small>Alignment and gaps</small></div>
+          </li>
+        </ol>
+        <div class="rail-progress" aria-hidden="true"><i id="rail-progress-fill"></i></div>
+        <p class="rail-note">
+          Forge maps language to evidence. It does not invent titles, dates, metrics, or experience.
+        </p>
+      </aside>
+
+      <main class="workspace-main">
+        <div class="workspace-heading">
+          <p class="eyebrow"><span></span> Working surface</p>
+          <h2>Build a truthful role-alignment brief.</h2>
+          <p>Paste the role and the career evidence you can prove. Forge will show what is supported and what still needs verification.</p>
+        </div>
+
+        <form id="forge-brief-form" class="forge-form" data-api-base={apiBase}>
+          <fieldset id="target-inputs">
+            <legend><span>01</span> Target</legend>
+            <div class="app-form-row">
+              <label>
+                <span>Target role</span>
+                <input name="target_role" minlength="2" maxlength="160" placeholder="Senior backend engineer" required />
+              </label>
+              <label>
+                <span>Company <small>Optional</small></span>
+                <input name="company" maxlength="160" placeholder="Company or team" />
+              </label>
+            </div>
+            <label>
+              <span class="field-heading">Job description <small><output id="jd-count">0</output> / 20,000</small></span>
+              <textarea
+                name="job_description"
+                rows="10"
+                minlength="100"
+                maxlength="20000"
+                placeholder="Paste the full job description. Include responsibilities, requirements, and the language the employer uses."
+                required></textarea>
+            </label>
+          </fieldset>
+
+          <fieldset id="evidence-inputs">
+            <legend><span>02</span> Evidence</legend>
+            <label>
+              <span class="field-heading">Verified career history <small><output id="evidence-count">0</output> / 30,000</small></span>
+              <textarea
+                name="career_evidence"
+                rows="12"
+                minlength="100"
+                maxlength="30000"
+                placeholder="Paste your current resume, project notes, or factual work history. Keep employers, dates, technologies, outcomes, and metrics exactly as you can verify them."
+                required></textarea>
+            </label>
+            <p class="field-note"><span>Evidence boundary</span> Forge only marks a requirement as supported when its language appears in the history you provide.</p>
+          </fieldset>
+
+          <fieldset id="output-inputs">
+            <legend><span>03</span> Output focus</legend>
+            <div class="output-options">
+              <label class="output-option">
+                <input type="checkbox" name="outputs" value="resume" checked />
+                <span><strong>Resume</strong><small>Positioning, evidence order, and keyword gaps</small></span>
+              </label>
+              <label class="output-option">
+                <input type="checkbox" name="outputs" value="cover-letter" />
+                <span><strong>Cover letter</strong><small>Evidence to connect with the employer’s need</small></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <label class="app-consent">
+            <input type="checkbox" name="consent" required />
+            <span>I confirm this is my information and agree to its private processing for this Forge brief.</span>
+          </label>
+
+          <div class="forge-submit-row">
+            <button class="button button-primary" type="submit">
+              <span>Build evidence brief</span><b aria-hidden="true">→</b>
+            </button>
+            <p id="forge-form-status" role="status" aria-live="polite">No claims are generated at this step.</p>
+          </div>
+        </form>
+      </main>
+
+      <aside class="brief-inspector" aria-label="Forge brief result">
+        <div class="inspector-topline">
+          <span>Live brief</span>
+          <span id="brief-state">Waiting for evidence</span>
+        </div>
+
+        <div class="brief-empty" id="brief-empty">
+          <div class="empty-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+          <h2>Your brief appears here.</h2>
+          <p>Complete the target and evidence fields, then build the brief to see supported language, gaps, and the strongest source passages.</p>
+        </div>
+
+        <section class="brief-result" id="brief-result" hidden>
+          <div class="score-block">
+            <p>Evidence coverage</p>
+            <div><strong id="brief-score">0</strong><span>%</span></div>
+            <i><b id="brief-score-fill"></b></i>
+            <small id="brief-score-label">Alignment measured</small>
+          </div>
+
+          <div class="result-section">
+            <h3>Supported language</h3>
+            <ul class="keyword-list matched" id="matched-keywords"></ul>
+          </div>
+
+          <div class="result-section">
+            <h3>Needs verification</h3>
+            <ul class="keyword-list gaps" id="gap-keywords"></ul>
+          </div>
+
+          <div class="result-section">
+            <h3>Evidence to lead with</h3>
+            <ol class="evidence-list" id="evidence-highlights"></ol>
+          </div>
+
+          <div class="result-section">
+            <h3>Document direction</h3>
+            <ul class="direction-list" id="brief-recommendations"></ul>
+          </div>
+
+          <div class="brief-actions">
+            <button type="button" id="download-brief">Download brief <span aria-hidden="true">↓</span></button>
+            <button type="button" id="start-new-brief">Start again</button>
+          </div>
+          <p class="brief-reference">Reference <code id="brief-reference"></code></p>
+        </section>
+      </aside>
+    </div>
+
+    <footer class="app-footer">
+      <span>Evidence stays private to the Forge service.</span>
+      <span>Axelyn Forge / workspace v0.3</span>
+    </footer>
+  </div>
+
+  <script is:inline src="/scripts/app.js" defer></script>
+</BaseLayout>
