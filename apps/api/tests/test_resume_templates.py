@@ -60,6 +60,14 @@ class ResumeTemplateTests(unittest.TestCase):
                     "project_status": "Live / Production",
                 }
             ],
+            "skill_categories": [
+                {"category": "Framework", "skills": ["Django", "FastAPI"]},
+                {
+                    "category": "Programming Language",
+                    "skills": ["Python", "Go", "TypeScript"],
+                },
+                {"category": "Database", "skills": ["PostgreSQL", "Redis"]},
+            ],
             "sections": {
                 "experience": ["Engineer | Example", "• Built production APIs."],
                 "projects": ["Open source platform"],
@@ -82,6 +90,13 @@ class ResumeTemplateTests(unittest.TestCase):
         self.assertEqual(
             "Designed the event ingestion API.",
             template_values["project.monitorscape.highlight.1"],
+        )
+        self.assertEqual("Framework", template_values["skills.backend.label"])
+        self.assertEqual(
+            "Django, FastAPI", template_values["skills.backend.items"]
+        )
+        self.assertEqual(
+            "Python, Go, TypeScript", template_values["skills.programming.items"]
         )
 
         with tempfile.TemporaryDirectory() as directory:
@@ -110,6 +125,8 @@ class ResumeTemplateTests(unittest.TestCase):
                     b"Monitorscape",
                     b"Designed the event ingestion API",
                     b"Reduced incident response time by 60%",
+                    b"Framework: Django, FastAPI",
+                    b"Programming Language: Python, Go, TypeScript",
                     b"PUBLICATIONS",
                     b"Reliable Systems Review",
                 ):

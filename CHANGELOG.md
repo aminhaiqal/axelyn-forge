@@ -6,6 +6,8 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ### Added
 
+- Added repeatable skill categories with removable skill tags, required category and skill validation, and preserved imported skill text.
+
 - Added repeatable structured project entries to the resume builder, including contribution, technology, outcome, metrics, status, dates, and optional project links.
 
 - Added repeatable structured education entries with essential qualification details and optional academic highlights, projects, activities, and skills.

@@ -535,6 +535,20 @@ def project_entry_lines(entry: object) -> list[str]:
     return [line for line in lines if line]
 
 
+def skill_category_lines(entry: object) -> list[str]:
+    """Flatten one structured skill category into an ATS-readable line."""
+    if not isinstance(entry, dict):
+        return []
+    category = str(entry.get("category") or "").strip()
+    raw_skills = entry.get("skills")
+    if not category or not isinstance(raw_skills, list):
+        return []
+    skills = [str(skill).strip() for skill in raw_skills if str(skill).strip()]
+    if not skills:
+        return []
+    return [f"{category}: {', '.join(skills)}"]
+
+
 def resume_plain_text(draft: dict[str, object]) -> str:
     """Create a durable text transcript from structured manual-entry content."""
     values = [
@@ -587,8 +601,20 @@ def resume_plain_text(draft: dict[str, object]) -> str:
                 values.extend(project_entry_lines(entry))
         if isinstance(legacy_projects, list):
             values.extend(str(line) for line in legacy_projects)
+    skill_categories = draft.get("skill_categories")
+    legacy_skills = sections.get("skills")
+    if (
+        isinstance(skill_categories, list) and skill_categories
+    ) or (
+        isinstance(legacy_skills, list) and legacy_skills
+    ):
+        values.append("Skills")
+        if isinstance(skill_categories, list):
+            for category in skill_categories:
+                values.extend(skill_category_lines(category))
+        if isinstance(legacy_skills, list):
+            values.extend(str(line) for line in legacy_skills)
     for key, title in (
-        ("skills", "Skills"),
         ("languages", "Languages"),
         ("additional", "Additional Information"),
     ):
@@ -668,6 +694,18 @@ def unmapped_resume_content(draft: dict[str, object]) -> list[str]:
                     represented.update(
                         normalized(line) for line in value.splitlines()
                     )
+    skill_categories = draft.get("skill_categories")
+    if isinstance(skill_categories, list):
+        for category in skill_categories:
+            if not isinstance(category, dict):
+                continue
+            represented.update(
+                normalized(line) for line in skill_category_lines(category)
+            )
+            represented.add(normalized(category.get("category")))
+            skills = category.get("skills")
+            if isinstance(skills, list):
+                represented.update(normalized(skill) for skill in skills)
     custom_sections = draft.get("custom_sections")
     if isinstance(custom_sections, list):
         for custom in custom_sections:
@@ -952,11 +990,65 @@ def standard_template_values(draft: dict[str, object]) -> dict[str, str]:
         values["education.utm.meta"] = " | ".join(education[1:3])
         values["education.utm.date"] = next((line for line in education if DATE_PATTERN.search(line)), "")
 
-    skills = [str(value) for value in sections.get("skills", [])] if isinstance(sections.get("skills"), list) else []
-    skill_names = ("programming", "backend", "data", "cloud", "reliability", "ai", "softwareEngineering")
-    for index, line in enumerate(skills[: len(skill_names)]):
+    skill_names = (
+        "programming",
+        "backend",
+        "data",
+        "cloud",
+        "reliability",
+        "ai",
+        "softwareEngineering",
+    )
+    category_slots = {
+        "Programming Language": "programming",
+        "Framework": "backend",
+        "Database": "data",
+        "Cloud": "cloud",
+        "DevOps": "reliability",
+        "AI / ML": "ai",
+        "Frontend": "softwareEngineering",
+    }
+    used_skill_slots: set[str] = set()
+    structured_skills = draft.get("skill_categories")
+    if isinstance(structured_skills, list):
+        for skill_category in structured_skills:
+            if not isinstance(skill_category, dict):
+                continue
+            category = str(skill_category.get("category") or "").strip()
+            raw_items = skill_category.get("skills")
+            if not category or not isinstance(raw_items, list):
+                continue
+            items = ", ".join(
+                str(item).strip() for item in raw_items if str(item).strip()
+            )
+            if not items:
+                continue
+            name = category_slots.get(category, "")
+            if not name or name in used_skill_slots:
+                name = next(
+                    (candidate for candidate in skill_names if candidate not in used_skill_slots),
+                    "",
+                )
+            if not name:
+                break
+            used_skill_slots.add(name)
+            values[f"skills.{name}.label"] = category
+            values[f"skills.{name}.items"] = items
+
+    skills = (
+        [str(value) for value in sections.get("skills", [])]
+        if isinstance(sections.get("skills"), list)
+        else []
+    )
+    for line in skills:
+        name = next(
+            (candidate for candidate in skill_names if candidate not in used_skill_slots),
+            "",
+        )
+        if not name:
+            break
+        used_skill_slots.add(name)
         label, separator, items = line.partition(":")
-        name = skill_names[index]
         values[f"skills.{name}.label"] = label if separator else "Skills"
         values[f"skills.{name}.items"] = items.strip() if separator else line
 

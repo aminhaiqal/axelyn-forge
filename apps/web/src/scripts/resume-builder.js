@@ -22,6 +22,10 @@ if (builderPage instanceof HTMLElement) {
   const projectEmpty = document.querySelector("#project-empty");
   const projectTemplate = document.querySelector("#project-template");
   const legacyProjects = document.querySelector("#legacy-projects");
+  const skillCategoryList = document.querySelector("#skill-category-list");
+  const skillCategoryEmpty = document.querySelector("#skill-category-empty");
+  const skillCategoryTemplate = document.querySelector("#skill-category-template");
+  const legacySkills = document.querySelector("#legacy-skills");
   const sourceInbox = document.querySelector("#source-inbox");
   const unmappedContent = document.querySelector("#unmapped-content");
   const transcriptPanel = document.querySelector("#source-transcript");
@@ -32,6 +36,7 @@ if (builderPage instanceof HTMLElement) {
   let workEntrySequence = 0;
   let educationEntrySequence = 0;
   let projectEntrySequence = 0;
+  let skillCategorySequence = 0;
 
   const api = async (path, options = {}) => {
     const response = await fetch(`${apiBase}${path}`, { credentials: "same-origin", ...options });
@@ -213,6 +218,88 @@ if (builderPage instanceof HTMLElement) {
     if (scroll) card.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const updateSkillCategories = () => {
+    if (!(skillCategoryList instanceof HTMLElement)) return;
+    Array.from(skillCategoryList.querySelectorAll(".skill-category-card")).forEach((card, index) => {
+      const number = card.querySelector("[data-skill-category-number]");
+      if (number instanceof HTMLElement) number.textContent = `Category ${String(index + 1).padStart(2, "0")}`;
+    });
+    if (skillCategoryEmpty instanceof HTMLElement) skillCategoryEmpty.hidden = skillCategoryList.children.length > 0;
+  };
+
+  const parsedSkills = (value) => String(value || "")
+    .split(/[,\n]+/)
+    .map((skill) => skill.trim())
+    .filter(Boolean);
+
+  const skillValues = (card, { includeInput = false } = {}) => {
+    const values = Array.from(card.querySelectorAll("[data-skill-chip]"))
+      .map((chip) => chip.getAttribute("data-skill-chip") || "")
+      .filter(Boolean);
+    if (includeInput) {
+      const input = card.querySelector("[data-skill-input]");
+      if (input instanceof HTMLInputElement) values.push(...parsedSkills(input.value));
+    }
+    const seen = new Set();
+    return values.filter((skill) => {
+      const key = skill.toLocaleLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const syncSkillRequirement = (card) => {
+    const input = card.querySelector("[data-skill-input]");
+    if (!(input instanceof HTMLInputElement)) return;
+    input.required = skillValues(card).length === 0;
+    input.setCustomValidity("");
+  };
+
+  const addSkillChip = (card, skill) => {
+    const value = String(skill || "").trim();
+    const chips = card.querySelector("[data-skill-chips]");
+    if (!value || !(chips instanceof HTMLElement)) return;
+    if (skillValues(card).some((existing) => existing.toLocaleLowerCase() === value.toLocaleLowerCase())) return;
+    const chip = document.createElement("span");
+    chip.dataset.skillChip = value;
+    chip.setAttribute("role", "listitem");
+    chip.append(document.createTextNode(value));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.dataset.removeSkill = "";
+    remove.setAttribute("aria-label", `Remove ${value}`);
+    remove.textContent = "×";
+    chip.append(remove);
+    chips.append(chip);
+  };
+
+  const commitSkillInput = (card, { focus = true } = {}) => {
+    const input = card.querySelector("[data-skill-input]");
+    if (!(input instanceof HTMLInputElement)) return;
+    parsedSkills(input.value).forEach((skill) => addSkillChip(card, skill));
+    input.value = "";
+    syncSkillRequirement(card);
+    if (focus) input.focus();
+  };
+
+  const addSkillCategory = (entry = { category: "Framework", skills: [] }, { scroll = true } = {}) => {
+    if (!(skillCategoryTemplate instanceof HTMLTemplateElement) || !(skillCategoryList instanceof HTMLElement)) return;
+    const fragment = skillCategoryTemplate.content.cloneNode(true);
+    const card = fragment.querySelector(".skill-category-card");
+    if (!(card instanceof HTMLElement)) return;
+    const category = card.querySelector("[data-skill-category]");
+    if (category instanceof HTMLSelectElement && entry.category) category.value = String(entry.category);
+    skillCategorySequence += 1;
+    const input = card.querySelector("[data-skill-input]");
+    if (input instanceof HTMLInputElement) input.id = `skill-input-${skillCategorySequence}`;
+    (Array.isArray(entry.skills) ? entry.skills : []).forEach((skill) => addSkillChip(card, skill));
+    skillCategoryList.append(fragment);
+    syncSkillRequirement(card);
+    updateSkillCategories();
+    if (scroll) card.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   const addCustomSection = (section = { title: "", lines: [] }) => {
     if (!(customTemplate instanceof HTMLTemplateElement) || !(customList instanceof HTMLElement)) return;
     const fragment = customTemplate.content.cloneNode(true);
@@ -349,6 +436,13 @@ if (builderPage instanceof HTMLElement) {
         project_status: value("project_status"),
       };
     });
+    const skillCategories = Array.from(form.querySelectorAll(".skill-category-card")).map((card) => {
+      const category = card.querySelector("[data-skill-category]");
+      return {
+        category: category instanceof HTMLSelectElement ? category.value : "Framework",
+        skills: skillValues(card, { includeInput: true }),
+      };
+    });
     return {
       display_name: String(field("display_name")?.value || "").trim(),
       target_role: String(field("target_role")?.value || "").trim() || null,
@@ -367,6 +461,7 @@ if (builderPage instanceof HTMLElement) {
       experience_entries: experienceEntries,
       education_entries: educationEntries,
       project_entries: projectEntries,
+      skill_categories: skillCategories,
       custom_sections: customSections,
     };
   };
@@ -445,6 +540,7 @@ if (builderPage instanceof HTMLElement) {
     updateWorkEntries();
     updateEducationEntries();
     updateProjectEntries();
+    updateSkillCategories();
     if (!sourceId) return;
     setStatus("Loading your private resume source…");
     try {
@@ -457,9 +553,12 @@ if (builderPage instanceof HTMLElement) {
       setField("contact_line", source.draft.contact_line || "");
       setField("summary", source.draft.summary || "");
       setField("extracted_text", source.draft.extracted_text || "");
-      ["skills"].forEach((name) => {
-        setField(`section_${name}`, (source.draft.sections?.[name] || []).join("\n"));
-      });
+      const importedSkills = source.draft.sections?.skills || [];
+      setField("section_skills", importedSkills.join("\n"));
+      if (legacySkills instanceof HTMLElement) legacySkills.hidden = importedSkills.length === 0;
+      if (skillCategoryList instanceof HTMLElement) skillCategoryList.replaceChildren();
+      (source.draft.skill_categories || []).forEach((entry) => addSkillCategory(entry, { scroll: false }));
+      updateSkillCategories();
       const importedProjects = source.draft.sections?.projects || [];
       setField("section_projects", importedProjects.join("\n"));
       if (legacyProjects instanceof HTMLElement) legacyProjects.hidden = importedProjects.length === 0;
@@ -534,6 +633,34 @@ if (builderPage instanceof HTMLElement) {
     if (!(radio instanceof HTMLInputElement)) return;
     const card = radio.closest(".project-card");
     if (card instanceof HTMLElement) syncCurrentProject(card);
+  });
+  document.querySelector("#add-skill-category")?.addEventListener("click", () => addSkillCategory());
+  skillCategoryList?.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const card = target.closest(".skill-category-card");
+    if (!(card instanceof HTMLElement)) return;
+    if (target.closest("[data-remove-skill-category]")) {
+      card.remove();
+      updateSkillCategories();
+      return;
+    }
+    if (target.closest("[data-add-skill]")) {
+      commitSkillInput(card);
+      return;
+    }
+    const removeSkill = target.closest("[data-remove-skill]");
+    if (removeSkill) {
+      removeSkill.closest("[data-skill-chip]")?.remove();
+      syncSkillRequirement(card);
+    }
+  });
+  skillCategoryList?.addEventListener("keydown", (event) => {
+    const input = event.target instanceof Element ? event.target.closest("[data-skill-input]") : null;
+    if (!(input instanceof HTMLInputElement) || (event.key !== "Enter" && event.key !== ",")) return;
+    event.preventDefault();
+    const card = input.closest(".skill-category-card");
+    if (card instanceof HTMLElement) commitSkillInput(card);
   });
   customList?.addEventListener("click", (event) => {
     const button = event.target instanceof Element ? event.target.closest("[data-remove-custom]") : null;

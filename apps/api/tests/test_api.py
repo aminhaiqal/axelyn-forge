@@ -449,6 +449,16 @@ class ApiTests(unittest.TestCase):
                         "project_status": "Live / Production",
                     }
                 ],
+                "skill_categories": [
+                    {
+                        "category": "Framework",
+                        "skills": ["Django", "FastAPI"],
+                    },
+                    {
+                        "category": "Programming Language",
+                        "skills": ["Python", "Go", "python"],
+                    },
+                ],
                 "custom_sections": [
                     {
                         "title": "Publications",
@@ -476,6 +486,9 @@ class ApiTests(unittest.TestCase):
             source["draft"]["project_entries"][0]["currently_working_on_project"]
         )
         self.assertEqual("", source["draft"]["project_entries"][0]["end_date"])
+        self.assertEqual(
+            ["Python", "Go"], source["draft"]["skill_categories"][1]["skills"]
+        )
         self.assertEqual(
             "Publications", source["draft"]["custom_sections"][0]["title"]
         )
@@ -519,6 +532,8 @@ class ApiTests(unittest.TestCase):
         self.assertIn(b"Python, FastAPI, PostgreSQL, Docker", document_xml)
         self.assertIn(b"Processed 100K events with 99.9% uptime", document_xml)
         self.assertIn(b"Feb 2024", document_xml)
+        self.assertIn(b"Framework: Django, FastAPI", document_xml)
+        self.assertIn(b"Programming Language: Python, Go", document_xml)
 
         other_read = self.client.get(
             f"/api/v1/resumes/{source_id}",

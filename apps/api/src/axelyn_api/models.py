@@ -104,6 +104,15 @@ ResumeProjectStatus = Literal[
     "Completed",
     "Discontinued",
 ]
+ResumeSkillCategoryName = Literal[
+    "Framework",
+    "Programming Language",
+    "Database",
+    "Cloud",
+    "DevOps",
+    "Frontend",
+    "AI / ML",
+]
 RESUME_SECTION_NAMES = {
     "summary",
     "experience",
@@ -217,6 +226,30 @@ class ResumeProjectEntry(BaseModel):
         return self
 
 
+class ResumeSkillCategory(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    category: ResumeSkillCategoryName = "Framework"
+    skills: List[str] = Field(min_length=1, max_length=50)
+
+    @field_validator("skills")
+    @classmethod
+    def skills_are_clean_and_unique(cls, value: List[str]) -> List[str]:
+        cleaned: List[str] = []
+        seen: set[str] = set()
+        for skill in value:
+            normalized = skill.strip()
+            if len(normalized) > 100:
+                raise ValueError("skills are limited to 100 characters each")
+            key = normalized.casefold()
+            if normalized and key not in seen:
+                seen.add(key)
+                cleaned.append(normalized)
+        if not cleaned:
+            raise ValueError("add at least one skill")
+        return cleaned
+
+
 class ResumeCustomSection(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -255,6 +288,10 @@ class ResumeDraft(BaseModel):
         max_length=20,
     )
     project_entries: List[ResumeProjectEntry] = Field(
+        default_factory=list,
+        max_length=30,
+    )
+    skill_categories: List[ResumeSkillCategory] = Field(
         default_factory=list,
         max_length=30,
     )

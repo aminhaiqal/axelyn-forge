@@ -15,6 +15,7 @@ from .resume_import import (
     experience_entry_lines,
     extract_resume,
     project_entry_lines,
+    skill_category_lines,
 )
 
 
@@ -77,6 +78,10 @@ def draft_to_evidence_text(draft: dict[str, object]) -> str:
     if isinstance(project_entries, list):
         for entry in project_entries:
             values.extend(project_entry_lines(entry))
+    skill_categories = draft.get("skill_categories")
+    if isinstance(skill_categories, list):
+        for category in skill_categories:
+            values.extend(skill_category_lines(category))
     sections = draft.get("sections")
     if isinstance(sections, dict):
         for section in (
@@ -255,6 +260,13 @@ def tailor_resume_draft(
         project_entries.sort(
             key=lambda entry: -_relevance(
                 " ".join(project_entry_lines(entry)), keywords
+            )
+        )
+    skill_categories = tailored.get("skill_categories")
+    if isinstance(skill_categories, list):
+        skill_categories.sort(
+            key=lambda category: -_relevance(
+                " ".join(skill_category_lines(category)), keywords
             )
         )
     sections = tailored.get("sections")

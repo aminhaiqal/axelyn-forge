@@ -16,6 +16,7 @@ from .resume_import import (
     education_entry_lines,
     experience_entry_lines,
     project_entry_lines,
+    skill_category_lines,
 )
 
 
@@ -251,8 +252,16 @@ def render_resume(
     if project_lines:
         _add_section_heading(document, "Projects", spec)
         _add_lines(document, project_lines, spec)
+    skill_lines: list[str] = []
+    skill_categories = draft.get("skill_categories")
+    if isinstance(skill_categories, list):
+        for category in skill_categories:
+            skill_lines.extend(skill_category_lines(category))
+    skill_lines.extend(_clean_lines(sections.get("skills")))
+    if skill_lines:
+        _add_section_heading(document, "Skills", spec)
+        _add_lines(document, skill_lines, spec)
     for key, title_value in (
-        ("skills", "Skills"),
         ("languages", "Languages"),
         ("additional", "Additional information"),
     ):

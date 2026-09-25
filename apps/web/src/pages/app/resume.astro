@@ -123,10 +123,16 @@ if (!isAuthenticated) {
         </section>
 
         <section class="builder-section">
-          <div class="builder-section-heading"><span>05</span><div><h2>Skills</h2><p>Group related capabilities so both recruiters and ATS tools can scan them quickly.</p></div></div>
-          <label><span>Skills</span><textarea name="section_skills" rows="9" maxlength="12000" placeholder={`Languages: TypeScript, Python, SQL
-Frontend: React, Astro, HTML, CSS
-Cloud and tools: AWS, Docker, GitHub Actions`}></textarea></label>
+          <div class="builder-section-heading builder-action-heading"><span>05</span><div><h2>Skills</h2><p>Group related capabilities into simple categories that recruiters and ATS tools can scan quickly.</p></div><button type="button" id="add-skill-category">+ Add another category</button></div>
+          <div class="skill-category-list" id="skill-category-list"></div>
+          <p class="skill-category-empty" id="skill-category-empty">No skill categories added yet. Add a category when you are ready.</p>
+          <div class="legacy-skills" id="legacy-skills" hidden>
+            <div>
+              <strong>Preserved imported skills</strong>
+              <p>This text came from an older or uploaded resume. Keep it here, or move it into structured categories above and clear it when finished.</p>
+            </div>
+            <label><span>Imported skill text</span><textarea name="section_skills" rows="8" maxlength="12000"></textarea></label>
+          </div>
         </section>
 
         <section class="builder-section custom-section-area">
@@ -276,6 +282,27 @@ Cloud and tools: AWS, Docker, GitHub Actions`}></textarea></label>
             <label class="project-field-wide"><span>What was the most challenging part of the project? <small>optional</small></span><textarea data-project-field="challenge" rows="4" maxlength="4000" placeholder="Describe the constraint, complexity, or technical challenge you worked through."></textarea></label>
           </div>
         </details>
+      </article>
+    </template>
+
+    <template id="skill-category-template">
+      <article class="skill-category-card">
+        <div class="skill-category-card-head">
+          <div><span>Skill category</span><strong data-skill-category-number>Category 01</strong></div>
+          <button type="button" data-remove-skill-category>Remove</button>
+        </div>
+        <div class="skill-category-fields">
+          <label><span>Skill Category *</span><select data-skill-category required><option>Framework</option><option>Programming Language</option><option>Database</option><option>Cloud</option><option>DevOps</option><option>Frontend</option><option>AI / ML</option></select></label>
+          <div class="skill-editor">
+            <p>Skills *</p>
+            <div class="skill-chips" data-skill-chips role="list"></div>
+            <div class="skill-entry-row">
+              <input data-skill-input maxlength="100" placeholder="Type a skill" aria-label="Skill" required />
+              <button type="button" data-add-skill>+ Add skill</button>
+            </div>
+            <small>Press Enter or use commas to add several skills.</small>
+          </div>
+        </div>
       </article>
     </template>
   </div>
