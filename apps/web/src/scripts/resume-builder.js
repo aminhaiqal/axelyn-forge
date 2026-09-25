@@ -283,13 +283,13 @@ if (builderPage instanceof HTMLElement) {
     if (focus) input.focus();
   };
 
-  const addSkillCategory = (entry = { category: "Framework", skills: [] }, { scroll = true } = {}) => {
+  const addSkillCategory = (entry = { category: "", skills: [] }, { scroll = true } = {}) => {
     if (!(skillCategoryTemplate instanceof HTMLTemplateElement) || !(skillCategoryList instanceof HTMLElement)) return;
     const fragment = skillCategoryTemplate.content.cloneNode(true);
     const card = fragment.querySelector(".skill-category-card");
     if (!(card instanceof HTMLElement)) return;
     const category = card.querySelector("[data-skill-category]");
-    if (category instanceof HTMLSelectElement && entry.category) category.value = String(entry.category);
+    if (category instanceof HTMLInputElement && entry.category) category.value = String(entry.category);
     skillCategorySequence += 1;
     const input = card.querySelector("[data-skill-input]");
     if (input instanceof HTMLInputElement) input.id = `skill-input-${skillCategorySequence}`;
@@ -439,7 +439,7 @@ if (builderPage instanceof HTMLElement) {
     const skillCategories = Array.from(form.querySelectorAll(".skill-category-card")).map((card) => {
       const category = card.querySelector("[data-skill-category]");
       return {
-        category: category instanceof HTMLSelectElement ? category.value : "Framework",
+        category: category instanceof HTMLInputElement ? category.value.trim() : "",
         skills: skillValues(card, { includeInput: true }),
       };
     });

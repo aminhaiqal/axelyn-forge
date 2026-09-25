@@ -104,15 +104,6 @@ ResumeProjectStatus = Literal[
     "Completed",
     "Discontinued",
 ]
-ResumeSkillCategoryName = Literal[
-    "Framework",
-    "Programming Language",
-    "Database",
-    "Cloud",
-    "DevOps",
-    "Frontend",
-    "AI / ML",
-]
 RESUME_SECTION_NAMES = {
     "summary",
     "experience",
@@ -229,7 +220,7 @@ class ResumeProjectEntry(BaseModel):
 class ResumeSkillCategory(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    category: ResumeSkillCategoryName = "Framework"
+    category: str = Field(min_length=1, max_length=80)
     skills: List[str] = Field(min_length=1, max_length=50)
 
     @field_validator("skills")

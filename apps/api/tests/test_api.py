@@ -451,7 +451,7 @@ class ApiTests(unittest.TestCase):
                 ],
                 "skill_categories": [
                     {
-                        "category": "Framework",
+                        "category": "Backend Framework",
                         "skills": ["Django", "FastAPI"],
                     },
                     {
@@ -488,6 +488,10 @@ class ApiTests(unittest.TestCase):
         self.assertEqual("", source["draft"]["project_entries"][0]["end_date"])
         self.assertEqual(
             ["Python", "Go"], source["draft"]["skill_categories"][1]["skills"]
+        )
+        self.assertEqual(
+            "Backend Framework",
+            source["draft"]["skill_categories"][0]["category"],
         )
         self.assertEqual(
             "Publications", source["draft"]["custom_sections"][0]["title"]

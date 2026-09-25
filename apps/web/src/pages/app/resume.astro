@@ -292,7 +292,7 @@ if (!isAuthenticated) {
           <button type="button" data-remove-skill-category>Remove</button>
         </div>
         <div class="skill-category-fields">
-          <label><span>Skill Category *</span><select data-skill-category required><option>Framework</option><option>Programming Language</option><option>Database</option><option>Cloud</option><option>DevOps</option><option>Frontend</option><option>AI / ML</option></select></label>
+          <label><span>Skill Category *</span><input data-skill-category list="skill-category-suggestions" maxlength="80" placeholder="e.g. Framework" autocomplete="off" required /></label>
           <div class="skill-editor">
             <p>Skills *</p>
             <div class="skill-chips" data-skill-chips role="list"></div>
@@ -305,6 +305,16 @@ if (!isAuthenticated) {
         </div>
       </article>
     </template>
+
+    <datalist id="skill-category-suggestions">
+      <option value="Framework"></option>
+      <option value="Programming Language"></option>
+      <option value="Database"></option>
+      <option value="Cloud"></option>
+      <option value="DevOps"></option>
+      <option value="Frontend"></option>
+      <option value="AI / ML"></option>
+    </datalist>
   </div>
   <script>
     import "../../scripts/resume-builder.js";
