@@ -27,6 +27,21 @@ class ResumeTemplateTests(unittest.TestCase):
                     "achievements": "Reduced recovery time by 40%.",
                 }
             ],
+            "education_entries": [
+                {
+                    "institution_name": "Universiti Teknologi Malaysia",
+                    "qualification": "Bachelor of Computer Science",
+                    "field_of_study": "Software Engineering",
+                    "education_level": "Bachelor’s Degree",
+                    "location": "Johor Bahru",
+                    "start_date": "2020-09",
+                    "end_date": "2024-06",
+                    "gpa": "3.72 / 4.00",
+                    "honours": "First Class Honours",
+                    "thesis_title": "Intelligent Document Classification",
+                    "academic_achievements": "Dean’s List",
+                }
+            ],
             "sections": {
                 "experience": ["Engineer | Example", "• Built production APIs."],
                 "projects": ["Open source platform"],
@@ -60,6 +75,9 @@ class ResumeTemplateTests(unittest.TestCase):
                     b"Structured Systems",
                     b"Reduced recovery time by 40%",
                     b"Built production APIs",
+                    b"Universiti Teknologi Malaysia",
+                    b"Intelligent Document Classification",
+                    "Dean’s List".encode(),
                     b"PUBLICATIONS",
                     b"Reliable Systems Review",
                 ):

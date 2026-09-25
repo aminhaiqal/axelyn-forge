@@ -6,6 +6,7 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ### Added
 
+- Added repeatable structured education entries with essential qualification details and optional academic highlights, projects, activities, and skills.
 - Added repeatable structured work-experience entries with employer, role, employment type, location, work arrangement, dates, current-role status, responsibilities, and achievements.
 - Added a shared guided resume builder for new and imported sources, with standard fields, editable custom sections, and a source inbox for imported lines that do not map cleanly.
 - Added Classic, Modern, and Compact single-column ATS-friendly templates that render every populated section into Word and PDF.

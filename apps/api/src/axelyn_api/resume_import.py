@@ -292,6 +292,28 @@ def draft_payload(
     }
 
 
+def _display_month(value: object) -> str:
+    raw = str(value or "").strip()
+    match = re.fullmatch(r"([0-9]{4})-(0[1-9]|1[0-2])", raw)
+    if not match:
+        return raw
+    month_names = (
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    )
+    return f"{month_names[int(match.group(2)) - 1]} {match.group(1)}"
+
+
 def experience_entry_lines(entry: object) -> list[str]:
     """Flatten one structured role into a stable ATS-readable line sequence."""
     if not isinstance(entry, dict):
@@ -319,32 +341,12 @@ def experience_entry_lines(entry: object) -> list[str]:
         )
         if value
     )
-    def display_month(value: object) -> str:
-        raw = str(value or "").strip()
-        match = re.fullmatch(r"([0-9]{4})-(0[1-9]|1[0-2])", raw)
-        if not match:
-            return raw
-        month_names = (
-            "Jan",
-            "Feb",
-            "Mar",
-            "Apr",
-            "May",
-            "Jun",
-            "Jul",
-            "Aug",
-            "Sep",
-            "Oct",
-            "Nov",
-            "Dec",
-        )
-        return f"{month_names[int(match.group(2)) - 1]} {match.group(1)}"
 
-    start_date = display_month(entry.get("start_date"))
+    start_date = _display_month(entry.get("start_date"))
     end_date = (
         "Present"
         if entry.get("currently_working_here")
-        else display_month(entry.get("end_date"))
+        else _display_month(entry.get("end_date"))
     )
     date = " – ".join(value for value in (start_date, end_date) if value)
     responsibilities = _clean_lines(
@@ -360,6 +362,93 @@ def experience_entry_lines(entry: object) -> list[str]:
         for value in (title, details, date, *responsibilities, *achievements)
         if value
     ]
+
+
+def education_entry_lines(entry: object) -> list[str]:
+    """Flatten one structured qualification into ATS-readable resume lines."""
+    if not isinstance(entry, dict):
+        return []
+    substantive_keys = (
+        "institution_name",
+        "qualification",
+        "field_of_study",
+        "location",
+        "start_date",
+        "end_date",
+        "gpa",
+        "honours",
+        "relevant_coursework",
+        "thesis_title",
+        "thesis_description",
+        "academic_achievements",
+        "activities",
+        "relevant_skills",
+    )
+    if not any(str(entry.get(key) or "").strip() for key in substantive_keys):
+        return []
+
+    qualification = " | ".join(
+        value
+        for value in (
+            str(entry.get("qualification") or "").strip(),
+            str(entry.get("field_of_study") or "").strip(),
+        )
+        if value
+    )
+    institution = " | ".join(
+        value
+        for value in (
+            str(entry.get("institution_name") or "").strip(),
+            str(entry.get("location") or "").strip(),
+        )
+        if value
+    )
+    end_date = (
+        "Present"
+        if entry.get("currently_studying_here")
+        else _display_month(entry.get("end_date"))
+    )
+    date = " – ".join(
+        value
+        for value in (_display_month(entry.get("start_date")), end_date)
+        if value
+    )
+    details = " | ".join(
+        value
+        for value in (
+            str(entry.get("education_level") or "").strip(),
+            date,
+            f"GPA / CGPA: {str(entry.get('gpa') or '').strip()}"
+            if str(entry.get("gpa") or "").strip()
+            else "",
+            str(entry.get("honours") or "").strip(),
+        )
+        if value
+    )
+    lines = [qualification, institution, details]
+    optional_fields = (
+        ("Relevant coursework", "relevant_coursework"),
+        ("Final year project / thesis", "thesis_title"),
+        ("Project / thesis description", "thesis_description"),
+    )
+    for label, key in optional_fields:
+        value = str(entry.get(key) or "").strip()
+        if value:
+            lines.append(f"{label}: {value}")
+    for achievement in _clean_lines(
+        str(entry.get("academic_achievements") or "").splitlines()
+    ):
+        value = achievement.lstrip("•-–* ").strip()
+        if value:
+            lines.append(f"• {value}")
+    for label, key in (
+        ("Activities & societies", "activities"),
+        ("Relevant skills learned", "relevant_skills"),
+    ):
+        value = str(entry.get(key) or "").strip()
+        if value:
+            lines.append(f"{label}: {value}")
+    return [line for line in lines if line]
 
 
 def resume_plain_text(draft: dict[str, object]) -> str:
@@ -388,18 +477,29 @@ def resume_plain_text(draft: dict[str, object]) -> str:
                 values.extend(experience_entry_lines(entry))
         if isinstance(legacy_experience, list):
             values.extend(str(line) for line in legacy_experience)
-    if isinstance(sections, dict):
-        for key, title in (
-            ("projects", "Projects"),
-            ("education", "Education"),
-            ("skills", "Skills"),
-            ("languages", "Languages"),
-            ("additional", "Additional Information"),
-        ):
-            lines = sections.get(key)
-            if isinstance(lines, list) and lines:
-                values.append(title)
-                values.extend(str(line) for line in lines)
+    education_entries = draft.get("education_entries")
+    legacy_education = sections.get("education")
+    if (
+        isinstance(education_entries, list) and education_entries
+    ) or (
+        isinstance(legacy_education, list) and legacy_education
+    ):
+        values.append("Education")
+        if isinstance(education_entries, list):
+            for entry in education_entries:
+                values.extend(education_entry_lines(entry))
+        if isinstance(legacy_education, list):
+            values.extend(str(line) for line in legacy_education)
+    for key, title in (
+        ("projects", "Projects"),
+        ("skills", "Skills"),
+        ("languages", "Languages"),
+        ("additional", "Additional Information"),
+    ):
+        lines = sections.get(key)
+        if isinstance(lines, list) and lines:
+            values.append(title)
+            values.extend(str(line) for line in lines)
     custom_sections = draft.get("custom_sections")
     if isinstance(custom_sections, list):
         for custom in custom_sections:
@@ -440,6 +540,19 @@ def unmapped_resume_content(draft: dict[str, object]) -> list[str]:
                 continue
             represented.update(
                 normalized(line) for line in experience_entry_lines(entry)
+            )
+            for value in entry.values():
+                if isinstance(value, str):
+                    represented.update(
+                        normalized(line) for line in value.splitlines()
+                    )
+    education_entries = draft.get("education_entries")
+    if isinstance(education_entries, list):
+        for entry in education_entries:
+            if not isinstance(entry, dict):
+                continue
+            represented.update(
+                normalized(line) for line in education_entry_lines(entry)
             )
             for value in entry.values():
                 if isinstance(value, str):
@@ -623,8 +736,53 @@ def standard_template_values(draft: dict[str, object]) -> dict[str, str]:
             for bullet_index, bullet in enumerate(bullets[:3], 1):
                 values[f"{prefix}.highlight.{bullet_index}"] = bullet
 
-    education = [str(value) for value in sections.get("education", [])] if isinstance(sections.get("education"), list) else []
-    if education:
+    structured_education = draft.get("education_entries")
+    first_education = (
+        structured_education[0]
+        if isinstance(structured_education, list)
+        and structured_education
+        and isinstance(structured_education[0], dict)
+        else None
+    )
+    education: list[str] = []
+    if first_education is not None:
+        values["education.utm.qualification"] = " | ".join(
+            value
+            for value in (
+                str(first_education.get("qualification") or "").strip(),
+                str(first_education.get("field_of_study") or "").strip(),
+            )
+            if value
+        )
+        values["education.utm.meta"] = " | ".join(
+            value
+            for value in (
+                str(first_education.get("institution_name") or "").strip(),
+                str(first_education.get("location") or "").strip(),
+                str(first_education.get("honours") or "").strip(),
+            )
+            if value
+        )
+        education_end = (
+            "Present"
+            if first_education.get("currently_studying_here")
+            else _display_month(first_education.get("end_date"))
+        )
+        values["education.utm.date"] = " – ".join(
+            value
+            for value in (
+                _display_month(first_education.get("start_date")),
+                education_end,
+            )
+            if value
+        )
+    else:
+        education = (
+            [str(value) for value in sections.get("education", [])]
+            if isinstance(sections.get("education"), list)
+            else []
+        )
+    if first_education is None and education:
         values["education.utm.qualification"] = education[0]
         values["education.utm.meta"] = " | ".join(education[1:3])
         values["education.utm.date"] = next((line for line in education if DATE_PATTERN.search(line)), "")

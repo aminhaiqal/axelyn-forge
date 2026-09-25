@@ -113,6 +113,9 @@ def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
     experience_entries = [
         entry.model_dump() for entry in payload.experience_entries
     ]
+    education_entries = [
+        entry.model_dump() for entry in payload.education_entries
+    ]
     custom_sections = [section.model_dump() for section in payload.custom_sections]
     if not sections and "sections" not in payload.model_fields_set:
         normalized = normalize_resume_text(payload.extracted_text)
@@ -130,6 +133,7 @@ def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
         "extracted_text": payload.extracted_text,
         "sections": sections,
         "experience_entries": experience_entries,
+        "education_entries": education_entries,
         "custom_sections": custom_sections,
     }
 

@@ -406,6 +406,26 @@ class ApiTests(unittest.TestCase):
                         "achievements": "Built production APIs.",
                     }
                 ],
+                "education_entries": [
+                    {
+                        "institution_name": "Universiti Teknologi Malaysia",
+                        "qualification": "Bachelor of Computer Science",
+                        "field_of_study": "Software Engineering",
+                        "education_level": "Bachelor’s Degree",
+                        "location": "Johor Bahru, Malaysia",
+                        "start_date": "2020-09",
+                        "end_date": "2024-06",
+                        "currently_studying_here": True,
+                        "gpa": "3.72 / 4.00",
+                        "honours": "First Class Honours",
+                        "relevant_coursework": "Software Architecture, Database Systems",
+                        "thesis_title": "Intelligent Document Classification",
+                        "thesis_description": "Built a classification pipeline.",
+                        "academic_achievements": "Dean’s List",
+                        "activities": "Computing Society",
+                        "relevant_skills": "Machine learning, research",
+                    }
+                ],
                 "custom_sections": [
                     {
                         "title": "Publications",
@@ -425,6 +445,10 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(
             source["draft"]["experience_entries"][0]["currently_working_here"]
         )
+        self.assertTrue(
+            source["draft"]["education_entries"][0]["currently_studying_here"]
+        )
+        self.assertEqual("", source["draft"]["education_entries"][0]["end_date"])
         self.assertEqual(
             "Publications", source["draft"]["custom_sections"][0]["title"]
         )
@@ -459,6 +483,10 @@ class ApiTests(unittest.TestCase):
         self.assertIn(b"Jan 2022", document_xml)
         self.assertIn(b"Present", document_xml)
         self.assertIn("• Built production APIs".encode(), document_xml)
+        self.assertIn(b"Universiti Teknologi Malaysia", document_xml)
+        self.assertIn(b"Intelligent Document Classification", document_xml)
+        self.assertIn("Dean’s List".encode(), document_xml)
+        self.assertIn(b"Sep 2020", document_xml)
 
         other_read = self.client.get(
             f"/api/v1/resumes/{source_id}",

@@ -9,7 +9,12 @@ from typing import Iterable
 
 from .models import JobMatchAnalysis, RoleAlignmentInput
 from .role_alignment import analyze_role_alignment
-from .resume_import import ResumeImportError, experience_entry_lines, extract_resume
+from .resume_import import (
+    ResumeImportError,
+    education_entry_lines,
+    experience_entry_lines,
+    extract_resume,
+)
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
@@ -63,6 +68,10 @@ def draft_to_evidence_text(draft: dict[str, object]) -> str:
     if isinstance(experience_entries, list):
         for entry in experience_entries:
             values.extend(experience_entry_lines(entry))
+    education_entries = draft.get("education_entries")
+    if isinstance(education_entries, list):
+        for entry in education_entries:
+            values.extend(education_entry_lines(entry))
     sections = draft.get("sections")
     if isinstance(sections, dict):
         for section in (

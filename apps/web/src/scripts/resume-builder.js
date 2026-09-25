@@ -14,6 +14,10 @@ if (builderPage instanceof HTMLElement) {
   const workEmpty = document.querySelector("#work-experience-empty");
   const workTemplate = document.querySelector("#work-experience-template");
   const legacyExperience = document.querySelector("#legacy-experience");
+  const educationList = document.querySelector("#education-list");
+  const educationEmpty = document.querySelector("#education-empty");
+  const educationTemplate = document.querySelector("#education-template");
+  const legacyEducation = document.querySelector("#legacy-education");
   const sourceInbox = document.querySelector("#source-inbox");
   const unmappedContent = document.querySelector("#unmapped-content");
   const transcriptPanel = document.querySelector("#source-transcript");
@@ -22,6 +26,7 @@ if (builderPage instanceof HTMLElement) {
   let sourceId = new URLSearchParams(window.location.search).get("source") || "";
   let currentUnmapped = [];
   let workEntrySequence = 0;
+  let educationEntrySequence = 0;
 
   const api = async (path, options = {}) => {
     const response = await fetch(`${apiBase}${path}`, { credentials: "same-origin", ...options });
@@ -108,6 +113,55 @@ if (builderPage instanceof HTMLElement) {
     if (scroll) card.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const updateEducationEntries = () => {
+    if (!(educationList instanceof HTMLElement)) return;
+    Array.from(educationList.querySelectorAll(".education-card")).forEach((card, index) => {
+      const number = card.querySelector("[data-education-entry-number]");
+      if (number instanceof HTMLElement) number.textContent = `Entry ${String(index + 1).padStart(2, "0")}`;
+    });
+    if (educationEmpty instanceof HTMLElement) educationEmpty.hidden = educationList.children.length > 0;
+  };
+
+  const syncCurrentStudy = (card) => {
+    const current = card.querySelector("[data-education-current][value='yes']");
+    const endDate = card.querySelector("[data-education-field='end_date']");
+    const endDateField = card.querySelector("[data-education-end-date-field]");
+    const isCurrent = current instanceof HTMLInputElement && current.checked;
+    if (endDate instanceof HTMLInputElement) {
+      endDate.disabled = isCurrent;
+      endDate.required = !isCurrent;
+    }
+    if (endDateField instanceof HTMLElement) endDateField.dataset.disabled = String(isCurrent);
+  };
+
+  const addEducation = (entry = {}, { scroll = true } = {}) => {
+    if (!(educationTemplate instanceof HTMLTemplateElement) || !(educationList instanceof HTMLElement)) return;
+    const fragment = educationTemplate.content.cloneNode(true);
+    const card = fragment.querySelector(".education-card");
+    if (!(card instanceof HTMLElement)) return;
+    card.querySelectorAll("[data-education-field]").forEach((control) => {
+      const key = control.getAttribute("data-education-field");
+      if (!key || !(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) return;
+      if (entry[key] !== undefined && entry[key] !== null) control.value = String(entry[key]);
+    });
+    educationEntrySequence += 1;
+    const radioName = `education-current-${educationEntrySequence}`;
+    card.querySelectorAll("[data-education-current]").forEach((radio) => {
+      if (!(radio instanceof HTMLInputElement)) return;
+      radio.name = radioName;
+      radio.checked = entry.currently_studying_here
+        ? radio.value === "yes"
+        : radio.value === "no";
+    });
+    const optionalKeys = ["gpa", "honours", "relevant_coursework", "thesis_title", "thesis_description", "academic_achievements", "activities", "relevant_skills"];
+    const optional = card.querySelector(".education-optional");
+    if (optional instanceof HTMLElement) optional.open = optionalKeys.some((key) => String(entry[key] || "").trim());
+    educationList.append(fragment);
+    syncCurrentStudy(card);
+    updateEducationEntries();
+    if (scroll) card.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   const addCustomSection = (section = { title: "", lines: [] }) => {
     if (!(customTemplate instanceof HTMLTemplateElement) || !(customList instanceof HTMLElement)) return;
     const fragment = customTemplate.content.cloneNode(true);
@@ -185,6 +239,34 @@ if (builderPage instanceof HTMLElement) {
         achievements: value("achievements"),
       };
     });
+    const educationEntries = Array.from(form.querySelectorAll(".education-card")).map((card) => {
+      const value = (name) => {
+        const control = card.querySelector(`[data-education-field='${name}']`);
+        return control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement
+          ? control.value.trim()
+          : "";
+      };
+      const current = card.querySelector("[data-education-current][value='yes']");
+      const currentlyStudyingHere = current instanceof HTMLInputElement && current.checked;
+      return {
+        institution_name: value("institution_name"),
+        qualification: value("qualification"),
+        field_of_study: value("field_of_study"),
+        education_level: value("education_level"),
+        location: value("location"),
+        start_date: value("start_date"),
+        end_date: currentlyStudyingHere ? "" : value("end_date"),
+        currently_studying_here: currentlyStudyingHere,
+        gpa: value("gpa"),
+        honours: value("honours"),
+        relevant_coursework: value("relevant_coursework"),
+        thesis_title: value("thesis_title"),
+        thesis_description: value("thesis_description"),
+        academic_achievements: value("academic_achievements"),
+        activities: value("activities"),
+        relevant_skills: value("relevant_skills"),
+      };
+    });
     return {
       display_name: String(field("display_name")?.value || "").trim(),
       target_role: String(field("target_role")?.value || "").trim() || null,
@@ -201,6 +283,7 @@ if (builderPage instanceof HTMLElement) {
         skills: lines("section_skills"),
       },
       experience_entries: experienceEntries,
+      education_entries: educationEntries,
       custom_sections: customSections,
     };
   };
@@ -277,6 +360,7 @@ if (builderPage instanceof HTMLElement) {
   const load = async () => {
     updateCustomEmpty();
     updateWorkEntries();
+    updateEducationEntries();
     if (!sourceId) return;
     setStatus("Loading your private resume source…");
     try {
@@ -289,9 +373,15 @@ if (builderPage instanceof HTMLElement) {
       setField("contact_line", source.draft.contact_line || "");
       setField("summary", source.draft.summary || "");
       setField("extracted_text", source.draft.extracted_text || "");
-      ["education", "projects", "skills"].forEach((name) => {
+      ["projects", "skills"].forEach((name) => {
         setField(`section_${name}`, (source.draft.sections?.[name] || []).join("\n"));
       });
+      const importedEducation = source.draft.sections?.education || [];
+      setField("section_education", importedEducation.join("\n"));
+      if (legacyEducation instanceof HTMLElement) legacyEducation.hidden = importedEducation.length === 0;
+      if (educationList instanceof HTMLElement) educationList.replaceChildren();
+      (source.draft.education_entries || []).forEach((entry) => addEducation(entry, { scroll: false }));
+      updateEducationEntries();
       const importedExperience = source.draft.sections?.experience || [];
       setField("section_experience", importedExperience.join("\n"));
       if (legacyExperience instanceof HTMLElement) legacyExperience.hidden = importedExperience.length === 0;
@@ -316,6 +406,19 @@ if (builderPage instanceof HTMLElement) {
   };
 
   document.querySelector("#add-custom-section")?.addEventListener("click", () => addCustomSection());
+  document.querySelector("#add-education")?.addEventListener("click", () => addEducation());
+  educationList?.addEventListener("click", (event) => {
+    const button = event.target instanceof Element ? event.target.closest("[data-remove-education]") : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.closest(".education-card")?.remove();
+    updateEducationEntries();
+  });
+  educationList?.addEventListener("change", (event) => {
+    const radio = event.target instanceof Element ? event.target.closest("[data-education-current]") : null;
+    if (!(radio instanceof HTMLInputElement)) return;
+    const card = radio.closest(".education-card");
+    if (card instanceof HTMLElement) syncCurrentStudy(card);
+  });
   document.querySelector("#add-work-experience")?.addEventListener("click", () => addWorkExperience());
   workList?.addEventListener("click", (event) => {
     const button = event.target instanceof Element ? event.target.closest("[data-remove-work-experience]") : null;

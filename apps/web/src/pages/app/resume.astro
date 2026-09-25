@@ -84,11 +84,16 @@ if (!isAuthenticated) {
         </section>
 
         <section class="builder-section">
-          <div class="builder-section-heading"><span>02</span><div><h2>Educational background</h2><p>Add qualifications in reverse chronological order. Keep each institution, qualification, date, and achievement on its own line.</p></div></div>
-          <label><span>Education</span><textarea name="section_education" rows="9" maxlength="12000" placeholder={`BSc Computer Science | University of Example
-Kuala Lumpur | 2020 – 2024
-• First Class Honours
-• Relevant study: Data Structures, Distributed Systems`}></textarea></label>
+          <div class="builder-section-heading builder-action-heading"><span>02</span><div><h2>Educational background</h2><p>Add each qualification separately. The essential details stay visible, while academic highlights remain optional.</p></div><button type="button" id="add-education">+ Add education</button></div>
+          <div class="education-list" id="education-list"></div>
+          <p class="education-empty" id="education-empty">No education added yet. Add a qualification when you are ready.</p>
+          <div class="legacy-education" id="legacy-education" hidden>
+            <div>
+              <strong>Preserved imported education</strong>
+              <p>This text came from an older or uploaded resume. Keep it here, or move it into structured entries above and clear it when finished.</p>
+            </div>
+            <label><span>Imported education text</span><textarea name="section_education" rows="9" maxlength="12000"></textarea></label>
+          </div>
         </section>
 
         <section class="builder-section">
@@ -151,6 +156,44 @@ Cloud and tools: AWS, Docker, GitHub Actions`}></textarea></label>
         <div><span>Custom section</span><button type="button" data-remove-custom>Remove</button></div>
         <label><span>Section title</span><input data-custom-title maxlength="80" placeholder="e.g. Certifications" required /></label>
         <label><span>Content</span><textarea data-custom-lines rows="6" maxlength="20000" placeholder="Keep one item or bullet on each line."></textarea></label>
+      </article>
+    </template>
+
+    <template id="education-template">
+      <article class="education-card">
+        <div class="education-card-head">
+          <div><span>Educational background</span><strong data-education-entry-number>Entry 01</strong></div>
+          <button type="button" data-remove-education>Remove</button>
+        </div>
+        <div class="education-fields">
+          <label><span>Institution / University Name*</span><input data-education-field="institution_name" maxlength="200" placeholder="Universiti Teknologi Malaysia" required /></label>
+          <label><span>Degree / Qualification*</span><input data-education-field="qualification" maxlength="200" placeholder="Bachelor of Computer Science" required /></label>
+          <label><span>Field of Study / Major*</span><input data-education-field="field_of_study" maxlength="200" placeholder="Software Engineering" required /></label>
+          <label><span>Education Level</span><select data-education-field="education_level"><option>Secondary School</option><option>Diploma</option><option>Foundation</option><option selected>Bachelor’s Degree</option><option>Master’s Degree</option><option>Doctorate / PhD</option><option>Professional Qualification</option><option>Other</option></select></label>
+          <label><span>Location</span><input data-education-field="location" maxlength="160" placeholder="City, State, Country" /></label>
+          <label><span>Start Date*</span><input data-education-field="start_date" type="month" required /></label>
+          <label data-education-end-date-field><span>Graduation / End Date*</span><input data-education-field="end_date" type="month" required /></label>
+          <fieldset class="education-current-field">
+            <legend>Currently studying here?</legend>
+            <div class="education-choice-pair">
+              <label><input type="radio" data-education-current value="yes" /><span>Yes</span></label>
+              <label><input type="radio" data-education-current value="no" checked /><span>No</span></label>
+            </div>
+          </fieldset>
+        </div>
+        <details class="education-optional">
+          <summary><span>Optional academic details</span><small>GPA, coursework, thesis, achievements, activities, and skills</small></summary>
+          <div class="education-optional-fields">
+            <label><span>GPA / CGPA</span><input data-education-field="gpa" maxlength="80" placeholder="3.72 / 4.00" /></label>
+            <label><span>Honours / Classification</span><input data-education-field="honours" maxlength="160" placeholder="First Class Honours" /></label>
+            <label class="education-field-wide"><span>Relevant Coursework</span><textarea data-education-field="relevant_coursework" rows="3" maxlength="2000" placeholder="Software Architecture, Database Systems, Machine Learning"></textarea></label>
+            <label class="education-field-wide"><span>Final Year Project / Thesis Title</span><input data-education-field="thesis_title" maxlength="300" placeholder="Intelligent Regulatory Document Classification System" /></label>
+            <label class="education-field-wide"><span>Project / Thesis Description</span><textarea data-education-field="thesis_description" rows="4" maxlength="4000" placeholder="Briefly describe what you built or researched."></textarea></label>
+            <label class="education-field-wide"><span>Academic Achievements / Awards</span><textarea data-education-field="academic_achievements" rows="4" maxlength="4000" placeholder="Dean’s List, scholarships, competitions, or academic awards. Keep one item on each line."></textarea></label>
+            <label class="education-field-wide"><span>Activities &amp; Societies</span><textarea data-education-field="activities" rows="3" maxlength="4000" placeholder="Clubs, associations, leadership positions, or student organisations."></textarea></label>
+            <label class="education-field-wide"><span>Relevant Skills Learned</span><textarea data-education-field="relevant_skills" rows="3" maxlength="2000" placeholder="Optional skills gained through this qualification."></textarea></label>
+          </div>
+        </details>
       </article>
     </template>
 

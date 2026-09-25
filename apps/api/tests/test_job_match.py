@@ -59,6 +59,14 @@ class JobMatchTests(unittest.TestCase):
                     "responsibilities": "Built Python APIs.",
                 },
             ],
+            "education_entries": [
+                {
+                    "institution_name": "Example University",
+                    "qualification": "Bachelor of Computer Science",
+                    "field_of_study": "Software Engineering",
+                    "relevant_coursework": "Python and distributed APIs",
+                }
+            ],
             "sections": {
                 "experience": [
                     "Designer | Studio",
@@ -87,6 +95,7 @@ class JobMatchTests(unittest.TestCase):
         self.assertEqual("Designer | Studio", draft["sections"]["experience"][0])
         self.assertEqual("Studio", draft["experience_entries"][0]["company_name"])
         self.assertIn("Built Python APIs", draft_to_evidence_text(draft))
+        self.assertIn("distributed APIs", draft_to_evidence_text(draft))
 
 
 if __name__ == "__main__":

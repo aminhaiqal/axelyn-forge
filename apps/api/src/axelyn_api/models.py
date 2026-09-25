@@ -78,6 +78,16 @@ ResumeEmploymentType = Literal[
     "Self-employed",
 ]
 ResumeWorkArrangement = Literal["On-site", "Hybrid", "Remote"]
+ResumeEducationLevel = Literal[
+    "Secondary School",
+    "Diploma",
+    "Foundation",
+    "Bachelor’s Degree",
+    "Master’s Degree",
+    "Doctorate / PhD",
+    "Professional Qualification",
+    "Other",
+]
 RESUME_SECTION_NAMES = {
     "summary",
     "experience",
@@ -118,6 +128,41 @@ class ResumeExperienceEntry(BaseModel):
         return self
 
 
+class ResumeEducationEntry(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    institution_name: str = Field(default="", max_length=200)
+    qualification: str = Field(default="", max_length=200)
+    field_of_study: str = Field(default="", max_length=200)
+    education_level: ResumeEducationLevel = "Bachelor’s Degree"
+    location: str = Field(default="", max_length=160)
+    start_date: str = Field(
+        default="",
+        max_length=7,
+        pattern=r"^(?:|[0-9]{4}-(?:0[1-9]|1[0-2]))$",
+    )
+    end_date: str = Field(
+        default="",
+        max_length=7,
+        pattern=r"^(?:|[0-9]{4}-(?:0[1-9]|1[0-2]))$",
+    )
+    currently_studying_here: bool = False
+    gpa: str = Field(default="", max_length=80)
+    honours: str = Field(default="", max_length=160)
+    relevant_coursework: str = Field(default="", max_length=2_000)
+    thesis_title: str = Field(default="", max_length=300)
+    thesis_description: str = Field(default="", max_length=4_000)
+    academic_achievements: str = Field(default="", max_length=4_000)
+    activities: str = Field(default="", max_length=4_000)
+    relevant_skills: str = Field(default="", max_length=2_000)
+
+    @model_validator(mode="after")
+    def current_study_has_no_end_date(self) -> Self:
+        if self.currently_studying_here:
+            self.end_date = ""
+        return self
+
+
 class ResumeCustomSection(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -150,6 +195,10 @@ class ResumeDraft(BaseModel):
     experience_entries: List[ResumeExperienceEntry] = Field(
         default_factory=list,
         max_length=30,
+    )
+    education_entries: List[ResumeEducationEntry] = Field(
+        default_factory=list,
+        max_length=20,
     )
     custom_sections: List[ResumeCustomSection] = Field(
         default_factory=list,
