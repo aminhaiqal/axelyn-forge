@@ -39,7 +39,7 @@ if (!isAuthenticated) {
           <h1>Your resume<br /><em>source library.</em></h1>
         </div>
         <div class="intro-copy">
-          <p>Keep one trusted source for every direction you pursue. Import an existing resume, review what Forge found, then shape it through the Axelyn standard.</p>
+          <p>Keep one trusted source for every direction you pursue. Forge converts PDF and DOCX files into editable content, then shapes approved facts through the Axelyn standard.</p>
           <div class="privacy-note">
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3m-11 0h12v10H6z" /></svg>
             <span><strong>Private by default.</strong> Only your signed-in account can read these files.</span>
@@ -60,7 +60,7 @@ if (!isAuthenticated) {
               <span class="upload-mark" aria-hidden="true">+</span>
               <span class="upload-copy">
                 <strong>Bring in your resume files</strong>
-                <small>Drop up to 5 DOCX or PDF files here, or choose files · 10 MB each</small>
+                <small>Drop up to 5 DOCX or PDF files here · PDFs become editable Forge drafts · 10 MB each</small>
               </span>
               <span class="choose-files">Choose files</span>
             </label>
@@ -84,10 +84,10 @@ if (!isAuthenticated) {
             <span></span><i></i><i></i><b></b><i></i><i></i><b></b><i></i><i></i>
           </div>
           <h2>One clean structure.<br />Every career direction.</h2>
-          <p>Your uploaded resume supplies the facts. The Axelyn standard supplies the hierarchy and spacing, with editable DOCX and layout-stable PDF output.</p>
+          <p>Your uploaded resume supplies the facts. Edit the content in Forge while the Axelyn standard controls hierarchy and spacing, with Word and PDF output.</p>
           <ul>
             <li><span>01</span> Import the source</li>
-            <li><span>02</span> Review extracted facts</li>
+            <li><span>02</span> Edit content by section</li>
             <li><span>03</span> Name the role version</li>
             <li><span>04</span> Generate DOCX + PDF</li>
           </ul>
@@ -106,9 +106,9 @@ if (!isAuthenticated) {
     <dialog class="review-dialog" id="resume-review-dialog">
       <form method="dialog" class="dialog-close-form"><button aria-label="Close resume review">×</button></form>
       <div class="review-heading">
-        <p><span></span> Review import</p>
-        <h2>Confirm the facts before they enter your library.</h2>
-        <p>Extraction can miss layout details. Edit anything that needs correction; Forge will only render what you approve here.</p>
+        <p><span></span> Edit content</p>
+        <h2>Change the facts. Keep the layout consistent.</h2>
+        <p>Forge turns the source into editable sections. The standard template handles layout, so content changes never require opening Word.</p>
       </div>
       <form class="review-form" id="resume-review-form">
         <input name="source_id" type="hidden" />
@@ -120,10 +120,25 @@ if (!isAuthenticated) {
         </div>
         <label><span>Contact line</span><input name="contact_line" maxlength="300" /></label>
         <label><span>Professional summary</span><textarea name="summary" rows="5" maxlength="2000"></textarea></label>
-        <label>
-          <span>Extracted resume text <small>Used to map experience, projects, education, and skills</small></span>
-          <textarea name="extracted_text" rows="16" maxlength="100000" required></textarea>
-        </label>
+        <div class="content-section-heading">
+          <span>Resume sections</span>
+          <p>Keep each heading, date, and bullet on its own line. Start achievements with • or -.</p>
+        </div>
+        <label><span>Experience</span><textarea name="section_experience" rows="10" maxlength="30000"></textarea></label>
+        <label><span>Projects</span><textarea name="section_projects" rows="8" maxlength="30000"></textarea></label>
+        <div class="review-fields two-up">
+          <label><span>Education</span><textarea name="section_education" rows="7" maxlength="12000"></textarea></label>
+          <label><span>Skills</span><textarea name="section_skills" rows="7" maxlength="12000"></textarea></label>
+          <label><span>Languages</span><textarea name="section_languages" rows="5" maxlength="8000"></textarea></label>
+          <label><span>Additional details</span><textarea name="section_additional" rows="5" maxlength="12000"></textarea></label>
+        </div>
+        <details class="source-transcript">
+          <summary>View original extracted text</summary>
+          <label>
+            <span>Source transcript <small>Use this to repair extraction when a section is missing</small></span>
+            <textarea name="extracted_text" rows="14" maxlength="100000" required></textarea>
+          </label>
+        </details>
         <label class="variant-name"><span>Version name</span><input name="variant_name" maxlength="160" placeholder="e.g. Frontend Engineer — Master" required /></label>
         <p class="form-status" id="review-status" aria-live="polite"></p>
         <div class="review-actions">

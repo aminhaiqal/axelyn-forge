@@ -83,7 +83,9 @@ def _object_prefix(user_id: str) -> str:
 
 
 def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
-    normalized = normalize_resume_text(payload.extracted_text)
+    sections = payload.sections
+    if not sections:
+        sections = normalize_resume_text(payload.extracted_text).get("sections", {})
     return {
         "display_name": payload.display_name,
         "target_role": payload.target_role,
@@ -92,8 +94,30 @@ def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
         "contact_line": payload.contact_line,
         "summary": payload.summary,
         "extracted_text": payload.extracted_text,
-        "sections": normalized.get("sections", {}),
+        "sections": sections,
     }
+
+
+def _render_resume_docx(
+    *,
+    template: Path,
+    draft: dict[str, object],
+    title: str,
+    description: str,
+) -> bytes:
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        output = Path(temporary_directory) / "resume.docx"
+        render_docx(template, output, standard_template_values(draft), strict=True)
+        update_docx_core_properties(
+            output,
+            {
+                "title": title,
+                "subject": "Axelyn Forge standard resume",
+                "description": description,
+                "keywords": "resume, axelyn forge",
+            },
+        )
+        return output.read_bytes()
 
 
 def create_app(
@@ -322,6 +346,49 @@ def create_app(
             raise HTTPException(status_code=503, detail="Resume draft is unavailable.") from error
         return ResumeSourceDetail(**row, draft=ResumeDraft(**draft))
 
+    @app.get(
+        "/api/v1/resumes/{source_id}/editable.docx",
+        tags=["resumes"],
+    )
+    def download_editable_resume(
+        source_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> Response:
+        row = resume_store.get_source(user_id, source_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+        template = resolved_settings.resume_template_path
+        if not template.is_file():
+            raise HTTPException(status_code=503, detail="The standard resume template is unavailable.")
+        try:
+            draft = decode_json(object_store.get(str(row["draft_object_key"])))
+        except KeyError as error:
+            raise HTTPException(status_code=503, detail="Resume draft is unavailable.") from error
+        if not str(draft.get("extracted_text") or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Add resume text before creating an editable Word draft.",
+            )
+        payload = _render_resume_docx(
+            template=template,
+            draft=draft,
+            title=str(row["display_name"]),
+            description="Editable Word draft generated from a private resume source.",
+        )
+        safe_stem = re.sub(
+            r"[^A-Za-z0-9._-]+", "-", str(row["display_name"])
+        ).strip("-.")
+        filename = f"{safe_stem or 'resume'}-editable.docx"
+        return Response(
+            payload,
+            media_type=DOCX_MEDIA_TYPE,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     @app.put(
         "/api/v1/resumes/{source_id}/draft",
         response_model=ResumeSourceDetail,
@@ -446,19 +513,12 @@ def create_app(
         except KeyError as error:
             raise HTTPException(status_code=503, detail="Resume data is unavailable.") from error
 
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            output = Path(temporary_directory) / "resume.docx"
-            render_docx(template, output, standard_template_values(normalized), strict=True)
-            update_docx_core_properties(
-                output,
-                {
-                    "title": str(variant["name"]),
-                    "subject": "Axelyn Forge standard resume",
-                    "description": "Resume generated from user-approved source material.",
-                    "keywords": "resume, axelyn forge",
-                },
-            )
-            document_payload = output.read_bytes()
+        document_payload = _render_resume_docx(
+            template=template,
+            draft=normalized,
+            title=str(variant["name"]),
+            description="Resume generated from user-approved source material.",
+        )
 
         safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", str(variant["name"])).strip("-.")
         base_filename = f"{safe_stem or 'resume'}-axelyn-forge"

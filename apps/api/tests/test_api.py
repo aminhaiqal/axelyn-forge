@@ -62,6 +62,48 @@ class ApiTests(unittest.TestCase):
             archive.writestr("word/document.xml", document)
         return output.getvalue()
 
+    @staticmethod
+    def resume_pdf() -> bytes:
+        content = (
+            b"BT /F1 12 Tf 72 720 Td (Taylor Example) Tj "
+            b"0 -18 Td (Backend Engineer) Tj "
+            b"0 -18 Td (Summary) Tj "
+            b"0 -18 Td (Builds reliable APIs.) Tj "
+            b"0 -18 Td (Experience) Tj "
+            b"0 -18 Td (Senior Engineer) Tj "
+            b"0 -18 Td (2022 - Present) Tj "
+            b"0 -18 Td (- Built production APIs.) Tj ET"
+        )
+        objects = [
+            b"<< /Type /Catalog /Pages 2 0 R >>",
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            (
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"
+            ),
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+            b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content),
+        ]
+        payload = bytearray(b"%PDF-1.4\n")
+        offsets = [0]
+        for index, obj in enumerate(objects, 1):
+            offsets.append(len(payload))
+            payload.extend(f"{index} 0 obj\n".encode())
+            payload.extend(obj)
+            payload.extend(b"\nendobj\n")
+        xref = len(payload)
+        payload.extend(f"xref\n0 {len(objects) + 1}\n".encode())
+        payload.extend(b"0000000000 65535 f \n")
+        for offset in offsets[1:]:
+            payload.extend(f"{offset:010d} 00000 n \n".encode())
+        payload.extend(
+            (
+                f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+                f"startxref\n{xref}\n%%EOF\n"
+            ).encode()
+        )
+        return bytes(payload)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
@@ -263,6 +305,40 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(200, detail.status_code)
         source = detail.json()
         self.assertEqual("Taylor Example", source["draft"]["full_name"])
+        source["draft"]["sections"]["experience"][-1] = (
+            "• Delivered editable resume content through Forge."
+        )
+        saved = self.client.put(
+            f"/api/v1/resumes/{source_id}/draft",
+            headers=headers,
+            json={
+                **source["draft"],
+                "display_name": "Backend resume",
+                "target_role": "Backend Engineer",
+            },
+        )
+        self.assertEqual(200, saved.status_code, saved.text)
+        source = saved.json()
+
+        editable_word = self.client.get(
+            f"/api/v1/resumes/{source_id}/editable.docx",
+            headers=headers,
+        )
+        other_word = self.client.get(
+            f"/api/v1/resumes/{source_id}/editable.docx",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        self.assertEqual(200, editable_word.status_code, editable_word.text)
+        self.assertEqual(404, other_word.status_code)
+        self.assertTrue(editable_word.content.startswith(b"PK"))
+        self.assertIn(
+            "Backend-resume-editable.docx",
+            editable_word.headers["content-disposition"],
+        )
+        with zipfile.ZipFile(BytesIO(editable_word.content)) as archive:
+            document_xml = archive.read("word/document.xml")
+        self.assertIn(b"Delivered editable resume content", document_xml)
+
         accepted = self.client.post(
             f"/api/v1/resumes/{source_id}/accept",
             headers=headers,
@@ -321,6 +397,28 @@ class ApiTests(unittest.TestCase):
             headers={"Authorization": "Bearer other-session"},
         )
         self.assertEqual(404, other_download.status_code)
+
+    def test_pdf_import_becomes_an_editable_word_draft(self):
+        headers = {"Authorization": "Bearer test-session"}
+        imported = self.client.post(
+            "/api/v1/resumes/imports",
+            headers=headers,
+            files=[("files", ("backend-resume.pdf", self.resume_pdf(), "application/pdf"))],
+        )
+
+        self.assertEqual(201, imported.status_code, imported.text)
+        source = imported.json()["items"][0]["source"]
+        self.assertEqual("application/pdf", source["media_type"])
+        editable_word = self.client.get(
+            f"/api/v1/resumes/{source['id']}/editable.docx",
+            headers=headers,
+        )
+
+        self.assertEqual(200, editable_word.status_code, editable_word.text)
+        with zipfile.ZipFile(BytesIO(editable_word.content)) as archive:
+            document_xml = archive.read("word/document.xml")
+        self.assertIn(b"Taylor Example", document_xml)
+        self.assertIn(b"Built production APIs", document_xml)
 
     def test_resume_import_rejects_unsupported_files_and_requires_auth(self):
         unsupported = self.client.post(

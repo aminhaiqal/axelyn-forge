@@ -82,6 +82,15 @@ class ForgeBriefAccepted(ForgeBriefAnalysis):
 
 
 ResumeSourceStatus = Literal["needs_review", "needs_ocr", "ready"]
+RESUME_SECTION_NAMES = {
+    "summary",
+    "experience",
+    "projects",
+    "education",
+    "skills",
+    "languages",
+    "additional",
+}
 
 
 class ResumeDraft(BaseModel):
@@ -93,6 +102,27 @@ class ResumeDraft(BaseModel):
     summary: str = Field(default="", max_length=2_000)
     extracted_text: str = Field(default="", max_length=100_000)
     sections: dict[str, List[str]] = Field(default_factory=dict)
+
+    @field_validator("sections")
+    @classmethod
+    def sections_are_bounded(
+        cls, value: dict[str, List[str]]
+    ) -> dict[str, List[str]]:
+        unknown = set(value) - RESUME_SECTION_NAMES
+        if unknown:
+            raise ValueError(f"unsupported resume section: {sorted(unknown)[0]}")
+        if sum(len(lines) for lines in value.values()) > 500:
+            raise ValueError("resume sections are limited to 500 lines")
+        cleaned: dict[str, List[str]] = {}
+        for section, lines in value.items():
+            cleaned[section] = []
+            for line in lines:
+                normalized = line.strip()
+                if len(normalized) > 2_000:
+                    raise ValueError("resume section lines are limited to 2,000 characters")
+                if normalized:
+                    cleaned[section].append(normalized)
+        return cleaned
 
 
 class ResumeSourceSummary(BaseModel):

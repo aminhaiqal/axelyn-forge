@@ -73,7 +73,8 @@ The first public contract is versioned under `/api/v1`.
 | `GET` | `/api/v1/resumes` | List resume sources owned by the signed-in user. |
 | `POST` | `/api/v1/resumes/imports` | Import up to five PDF/DOCX resume sources for review. |
 | `GET`, `DELETE` | `/api/v1/resumes/{id}` | Read or delete one owned resume source. |
-| `PUT` | `/api/v1/resumes/{id}/draft` | Save corrections to an owned resume review draft. |
+| `GET` | `/api/v1/resumes/{id}/editable.docx` | Render the current private draft as an editable Word document. |
+| `PUT` | `/api/v1/resumes/{id}/draft` | Save profile, experience, project, education, skill, language, and additional content fields. |
 | `POST` | `/api/v1/resumes/{id}/accept` | Approve a reviewed source as a named role version. |
 | `GET` | `/api/v1/resume-variants` | List the signed-in user's approved versions. |
 | `GET` | `/api/v1/generated-documents` | List private generated files owned by the signed-in user. |

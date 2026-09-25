@@ -81,7 +81,7 @@
 .status-pill { color: #8d573d; }
 .status-pill[data-ready="true"] { color: #286751; }
 .source-actions { display: flex; gap: 8px; }
-.source-actions button { min-height: 36px; border: 1px solid #aeb9bc; padding: 0 12px; color: var(--ink); background: transparent; font-size: .6rem; font-weight: 800; cursor: pointer; }
+.source-actions button, .source-actions a { min-height: 36px; display: inline-flex; align-items: center; border: 1px solid #aeb9bc; padding: 0 12px; color: var(--ink); background: transparent; font-size: .6rem; font-weight: 800; text-decoration: none; cursor: pointer; }
 .source-actions button:first-child { border-color: var(--ink); background: var(--ink); color: white; }
 .empty-library { display: flex; gap: 22px; align-items: flex-start; padding: 35px 5px; border-bottom: 1px solid #c5cdcf; }
 .empty-library > span { color: #acb5b7; font-family: var(--font-display); font-size: 2.2rem; }
@@ -127,6 +127,12 @@
 .review-form { display: grid; gap: 22px; padding: 42px clamp(24px, 7vw, 70px) 55px; }
 .review-fields.two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .review-form textarea { resize: vertical; line-height: 1.65; }
+.content-section-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
+.content-section-heading > span { color: var(--ink); font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; }
+.content-section-heading p { max-width: 430px; margin: 0; color: #718087; font-size: .62rem; line-height: 1.6; }
+.source-transcript { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding-block: 16px; }
+.source-transcript summary { color: #52636b; font-size: .63rem; font-weight: 800; cursor: pointer; }
+.source-transcript label { margin-top: 18px; }
 .variant-name { padding-top: 22px; border-top: 1px solid var(--line); }
 .review-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
@@ -166,11 +172,12 @@
   .file-selection { padding-inline: 20px; }
   .source-card { grid-template-columns: 40px minmax(0,1fr); }
   .source-actions { grid-column: 1 / -1; }
-  .source-actions button { flex: 1; }
+  .source-actions button, .source-actions a { flex: 1; justify-content: center; }
   .standard-panel { display: block; }
   .template-sheet { margin-inline: 0; }
   .variant-list { grid-template-columns: 1fr; }
   .review-fields.two-up { grid-template-columns: 1fr; }
+  .content-section-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
   .review-actions { align-items: stretch; flex-direction: column-reverse; }
   .review-actions button { width: 100%; }
   .library-footer { align-items: flex-start; flex-direction: column; padding: 22px 18px; }

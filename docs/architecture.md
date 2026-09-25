@@ -45,9 +45,9 @@ flowchart LR
 ## Resume library flow
 
 1. The signed-in browser sends up to five DOCX/PDF files to the same-origin import endpoint.
-2. FastAPI validates signatures and size limits, defensively extracts text, and writes the original plus a review draft to private object storage.
-3. The user corrects the extracted fields and approves a named role version. The approved normalized payload becomes the rendering source.
-4. The API maps approved content to the fixed Axelyn template bindings and renders a DOCX.
+2. FastAPI validates signatures and size limits, defensively extracts text, and writes the original plus structured editable content to private object storage.
+3. The user edits profile, experience, project, education, skill, language, and additional sections in the browser. Forge can render the latest saved draft as an editable Word document at any time.
+4. The user approves a named role version. The API maps that approved content to the fixed Axelyn template bindings and renders a DOCX.
 5. The API sends that DOCX to the private converter, which uses headless LibreOffice and returns a validated PDF.
 6. The API stores both files as one generated bundle. Download authorization checks both the document ID and Clerk user ID. Storage credentials and R2 object keys never reach browser code.
 

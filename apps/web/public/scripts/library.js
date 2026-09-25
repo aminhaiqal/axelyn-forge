@@ -88,7 +88,15 @@ if (page instanceof HTMLElement) {
       body.append(title, meta);
       const actions = document.createElement("div");
       actions.className = "source-actions";
-      actions.append(button(source.status === "ready" ? "Edit" : "Review", "review", source.id), button("Delete", "delete", source.id));
+      actions.append(button(source.status === "ready" ? "Edit content" : "Review", "review", source.id));
+      if (source.status !== "needs_ocr") {
+        const word = document.createElement("a");
+        word.href = `${apiBase}/api/v1/resumes/${source.id}/editable.docx`;
+        word.textContent = "Word draft";
+        word.setAttribute("download", "");
+        actions.append(word);
+      }
+      actions.append(button("Delete", "delete", source.id));
       card.append(filetype, body, actions);
       sourceList.append(card);
     });
@@ -158,6 +166,10 @@ if (page instanceof HTMLElement) {
   const formPayload = () => {
     if (!(reviewForm instanceof HTMLFormElement)) return null;
     const data = new FormData(reviewForm);
+    const sectionLines = (name) => String(data.get(name) || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
     return {
       display_name: String(data.get("display_name") || ""),
       target_role: String(data.get("target_role") || "") || null,
@@ -166,7 +178,14 @@ if (page instanceof HTMLElement) {
       contact_line: String(data.get("contact_line") || ""),
       summary: String(data.get("summary") || ""),
       extracted_text: String(data.get("extracted_text") || ""),
-      sections: {},
+      sections: {
+        experience: sectionLines("section_experience"),
+        projects: sectionLines("section_projects"),
+        education: sectionLines("section_education"),
+        skills: sectionLines("section_skills"),
+        languages: sectionLines("section_languages"),
+        additional: sectionLines("section_additional"),
+      },
     };
   };
 
@@ -185,13 +204,19 @@ if (page instanceof HTMLElement) {
         contact_line: source.draft.contact_line || "",
         summary: source.draft.summary || "",
         extracted_text: source.draft.extracted_text || "",
+        section_experience: (source.draft.sections?.experience || []).join("\n"),
+        section_projects: (source.draft.sections?.projects || []).join("\n"),
+        section_education: (source.draft.sections?.education || []).join("\n"),
+        section_skills: (source.draft.sections?.skills || []).join("\n"),
+        section_languages: (source.draft.sections?.languages || []).join("\n"),
+        section_additional: (source.draft.sections?.additional || []).join("\n"),
         variant_name: source.target_role ? `${source.target_role} — Master` : source.display_name,
       };
       Object.entries(values).forEach(([key, value]) => {
         const field = reviewForm.elements.namedItem(key);
         if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) field.value = value;
       });
-      setStatus(reviewStatus, source.warning || "Review each field, then approve this version.");
+      setStatus(reviewStatus, source.warning || "Edit the content fields, then approve this version or download a Word draft.");
     } catch (error) {
       setStatus(reviewStatus, error instanceof Error ? error.message : "The resume could not be loaded.", "error");
     }
@@ -253,7 +278,7 @@ if (page instanceof HTMLElement) {
       if (rejected.length) {
         setStatus(uploadStatus, `${stored} imported. ${rejected.map((item) => `${item.filename}: ${item.error}`).join(" ")}`, "error");
       } else {
-        setStatus(uploadStatus, `${stored} resume${stored === 1 ? "" : "s"} imported. Open each one to review the extracted facts.`, "success");
+        setStatus(uploadStatus, `${stored} resume${stored === 1 ? "" : "s"} converted into editable content. Review each one before approval.`, "success");
         uploadForm.reset();
         if (fileSelection instanceof HTMLElement) fileSelection.hidden = true;
       }

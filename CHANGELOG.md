@@ -6,6 +6,8 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ### Added
 
+- Added private source-level Word draft generation so imported PDF or DOCX content can be downloaded as an editable `.docx` before approval.
+- Added section-based browser editing for experience, projects, education, skills, languages, and additional resume content.
 - Added a private, resource-bounded LibreOffice conversion service and standard resume generation as matched DOCX/PDF bundles.
 - Added owner-scoped generated-document listing so authenticated users can return to their latest downloads.
 
