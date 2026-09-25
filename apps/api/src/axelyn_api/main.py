@@ -110,6 +110,9 @@ def _object_prefix(user_id: str) -> str:
 
 def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
     sections = payload.sections
+    experience_entries = [
+        entry.model_dump() for entry in payload.experience_entries
+    ]
     custom_sections = [section.model_dump() for section in payload.custom_sections]
     if not sections and "sections" not in payload.model_fields_set:
         normalized = normalize_resume_text(payload.extracted_text)
@@ -126,6 +129,7 @@ def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
         "summary": payload.summary,
         "extracted_text": payload.extracted_text,
         "sections": sections,
+        "experience_entries": experience_entries,
         "custom_sections": custom_sections,
     }
 

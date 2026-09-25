@@ -9,7 +9,7 @@ from typing import Iterable
 
 from .models import JobMatchAnalysis, RoleAlignmentInput
 from .role_alignment import analyze_role_alignment
-from .resume_import import ResumeImportError, extract_resume
+from .resume_import import ResumeImportError, experience_entry_lines, extract_resume
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
@@ -59,6 +59,10 @@ def draft_to_evidence_text(draft: dict[str, object]) -> str:
         str(draft.get("headline") or ""),
         str(draft.get("summary") or ""),
     ]
+    experience_entries = draft.get("experience_entries")
+    if isinstance(experience_entries, list):
+        for entry in experience_entries:
+            values.extend(experience_entry_lines(entry))
     sections = draft.get("sections")
     if isinstance(sections, dict):
         for section in (
@@ -225,6 +229,13 @@ def tailor_resume_draft(
     if not str(tailored.get("headline") or "").strip():
         tailored["headline"] = target_role
     keywords = {keyword.casefold() for keyword in matched_keywords}
+    experience_entries = tailored.get("experience_entries")
+    if isinstance(experience_entries, list):
+        experience_entries.sort(
+            key=lambda entry: -_relevance(
+                " ".join(experience_entry_lines(entry)), keywords
+            )
+        )
     sections = tailored.get("sections")
     if not isinstance(sections, dict):
         return tailored

@@ -1,8 +1,16 @@
 """Versioned request and response models for the public HTTP contract."""
 
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Self
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    HttpUrl,
+    field_validator,
+    model_validator,
+)
 
 
 class Service(BaseModel):
@@ -61,6 +69,15 @@ class RoleAlignmentAnalysis(BaseModel):
 
 ResumeSourceStatus = Literal["needs_review", "needs_ocr", "ready"]
 ResumeTemplateId = Literal["ats-classic", "ats-modern", "ats-compact"]
+ResumeEmploymentType = Literal[
+    "Full-time",
+    "Part-time",
+    "Contract",
+    "Freelance",
+    "Internship",
+    "Self-employed",
+]
+ResumeWorkArrangement = Literal["On-site", "Hybrid", "Remote"]
 RESUME_SECTION_NAMES = {
     "summary",
     "experience",
@@ -70,6 +87,35 @@ RESUME_SECTION_NAMES = {
     "languages",
     "additional",
 }
+
+
+class ResumeExperienceEntry(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    company_name: str = Field(default="", max_length=160)
+    job_title: str = Field(default="", max_length=160)
+    employment_type: ResumeEmploymentType = "Full-time"
+    location: str = Field(default="", max_length=160)
+    work_arrangement: ResumeWorkArrangement = "On-site"
+    start_date: str = Field(
+        default="",
+        max_length=7,
+        pattern=r"^(?:|[0-9]{4}-(?:0[1-9]|1[0-2]))$",
+    )
+    end_date: str = Field(
+        default="",
+        max_length=7,
+        pattern=r"^(?:|[0-9]{4}-(?:0[1-9]|1[0-2]))$",
+    )
+    currently_working_here: bool = False
+    responsibilities: str = Field(default="", max_length=10_000)
+    achievements: str = Field(default="", max_length=10_000)
+
+    @model_validator(mode="after")
+    def current_role_has_no_end_date(self) -> Self:
+        if self.currently_working_here:
+            self.end_date = ""
+        return self
 
 
 class ResumeCustomSection(BaseModel):
@@ -101,6 +147,10 @@ class ResumeDraft(BaseModel):
     summary: str = Field(default="", max_length=2_000)
     extracted_text: str = Field(default="", max_length=100_000)
     sections: dict[str, List[str]] = Field(default_factory=dict)
+    experience_entries: List[ResumeExperienceEntry] = Field(
+        default_factory=list,
+        max_length=30,
+    )
     custom_sections: List[ResumeCustomSection] = Field(
         default_factory=list,
         max_length=12,

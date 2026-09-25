@@ -92,11 +92,16 @@ Kuala Lumpur | 2020 – 2024
         </section>
 
         <section class="builder-section">
-          <div class="builder-section-heading"><span>03</span><div><h2>Work experience</h2><p>Start with your latest role. Put titles and dates on separate lines, then use bullets for evidence and measurable results.</p></div></div>
-          <label><span>Experience</span><textarea name="section_experience" rows="14" maxlength="30000" placeholder={`Software Engineer | Example Company
-2023 – Present
-• Built an accessible customer portal used by 20,000 people.
-• Reduced page load time by 35%.`}></textarea></label>
+          <div class="builder-section-heading builder-action-heading"><span>03</span><div><h2>Work experience</h2><p>Add one entry for each role so every position stays separately editable in the generated resume.</p></div><button type="button" id="add-work-experience">+ Add work experience</button></div>
+          <div class="work-experience-list" id="work-experience-list"></div>
+          <p class="work-experience-empty" id="work-experience-empty">No work experience added yet. Add a role when you are ready.</p>
+          <div class="legacy-experience" id="legacy-experience" hidden>
+            <div>
+              <strong>Preserved imported work content</strong>
+              <p>This text came from an older or uploaded resume. Keep it here, or move it into structured entries above and clear it when finished.</p>
+            </div>
+            <label><span>Imported experience text</span><textarea name="section_experience" rows="10" maxlength="30000"></textarea></label>
+          </div>
         </section>
 
         <section class="builder-section">
@@ -146,6 +151,33 @@ Cloud and tools: AWS, Docker, GitHub Actions`}></textarea></label>
         <div><span>Custom section</span><button type="button" data-remove-custom>Remove</button></div>
         <label><span>Section title</span><input data-custom-title maxlength="80" placeholder="e.g. Certifications" required /></label>
         <label><span>Content</span><textarea data-custom-lines rows="6" maxlength="20000" placeholder="Keep one item or bullet on each line."></textarea></label>
+      </article>
+    </template>
+
+    <template id="work-experience-template">
+      <article class="work-experience-card">
+        <div class="work-experience-card-head">
+          <div><span>Work experience</span><strong data-work-entry-number>Entry 01</strong></div>
+          <button type="button" data-remove-work-experience>Remove</button>
+        </div>
+        <div class="work-experience-fields">
+          <label><span>Company / Organization Name</span><input data-work-field="company_name" maxlength="160" placeholder="Example Company" required /></label>
+          <label><span>Job Title / Position</span><input data-work-field="job_title" maxlength="160" placeholder="Software Engineer" required /></label>
+          <label><span>Employment Type</span><select data-work-field="employment_type" required><option>Full-time</option><option>Part-time</option><option>Contract</option><option>Freelance</option><option>Internship</option><option>Self-employed</option></select></label>
+          <label><span>Location</span><input data-work-field="location" maxlength="160" placeholder="Kuala Lumpur, Malaysia" required /></label>
+          <label><span>Work Arrangement</span><select data-work-field="work_arrangement" required><option>On-site</option><option>Hybrid</option><option>Remote</option></select></label>
+          <label><span>Start Date</span><input data-work-field="start_date" type="month" required /></label>
+          <label data-end-date-field><span>End Date</span><input data-work-field="end_date" type="month" required /></label>
+          <fieldset class="work-current-field">
+            <legend>Are you currently working here?</legend>
+            <div class="work-choice-pair">
+              <label><input type="radio" data-work-current value="yes" /><span>Yes</span></label>
+              <label><input type="radio" data-work-current value="no" checked /><span>No</span></label>
+            </div>
+          </fieldset>
+          <label class="work-field-wide"><span>Job Description / Responsibilities</span><textarea data-work-field="responsibilities" rows="5" maxlength="10000" placeholder="Describe your main responsibilities in this role."></textarea></label>
+          <label class="work-field-wide"><span>Key Achievements</span><textarea data-work-field="achievements" rows="5" maxlength="10000" placeholder="What did you accomplish or improve during this role? Keep one achievement on each line."></textarea></label>
+        </div>
       </article>
     </template>
   </div>

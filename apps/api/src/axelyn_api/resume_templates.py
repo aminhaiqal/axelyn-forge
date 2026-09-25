@@ -12,6 +12,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
+from .resume_import import experience_entry_lines
+
 
 TEMPLATE_VERSION = "1"
 DEFAULT_TEMPLATE_ID = "ats-classic"
@@ -218,8 +220,16 @@ def render_resume(
     sections = draft.get("sections")
     if not isinstance(sections, dict):
         sections = {}
+    experience_lines: list[str] = []
+    experience_entries = draft.get("experience_entries")
+    if isinstance(experience_entries, list):
+        for entry in experience_entries:
+            experience_lines.extend(experience_entry_lines(entry))
+    experience_lines.extend(_clean_lines(sections.get("experience")))
+    if experience_lines:
+        _add_section_heading(document, "Experience", spec)
+        _add_lines(document, experience_lines, spec)
     for key, title_value in (
-        ("experience", "Experience"),
         ("projects", "Projects"),
         ("education", "Education"),
         ("skills", "Skills"),

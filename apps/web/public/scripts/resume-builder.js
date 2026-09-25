@@ -10,6 +10,10 @@ if (builderPage instanceof HTMLElement) {
   const customList = document.querySelector("#custom-section-list");
   const customEmpty = document.querySelector("#custom-section-empty");
   const customTemplate = document.querySelector("#custom-section-template");
+  const workList = document.querySelector("#work-experience-list");
+  const workEmpty = document.querySelector("#work-experience-empty");
+  const workTemplate = document.querySelector("#work-experience-template");
+  const legacyExperience = document.querySelector("#legacy-experience");
   const sourceInbox = document.querySelector("#source-inbox");
   const unmappedContent = document.querySelector("#unmapped-content");
   const transcriptPanel = document.querySelector("#source-transcript");
@@ -17,6 +21,7 @@ if (builderPage instanceof HTMLElement) {
   const downloads = document.querySelector("#builder-downloads");
   let sourceId = new URLSearchParams(window.location.search).get("source") || "";
   let currentUnmapped = [];
+  let workEntrySequence = 0;
 
   const api = async (path, options = {}) => {
     const response = await fetch(`${apiBase}${path}`, { credentials: "same-origin", ...options });
@@ -55,6 +60,52 @@ if (builderPage instanceof HTMLElement) {
     if (customEmpty instanceof HTMLElement && customList instanceof HTMLElement) {
       customEmpty.hidden = customList.children.length > 0;
     }
+  };
+
+  const updateWorkEntries = () => {
+    if (!(workList instanceof HTMLElement)) return;
+    Array.from(workList.querySelectorAll(".work-experience-card")).forEach((card, index) => {
+      const number = card.querySelector("[data-work-entry-number]");
+      if (number instanceof HTMLElement) number.textContent = `Entry ${String(index + 1).padStart(2, "0")}`;
+    });
+    if (workEmpty instanceof HTMLElement) workEmpty.hidden = workList.children.length > 0;
+  };
+
+  const syncCurrentRole = (card) => {
+    const current = card.querySelector("[data-work-current][value='yes']");
+    const endDate = card.querySelector("[data-work-field='end_date']");
+    const endDateField = card.querySelector("[data-end-date-field]");
+    const isCurrent = current instanceof HTMLInputElement && current.checked;
+    if (endDate instanceof HTMLInputElement) {
+      endDate.disabled = isCurrent;
+      endDate.required = !isCurrent;
+    }
+    if (endDateField instanceof HTMLElement) endDateField.dataset.disabled = String(isCurrent);
+  };
+
+  const addWorkExperience = (entry = {}, { scroll = true } = {}) => {
+    if (!(workTemplate instanceof HTMLTemplateElement) || !(workList instanceof HTMLElement)) return;
+    const fragment = workTemplate.content.cloneNode(true);
+    const card = fragment.querySelector(".work-experience-card");
+    if (!(card instanceof HTMLElement)) return;
+    card.querySelectorAll("[data-work-field]").forEach((control) => {
+      const key = control.getAttribute("data-work-field");
+      if (!key || !(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) return;
+      if (entry[key] !== undefined && entry[key] !== null) control.value = String(entry[key]);
+    });
+    workEntrySequence += 1;
+    const radioName = `work-current-${workEntrySequence}`;
+    card.querySelectorAll("[data-work-current]").forEach((radio) => {
+      if (!(radio instanceof HTMLInputElement)) return;
+      radio.name = radioName;
+      radio.checked = entry.currently_working_here
+        ? radio.value === "yes"
+        : radio.value === "no";
+    });
+    workList.append(fragment);
+    syncCurrentRole(card);
+    updateWorkEntries();
+    if (scroll) card.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   const addCustomSection = (section = { title: "", lines: [] }) => {
@@ -112,6 +163,28 @@ if (builderPage instanceof HTMLElement) {
           : [],
       };
     }).filter((section) => section.title && section.lines.length);
+    const experienceEntries = Array.from(form.querySelectorAll(".work-experience-card")).map((card) => {
+      const value = (name) => {
+        const control = card.querySelector(`[data-work-field='${name}']`);
+        return control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement
+          ? control.value.trim()
+          : "";
+      };
+      const current = card.querySelector("[data-work-current][value='yes']");
+      const currentlyWorkingHere = current instanceof HTMLInputElement && current.checked;
+      return {
+        company_name: value("company_name"),
+        job_title: value("job_title"),
+        employment_type: value("employment_type"),
+        location: value("location"),
+        work_arrangement: value("work_arrangement"),
+        start_date: value("start_date"),
+        end_date: currentlyWorkingHere ? "" : value("end_date"),
+        currently_working_here: currentlyWorkingHere,
+        responsibilities: value("responsibilities"),
+        achievements: value("achievements"),
+      };
+    });
     return {
       display_name: String(field("display_name")?.value || "").trim(),
       target_role: String(field("target_role")?.value || "").trim() || null,
@@ -127,6 +200,7 @@ if (builderPage instanceof HTMLElement) {
         projects: lines("section_projects"),
         skills: lines("section_skills"),
       },
+      experience_entries: experienceEntries,
       custom_sections: customSections,
     };
   };
@@ -202,6 +276,7 @@ if (builderPage instanceof HTMLElement) {
 
   const load = async () => {
     updateCustomEmpty();
+    updateWorkEntries();
     if (!sourceId) return;
     setStatus("Loading your private resume source…");
     try {
@@ -214,9 +289,15 @@ if (builderPage instanceof HTMLElement) {
       setField("contact_line", source.draft.contact_line || "");
       setField("summary", source.draft.summary || "");
       setField("extracted_text", source.draft.extracted_text || "");
-      ["education", "experience", "projects", "skills"].forEach((name) => {
+      ["education", "projects", "skills"].forEach((name) => {
         setField(`section_${name}`, (source.draft.sections?.[name] || []).join("\n"));
       });
+      const importedExperience = source.draft.sections?.experience || [];
+      setField("section_experience", importedExperience.join("\n"));
+      if (legacyExperience instanceof HTMLElement) legacyExperience.hidden = importedExperience.length === 0;
+      if (workList instanceof HTMLElement) workList.replaceChildren();
+      (source.draft.experience_entries || []).forEach((entry) => addWorkExperience(entry, { scroll: false }));
+      updateWorkEntries();
       const templateInput = form?.querySelector(`input[name='template_id'][value='${source.draft.template_id || "ats-classic"}']`);
       if (templateInput instanceof HTMLInputElement) templateInput.checked = true;
       if (customList instanceof HTMLElement) customList.replaceChildren();
@@ -235,6 +316,19 @@ if (builderPage instanceof HTMLElement) {
   };
 
   document.querySelector("#add-custom-section")?.addEventListener("click", () => addCustomSection());
+  document.querySelector("#add-work-experience")?.addEventListener("click", () => addWorkExperience());
+  workList?.addEventListener("click", (event) => {
+    const button = event.target instanceof Element ? event.target.closest("[data-remove-work-experience]") : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.closest(".work-experience-card")?.remove();
+    updateWorkEntries();
+  });
+  workList?.addEventListener("change", (event) => {
+    const radio = event.target instanceof Element ? event.target.closest("[data-work-current]") : null;
+    if (!(radio instanceof HTMLInputElement)) return;
+    const card = radio.closest(".work-experience-card");
+    if (card instanceof HTMLElement) syncCurrentRole(card);
+  });
   customList?.addEventListener("click", (event) => {
     const button = event.target instanceof Element ? event.target.closest("[data-remove-custom]") : null;
     if (!(button instanceof HTMLButtonElement)) return;

@@ -1,6 +1,10 @@
 import unittest
 
-from axelyn_api.job_match import analyze_job_match, tailor_resume_draft
+from axelyn_api.job_match import (
+    analyze_job_match,
+    draft_to_evidence_text,
+    tailor_resume_draft,
+)
 
 
 class JobMatchTests(unittest.TestCase):
@@ -43,6 +47,18 @@ class JobMatchTests(unittest.TestCase):
     def test_tailoring_reorders_existing_evidence_without_rewriting_it(self):
         draft = {
             "headline": "Engineer",
+            "experience_entries": [
+                {
+                    "company_name": "Studio",
+                    "job_title": "Designer",
+                    "responsibilities": "Created visual systems.",
+                },
+                {
+                    "company_name": "Platform Co",
+                    "job_title": "Engineer",
+                    "responsibilities": "Built Python APIs.",
+                },
+            ],
             "sections": {
                 "experience": [
                     "Designer | Studio",
@@ -63,9 +79,14 @@ class JobMatchTests(unittest.TestCase):
         )
 
         self.assertEqual("Backend Engineer", tailored["target_role"])
+        self.assertEqual(
+            "Platform Co", tailored["experience_entries"][0]["company_name"]
+        )
         self.assertEqual("Engineer | Platform Co", tailored["sections"]["experience"][0])
         self.assertEqual("Python and APIs", tailored["sections"]["skills"][0])
         self.assertEqual("Designer | Studio", draft["sections"]["experience"][0])
+        self.assertEqual("Studio", draft["experience_entries"][0]["company_name"])
+        self.assertIn("Built Python APIs", draft_to_evidence_text(draft))
 
 
 if __name__ == "__main__":

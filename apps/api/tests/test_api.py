@@ -390,13 +390,22 @@ class ApiTests(unittest.TestCase):
                 "contact_line": "taylor@example.com | Kuala Lumpur",
                 "summary": "Builds reliable systems.",
                 "sections": {
-                    "experience": [
-                        "Engineer | Example Systems",
-                        "2022 - Present",
-                        "• Built production APIs.",
-                    ],
                     "skills": ["Python, PostgreSQL, Docker"],
                 },
+                "experience_entries": [
+                    {
+                        "company_name": "Example Systems",
+                        "job_title": "Engineer",
+                        "employment_type": "Full-time",
+                        "location": "Kuala Lumpur, Malaysia",
+                        "work_arrangement": "Hybrid",
+                        "start_date": "2022-01",
+                        "end_date": "",
+                        "currently_working_here": True,
+                        "responsibilities": "Own reliable backend services.",
+                        "achievements": "Built production APIs.",
+                    }
+                ],
                 "custom_sections": [
                     {
                         "title": "Publications",
@@ -413,6 +422,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual([], source["unmapped_content"])
         self.assertEqual("", source["draft"]["extracted_text"])
         self.assertEqual("ats-modern", source["draft"]["template_id"])
+        self.assertTrue(
+            source["draft"]["experience_entries"][0]["currently_working_here"]
+        )
         self.assertEqual(
             "Publications", source["draft"]["custom_sections"][0]["title"]
         )
@@ -442,6 +454,10 @@ class ApiTests(unittest.TestCase):
             document_xml = archive.read("word/document.xml")
         self.assertIn(b"PUBLICATIONS", document_xml)
         self.assertIn(b"Reliable Systems Review", document_xml)
+        self.assertIn(b"Example Systems", document_xml)
+        self.assertIn(b"Own reliable backend services", document_xml)
+        self.assertIn(b"Jan 2022", document_xml)
+        self.assertIn(b"Present", document_xml)
         self.assertIn("• Built production APIs".encode(), document_xml)
 
         other_read = self.client.get(

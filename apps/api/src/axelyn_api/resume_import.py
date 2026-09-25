@@ -292,6 +292,76 @@ def draft_payload(
     }
 
 
+def experience_entry_lines(entry: object) -> list[str]:
+    """Flatten one structured role into a stable ATS-readable line sequence."""
+    if not isinstance(entry, dict):
+        return []
+    job_title = str(entry.get("job_title") or "").strip()
+    company_name = str(entry.get("company_name") or "").strip()
+    substantive_values = (
+        job_title,
+        company_name,
+        str(entry.get("location") or "").strip(),
+        str(entry.get("start_date") or "").strip(),
+        str(entry.get("end_date") or "").strip(),
+        str(entry.get("responsibilities") or "").strip(),
+        str(entry.get("achievements") or "").strip(),
+    )
+    if not any(substantive_values):
+        return []
+    title = " | ".join(value for value in (job_title, company_name) if value)
+    details = " | ".join(
+        value
+        for value in (
+            str(entry.get("employment_type") or "").strip(),
+            str(entry.get("work_arrangement") or "").strip(),
+            str(entry.get("location") or "").strip(),
+        )
+        if value
+    )
+    def display_month(value: object) -> str:
+        raw = str(value or "").strip()
+        match = re.fullmatch(r"([0-9]{4})-(0[1-9]|1[0-2])", raw)
+        if not match:
+            return raw
+        month_names = (
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        )
+        return f"{month_names[int(match.group(2)) - 1]} {match.group(1)}"
+
+    start_date = display_month(entry.get("start_date"))
+    end_date = (
+        "Present"
+        if entry.get("currently_working_here")
+        else display_month(entry.get("end_date"))
+    )
+    date = " – ".join(value for value in (start_date, end_date) if value)
+    responsibilities = _clean_lines(
+        str(entry.get("responsibilities") or "").splitlines()
+    )
+    achievements = [
+        f"• {line.lstrip('•-–* ').strip()}"
+        for line in _clean_lines(str(entry.get("achievements") or "").splitlines())
+        if line.lstrip("•-–* ").strip()
+    ]
+    return [
+        value
+        for value in (title, details, date, *responsibilities, *achievements)
+        if value
+    ]
+
+
 def resume_plain_text(draft: dict[str, object]) -> str:
     """Create a durable text transcript from structured manual-entry content."""
     values = [
@@ -303,9 +373,23 @@ def resume_plain_text(draft: dict[str, object]) -> str:
     if summary:
         values.extend(["Professional Summary", summary])
     sections = draft.get("sections")
+    if not isinstance(sections, dict):
+        sections = {}
+    experience_entries = draft.get("experience_entries")
+    legacy_experience = sections.get("experience")
+    if (
+        isinstance(experience_entries, list) and experience_entries
+    ) or (
+        isinstance(legacy_experience, list) and legacy_experience
+    ):
+        values.append("Experience")
+        if isinstance(experience_entries, list):
+            for entry in experience_entries:
+                values.extend(experience_entry_lines(entry))
+        if isinstance(legacy_experience, list):
+            values.extend(str(line) for line in legacy_experience)
     if isinstance(sections, dict):
         for key, title in (
-            ("experience", "Experience"),
             ("projects", "Projects"),
             ("education", "Education"),
             ("skills", "Skills"),
@@ -349,6 +433,19 @@ def unmapped_resume_content(draft: dict[str, object]) -> list[str]:
         for lines in sections.values():
             if isinstance(lines, list):
                 represented.update(normalized(line) for line in lines)
+    experience_entries = draft.get("experience_entries")
+    if isinstance(experience_entries, list):
+        for entry in experience_entries:
+            if not isinstance(entry, dict):
+                continue
+            represented.update(
+                normalized(line) for line in experience_entry_lines(entry)
+            )
+            for value in entry.values():
+                if isinstance(value, str):
+                    represented.update(
+                        normalized(line) for line in value.splitlines()
+                    )
     custom_sections = draft.get("custom_sections")
     if isinstance(custom_sections, list):
         for custom in custom_sections:
@@ -484,7 +581,13 @@ def standard_template_values(draft: dict[str, object]) -> dict[str, str]:
         }
     )
 
-    experience_lines = [str(value) for value in sections.get("experience", [])] if isinstance(sections.get("experience"), list) else []
+    experience_lines: list[str] = []
+    structured_experience = draft.get("experience_entries")
+    if isinstance(structured_experience, list):
+        for entry in structured_experience:
+            experience_lines.extend(experience_entry_lines(entry))
+    if isinstance(sections.get("experience"), list):
+        experience_lines.extend(str(value) for value in sections["experience"])
     experiences = [_split_entry(block, 4) for block in _entry_blocks(experience_lines, 2)]
     for index, key in enumerate(("axelyn", "armo")):
         if index >= len(experiences):

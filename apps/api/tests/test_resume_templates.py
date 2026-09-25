@@ -14,6 +14,19 @@ class ResumeTemplateTests(unittest.TestCase):
             "headline": "Platform Engineer",
             "contact_line": "taylor@example.com | Kuala Lumpur",
             "summary": "Builds reliable systems.",
+            "experience_entries": [
+                {
+                    "company_name": "Structured Systems",
+                    "job_title": "Platform Engineer",
+                    "employment_type": "Full-time",
+                    "location": "Kuala Lumpur",
+                    "work_arrangement": "Remote",
+                    "start_date": "2024-01",
+                    "currently_working_here": True,
+                    "responsibilities": "Owns platform reliability.",
+                    "achievements": "Reduced recovery time by 40%.",
+                }
+            ],
             "sections": {
                 "experience": ["Engineer | Example", "• Built production APIs."],
                 "projects": ["Open source platform"],
@@ -44,6 +57,8 @@ class ResumeTemplateTests(unittest.TestCase):
                 documents.append(xml)
                 for text in (
                     b"Taylor Example",
+                    b"Structured Systems",
+                    b"Reduced recovery time by 40%",
                     b"Built production APIs",
                     b"PUBLICATIONS",
                     b"Reliable Systems Review",
