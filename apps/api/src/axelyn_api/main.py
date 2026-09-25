@@ -72,6 +72,19 @@ from .storage import create_object_store
 from .store import ServiceRequestStore
 
 
+PROFILE_PHOTO_MAX_BYTES = 5 * 1024 * 1024
+PROFILE_PHOTO_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+PROFILE_PHOTO_METADATA = (
+    "profile_photo_filename",
+    "profile_photo_media_type",
+    "profile_photo_object_key",
+)
+
+
 def _source_summary(row: dict[str, object]) -> ResumeSourceSummary:
     return ResumeSourceSummary(**row)
 
@@ -108,6 +121,63 @@ def _object_prefix(user_id: str) -> str:
     return f"users/{owner_hash}"
 
 
+def _profile_photo_payload(upload: UploadFile) -> tuple[bytes, str, str]:
+    media_type = (upload.content_type or "").split(";", 1)[0].strip().casefold()
+    extension = PROFILE_PHOTO_TYPES.get(media_type)
+    if extension is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Profile photos must be JPEG, PNG, or WebP images.",
+        )
+    payload = upload.file.read(PROFILE_PHOTO_MAX_BYTES + 1)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Choose a non-empty profile photo.",
+        )
+    if len(payload) > PROFILE_PHOTO_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Profile photos are limited to 5 MB.",
+        )
+    signatures = {
+        "image/jpeg": (
+            len(payload) >= 4
+            and payload.startswith(b"\xff\xd8\xff")
+            and payload.endswith(b"\xff\xd9")
+        ),
+        "image/png": (
+            len(payload) >= 24
+            and payload.startswith(b"\x89PNG\r\n\x1a\n")
+            and payload[12:16] == b"IHDR"
+            and int.from_bytes(payload[16:20], "big") > 0
+            and int.from_bytes(payload[20:24], "big") > 0
+        ),
+        "image/webp": (
+            len(payload) >= 20
+            and payload.startswith(b"RIFF")
+            and payload[8:12] == b"WEBP"
+            and payload[12:16] in {b"VP8 ", b"VP8L", b"VP8X"}
+            and int.from_bytes(payload[4:8], "little") + 8 <= len(payload)
+        ),
+    }
+    if not signatures[media_type]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The selected file does not match its image format.",
+        )
+    return payload, media_type, extension
+
+
+def _preserve_profile_photo(
+    draft: dict[str, object], original: dict[str, object]
+) -> None:
+    for key in PROFILE_PHOTO_METADATA:
+        value = original.get(key)
+        if value:
+            draft[key] = value
+
+
 def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
     sections = payload.sections
     experience_entries = [
@@ -134,6 +204,13 @@ def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
         "template_id": payload.template_id,
         "full_name": payload.full_name,
         "headline": payload.headline,
+        "email_address": payload.email_address,
+        "phone_number": payload.phone_number,
+        "location": payload.location,
+        "linkedin_url": payload.linkedin_url,
+        "portfolio_url": payload.portfolio_url,
+        "github_url": payload.github_url,
+        "other_professional_link": payload.other_professional_link,
         "contact_line": payload.contact_line,
         "summary": payload.summary,
         "extracted_text": payload.extracted_text,
@@ -431,6 +508,112 @@ def create_app(
             raise HTTPException(status_code=503, detail="Resume draft is unavailable.") from error
         return _source_detail(row, draft)
 
+    @app.put(
+        "/api/v1/resumes/{source_id}/profile-photo",
+        response_model=ResumeSourceDetail,
+        tags=["resumes"],
+    )
+    def upload_resume_profile_photo(
+        source_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+        photo: Annotated[UploadFile, File()],
+    ) -> ResumeSourceDetail:
+        row = resume_store.get_source(user_id, source_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+        try:
+            draft = decode_json(object_store.get(str(row["draft_object_key"])))
+        except KeyError as error:
+            raise HTTPException(
+                status_code=503, detail="Resume draft is unavailable."
+            ) from error
+        payload, media_type, extension = _profile_photo_payload(photo)
+        old_key = str(draft.get("profile_photo_object_key") or "")
+        new_key = (
+            f"{_object_prefix(user_id)}/sources/{source_id}/profile-photo/"
+            f"{uuid.uuid4().hex}{extension}"
+        )
+        draft["profile_photo_filename"] = _safe_filename(
+            photo.filename or "", f"profile-photo{extension}"
+        )
+        draft["profile_photo_media_type"] = media_type
+        draft["profile_photo_object_key"] = new_key
+        try:
+            object_store.put(new_key, payload, media_type)
+            object_store.put(
+                str(row["draft_object_key"]), encode_json(draft), "application/json"
+            )
+        except Exception:
+            object_store.delete(new_key)
+            raise
+        if old_key and old_key != new_key:
+            object_store.delete(old_key)
+        return _source_detail(row, draft)
+
+    @app.get(
+        "/api/v1/resumes/{source_id}/profile-photo",
+        tags=["resumes"],
+    )
+    def get_resume_profile_photo(
+        source_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> Response:
+        row = resume_store.get_source(user_id, source_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+        try:
+            draft = decode_json(object_store.get(str(row["draft_object_key"])))
+            object_key = str(draft.get("profile_photo_object_key") or "")
+            if not object_key:
+                raise KeyError(source_id)
+            payload = object_store.get(object_key)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Profile photo not found.") from error
+        media_type = str(draft.get("profile_photo_media_type") or "image/jpeg")
+        filename = _safe_filename(
+            str(draft.get("profile_photo_filename") or ""), "profile-photo"
+        )
+        download_name = re.sub(r"[^A-Za-z0-9._-]+", "-", filename).strip("-.")
+        return Response(
+            payload,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": (
+                    f'inline; filename="{download_name or "profile-photo"}"'
+                ),
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.delete(
+        "/api/v1/resumes/{source_id}/profile-photo",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["resumes"],
+    )
+    def delete_resume_profile_photo(
+        source_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> Response:
+        row = resume_store.get_source(user_id, source_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+        try:
+            draft = decode_json(object_store.get(str(row["draft_object_key"])))
+        except KeyError as error:
+            raise HTTPException(
+                status_code=503, detail="Resume draft is unavailable."
+            ) from error
+        object_key = str(draft.pop("profile_photo_object_key", "") or "")
+        draft.pop("profile_photo_filename", None)
+        draft.pop("profile_photo_media_type", None)
+        object_store.put(
+            str(row["draft_object_key"]), encode_json(draft), "application/json"
+        )
+        if object_key:
+            object_store.delete(object_key)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     @app.get(
         "/api/v1/resumes/{source_id}/editable.docx",
         tags=["resumes"],
@@ -494,6 +677,7 @@ def create_app(
                 detail="Resume draft is unavailable.",
             ) from error
         draft["extracted_text"] = str(original_draft.get("extracted_text") or "")
+        _preserve_profile_photo(draft, original_draft)
         has_content = bool(resume_plain_text(draft).strip())
         object_store.put(str(row["draft_object_key"]), encode_json(draft), "application/json")
         updated = resume_store.update_source(
@@ -532,6 +716,7 @@ def create_app(
                 detail="Resume draft is unavailable.",
             ) from error
         draft["extracted_text"] = str(original_draft.get("extracted_text") or "")
+        _preserve_profile_photo(draft, original_draft)
         if not resume_plain_text(draft).strip():
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -562,6 +747,15 @@ def create_app(
         keys = resume_store.source_object_keys(user_id, source_id)
         if keys is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
+        row = resume_store.get_source(user_id, source_id)
+        if row is not None:
+            try:
+                draft = decode_json(object_store.get(str(row["draft_object_key"])))
+                photo_key = str(draft.get("profile_photo_object_key") or "")
+                if photo_key:
+                    keys.append(photo_key)
+            except KeyError:
+                pass
         for key in set(keys):
             object_store.delete(key)
         if not resume_store.delete_source(user_id, source_id):

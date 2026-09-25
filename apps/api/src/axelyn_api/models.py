@@ -8,9 +8,14 @@ from pydantic import (
     EmailStr,
     Field,
     HttpUrl,
+    TypeAdapter,
     field_validator,
     model_validator,
 )
+
+
+_EMAIL_ADAPTER = TypeAdapter(EmailStr)
+_HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 
 
 class Service(BaseModel):
@@ -266,6 +271,17 @@ class ResumeDraft(BaseModel):
     template_id: ResumeTemplateId = "ats-classic"
     full_name: str = Field(default="", max_length=160)
     headline: str = Field(default="", max_length=200)
+    email_address: str = Field(default="", max_length=254)
+    phone_number: str = Field(default="", max_length=60)
+    location: str = Field(default="", max_length=200)
+    linkedin_url: str = Field(default="", max_length=500)
+    portfolio_url: str = Field(default="", max_length=500)
+    github_url: str = Field(default="", max_length=500)
+    other_professional_link: str = Field(default="", max_length=500)
+    profile_photo_filename: str = Field(default="", max_length=180)
+    profile_photo_media_type: Literal[
+        "", "image/jpeg", "image/png", "image/webp"
+    ] = ""
     contact_line: str = Field(default="", max_length=300)
     summary: str = Field(default="", max_length=2_000)
     extracted_text: str = Field(default="", max_length=100_000)
@@ -290,6 +306,25 @@ class ResumeDraft(BaseModel):
         default_factory=list,
         max_length=12,
     )
+
+    @field_validator("email_address")
+    @classmethod
+    def optional_email_is_valid(cls, value: str) -> str:
+        if value:
+            _EMAIL_ADAPTER.validate_python(value)
+        return value
+
+    @field_validator(
+        "linkedin_url",
+        "portfolio_url",
+        "github_url",
+        "other_professional_link",
+    )
+    @classmethod
+    def optional_professional_url_is_valid(cls, value: str) -> str:
+        if value:
+            _HTTP_URL_ADAPTER.validate_python(value)
+        return value
 
     @field_validator("sections")
     @classmethod
@@ -350,6 +385,10 @@ class ResumeImportResponse(BaseModel):
 
 
 class ResumeDraftUpdate(ResumeDraft):
+    full_name: str = Field(min_length=2, max_length=160)
+    email_address: str = Field(min_length=3, max_length=254)
+    phone_number: str = Field(min_length=5, max_length=60)
+    location: str = Field(min_length=2, max_length=200)
     display_name: str = Field(min_length=1, max_length=160)
     target_role: Optional[str] = Field(default=None, max_length=160)
 

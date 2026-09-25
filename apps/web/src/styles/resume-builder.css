@@ -25,6 +25,8 @@
 .builder-section > *,
 .builder-section-heading > *,
 .builder-fields > *,
+.identity-fields > *,
+.profile-photo-field > *,
 .work-experience-card,
 .education-card,
 .project-card,
@@ -36,6 +38,8 @@
 .builder-section-heading h2 { margin: 0; font: 620 clamp(1.75rem,2.5vw,2.8rem) var(--font-display); letter-spacing: -.05em; }
 .builder-section-heading p { margin: 7px 0 0; color: var(--builder-muted); font-size: .65rem; line-height: 1.6; }
 .builder-fields.two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.identity-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
+.identity-field-wide { grid-column: 1 / -1; }
 .builder-section label, .builder-finish label, .custom-section-card label { display: grid; gap: 9px; color: #53656d; font-size: .61rem; font-weight: 800; }
 .builder-section label small { color: #8a969b; font-weight: 500; }
 .builder-section input, .builder-section select, .builder-section textarea, .builder-finish input, .custom-section-card input, .custom-section-card textarea { width: 100%; border: 1px solid #bac5c8; border-radius: 0; padding: 13px 14px; color: var(--builder-ink); background: #fbfcfc; outline: none; font-size: .74rem; transition: border-color .16s,box-shadow .16s; }
@@ -47,6 +51,18 @@
 .builder-subsection-heading h3 { margin: 0; font: 620 1.15rem var(--font-display); letter-spacing: -.035em; }
 .builder-subsection-heading p { max-width: 620px; margin: 0; color: var(--builder-muted); font-size: .61rem; line-height: 1.6; }
 .builder-field-label { margin: 5px 0 -4px; color: #53656d; font-size: .61rem; font-weight: 800; }
+.profile-photo-field { display: grid; grid-template-columns: 92px minmax(0,1fr) auto; gap: 20px; align-items: center; border: 1px solid #c5ced1; padding: 18px; background: #fafbfb; }
+.profile-photo-preview { width: 92px; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; border: 1px solid #bac5c8; color: #7c8a90; background: #edf1f2; font: .5rem var(--font-mono); letter-spacing: .12em; }
+.profile-photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.profile-photo-copy { min-width: 0; display: grid; gap: 5px; }
+.profile-photo-copy p { margin: 0; color: #53656d; font-size: .61rem; font-weight: 800; }
+.profile-photo-copy p small { color: #8a969b; font-weight: 500; }
+.profile-photo-copy > span { overflow: hidden; color: var(--builder-ink); font-size: .72rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.profile-photo-copy > small { max-width: 590px; color: #819096; font-size: .54rem; line-height: 1.5; }
+.profile-photo-actions { display: flex; align-items: center; gap: 10px; }
+.profile-photo-upload { min-height: 42px; display: grid !important; place-items: center; border: 1px solid var(--builder-ink); padding: 0 15px; color: white !important; background: var(--builder-ink); cursor: pointer; white-space: nowrap; }
+.profile-photo-upload input { position: absolute; width: 1px !important; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.profile-photo-actions button { border: 0; border-bottom: 1px solid #d8a28c; padding: 5px 0; color: #8f4b35; background: transparent; font-size: .57rem; cursor: pointer; }
 
 .builder-action-heading { grid-template-columns: auto minmax(0,1fr) auto; }
 .builder-action-heading > button { min-height: 40px; border: 1px solid #9facb1; padding: 0 14px; color: var(--builder-ink); background: white; font-size: .61rem; font-weight: 800; cursor: pointer; }
@@ -175,7 +191,11 @@
   .builder-header { min-height: 0; padding: 48px 20px; }
   .builder-header h1 { font-size: clamp(3.2rem,15vw,5.4rem); }
   .builder-section { padding: 45px 20px 55px; }
-  .builder-fields.two-up, .work-experience-fields, .education-fields, .education-optional-fields, .project-fields, .project-story-fields, .project-optional-fields, .skill-category-fields, .custom-section-card, .source-inbox:not([hidden]), .legacy-experience:not([hidden]), .legacy-education:not([hidden]), .legacy-projects:not([hidden]), .legacy-skills:not([hidden]), .builder-finish { grid-template-columns: 1fr; }
+  .builder-fields.two-up, .identity-fields, .work-experience-fields, .education-fields, .education-optional-fields, .project-fields, .project-story-fields, .project-optional-fields, .skill-category-fields, .custom-section-card, .source-inbox:not([hidden]), .legacy-experience:not([hidden]), .legacy-education:not([hidden]), .legacy-projects:not([hidden]), .legacy-skills:not([hidden]), .builder-finish { grid-template-columns: 1fr; }
+  .identity-field-wide { grid-column: 1; }
+  .profile-photo-field { grid-template-columns: 76px minmax(0,1fr); }
+  .profile-photo-preview { width: 76px; }
+  .profile-photo-actions { grid-column: 1 / -1; }
   .work-field-wide, .education-field-wide, .project-field-wide { grid-column: 1; }
   .education-optional summary, .project-optional summary { align-items: start; flex-wrap: wrap; }
   .education-optional summary small, .project-optional summary small { width: calc(100% - 28px); margin-left: 0; }

@@ -1,3 +1,4 @@
+import base64
 import sqlite3
 import tempfile
 import unittest
@@ -250,6 +251,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(200, detail.status_code)
         source = detail.json()
         self.assertEqual("Taylor Example", source["draft"]["full_name"])
+        source["draft"]["location"] = "Kuala Lumpur, Malaysia"
         original_transcript = source["draft"]["extracted_text"]
         source["draft"]["sections"]["experience"][-1] = (
             "• Delivered editable resume content through Forge."
@@ -387,7 +389,13 @@ class ApiTests(unittest.TestCase):
                 "template_id": "ats-modern",
                 "full_name": "Taylor Example",
                 "headline": "Platform Engineer",
-                "contact_line": "taylor@example.com | Kuala Lumpur",
+                "email_address": "taylor@example.com",
+                "phone_number": "+60 12-345 6789",
+                "location": "Kuala Lumpur, Malaysia",
+                "linkedin_url": "https://linkedin.com/in/taylor-example",
+                "portfolio_url": "https://taylor.example",
+                "github_url": "https://github.com/taylor-example",
+                "other_professional_link": "https://kaggle.com/taylor-example",
                 "summary": "Builds reliable systems.",
                 "sections": {
                     "skills": ["Python, PostgreSQL, Docker"],
@@ -497,6 +505,30 @@ class ApiTests(unittest.TestCase):
             "Publications", source["draft"]["custom_sections"][0]["title"]
         )
 
+        photo_payload = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+            "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        )
+        uploaded_photo = self.client.put(
+            f"/api/v1/resumes/{source_id}/profile-photo",
+            headers=headers,
+            files={"photo": ("taylor.png", photo_payload, "image/png")},
+        )
+        self.assertEqual(200, uploaded_photo.status_code, uploaded_photo.text)
+        source = uploaded_photo.json()
+        self.assertEqual("taylor.png", source["draft"]["profile_photo_filename"])
+        self.assertEqual("image/png", source["draft"]["profile_photo_media_type"])
+        downloaded_photo = self.client.get(
+            f"/api/v1/resumes/{source_id}/profile-photo", headers=headers
+        )
+        other_photo = self.client.get(
+            f"/api/v1/resumes/{source_id}/profile-photo",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        self.assertEqual(photo_payload, downloaded_photo.content)
+        self.assertEqual("private, no-store", downloaded_photo.headers["cache-control"])
+        self.assertEqual(404, other_photo.status_code)
+
         accepted = self.client.post(
             f"/api/v1/resumes/{source_id}/accept",
             headers=headers,
@@ -522,6 +554,9 @@ class ApiTests(unittest.TestCase):
             document_xml = archive.read("word/document.xml")
         self.assertIn(b"PUBLICATIONS", document_xml)
         self.assertIn(b"Reliable Systems Review", document_xml)
+        self.assertIn(b"taylor@example.com", document_xml)
+        self.assertIn(b"Kuala Lumpur, Malaysia", document_xml)
+        self.assertIn(b"https://github.com/taylor-example", document_xml)
         self.assertIn(b"Example Systems", document_xml)
         self.assertIn(b"Own reliable backend services", document_xml)
         self.assertIn(b"Jan 2022", document_xml)
@@ -538,6 +573,15 @@ class ApiTests(unittest.TestCase):
         self.assertIn(b"Feb 2024", document_xml)
         self.assertIn(b"Framework: Django, FastAPI", document_xml)
         self.assertIn(b"Programming Language: Python, Go", document_xml)
+
+        removed_photo = self.client.delete(
+            f"/api/v1/resumes/{source_id}/profile-photo", headers=headers
+        )
+        missing_photo = self.client.get(
+            f"/api/v1/resumes/{source_id}/profile-photo", headers=headers
+        )
+        self.assertEqual(204, removed_photo.status_code)
+        self.assertEqual(404, missing_photo.status_code)
 
         other_read = self.client.get(
             f"/api/v1/resumes/{source_id}",

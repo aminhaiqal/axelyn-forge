@@ -17,6 +17,7 @@ from .resume_import import (
     experience_entry_lines,
     project_entry_lines,
     skill_category_lines,
+    resume_contact_line,
 )
 
 
@@ -207,7 +208,7 @@ def render_resume(
         run = headline.add_run(headline_value)
         _font(run, spec, size=spec.body_size + 1, bold=True)
 
-    contact_value = str(draft.get("contact_line") or "").strip()
+    contact_value = resume_contact_line(draft)
     if contact_value:
         contact = document.add_paragraph()
         contact.alignment = identity.alignment

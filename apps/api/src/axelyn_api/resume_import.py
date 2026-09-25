@@ -29,6 +29,10 @@ W_NUM_PROPERTIES = f"{{{WORD_NAMESPACE}}}numPr"
 
 EMAIL_PATTERN = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
 PHONE_PATTERN = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
+URL_PATTERN = re.compile(
+    r"(?:https?://|www\.)[^\s|,;]+|(?:linkedin|github)\.com/[^\s|,;]+",
+    re.IGNORECASE,
+)
 DATE_PATTERN = re.compile(
     r"(?:19|20)\d{2}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*",
     re.IGNORECASE,
@@ -211,6 +215,13 @@ def normalize_resume_text(text: str) -> dict[str, object]:
         return {
             "full_name": "",
             "headline": "",
+            "email_address": "",
+            "phone_number": "",
+            "location": "",
+            "linkedin_url": "",
+            "portfolio_url": "",
+            "github_url": "",
+            "other_professional_link": "",
             "contact_line": "",
             "summary": "",
             "sections": {},
@@ -218,8 +229,51 @@ def normalize_resume_text(text: str) -> dict[str, object]:
 
     email = next((match.group(0) for line in lines if (match := EMAIL_PATTERN.search(line))), "")
     phone = next((match.group(0) for line in lines if (match := PHONE_PATTERN.search(line))), "")
-    links = [line for line in lines if "linkedin.com/" in line.casefold()][:1]
-    contact_parts = [value for value in (email, phone, *links) if value]
+    urls = [
+        value
+        if value.casefold().startswith(("http://", "https://"))
+        else f"https://{value}"
+        for line in lines
+        for match in URL_PATTERN.finditer(line)
+        if (value := match.group(0).rstrip(".)"))
+    ]
+    linkedin_url = next((url for url in urls if "linkedin.com/" in url.casefold()), "")
+    github_url = next((url for url in urls if "github.com/" in url.casefold()), "")
+    portfolio_url = next(
+        (url for url in urls if url not in {linkedin_url, github_url}),
+        "",
+    )
+    other_link = next(
+        (url for url in urls if url not in {linkedin_url, github_url, portfolio_url}),
+        "",
+    )
+    location = next(
+        (
+            part.strip()
+            for line in lines
+            if EMAIL_PATTERN.search(line)
+            or PHONE_PATTERN.search(line)
+            or URL_PATTERN.search(line)
+            for part in line.split("|")
+            if part.strip()
+            and not EMAIL_PATTERN.search(part)
+            and not PHONE_PATTERN.search(part)
+            and not URL_PATTERN.search(part)
+        ),
+        "",
+    )
+    contact_parts = [
+        value
+        for value in (
+            email,
+            phone,
+            linkedin_url,
+            github_url,
+            portfolio_url,
+            other_link,
+        )
+        if value
+    ]
 
     first_heading = next(
         (
@@ -234,7 +288,7 @@ def normalize_resume_text(text: str) -> dict[str, object]:
         for line in lines[:first_heading]
         if not EMAIL_PATTERN.search(line)
         and not PHONE_PATTERN.search(line)
-        and "linkedin.com/" not in line.casefold()
+        and not URL_PATTERN.search(line)
     ]
     full_name = header[0] if header else lines[0]
     headline = header[1] if len(header) > 1 else ""
@@ -269,6 +323,13 @@ def normalize_resume_text(text: str) -> dict[str, object]:
     return {
         "full_name": full_name[:160],
         "headline": headline[:200],
+        "email_address": email[:254],
+        "phone_number": phone[:60],
+        "location": location[:200],
+        "linkedin_url": linkedin_url[:500],
+        "portfolio_url": portfolio_url[:500],
+        "github_url": github_url[:500],
+        "other_professional_link": other_link[:500],
         "contact_line": " | ".join(contact_parts)[:300],
         "summary": summary[:2_000],
         "sections": sections,
@@ -549,12 +610,35 @@ def skill_category_lines(entry: object) -> list[str]:
     return [f"{category}: {', '.join(skills)}"]
 
 
+def resume_contact_line(draft: dict[str, object]) -> str:
+    """Build the public-facing identity line from structured contact fields."""
+    values: list[str] = []
+    seen: set[str] = set()
+    for field in (
+        "email_address",
+        "phone_number",
+        "location",
+        "linkedin_url",
+        "portfolio_url",
+        "github_url",
+        "other_professional_link",
+    ):
+        value = str(draft.get(field) or "").strip()
+        key = value.casefold()
+        if value and key not in seen:
+            values.append(value)
+            seen.add(key)
+    if values:
+        return " | ".join(values)
+    return str(draft.get("contact_line") or "").strip()
+
+
 def resume_plain_text(draft: dict[str, object]) -> str:
     """Create a durable text transcript from structured manual-entry content."""
     values = [
         str(draft.get("full_name") or ""),
         str(draft.get("headline") or ""),
-        str(draft.get("contact_line") or ""),
+        resume_contact_line(draft),
     ]
     summary = str(draft.get("summary") or "").strip()
     if summary:
@@ -648,8 +732,21 @@ def unmapped_resume_content(draft: dict[str, object]) -> list[str]:
         normalized(draft.get("full_name")),
         normalized(draft.get("headline")),
         normalized(draft.get("contact_line")),
+        normalized(resume_contact_line(draft)),
         normalized(draft.get("summary")),
     }
+    represented.update(
+        normalized(draft.get(field))
+        for field in (
+            "email_address",
+            "phone_number",
+            "location",
+            "linkedin_url",
+            "portfolio_url",
+            "github_url",
+            "other_professional_link",
+        )
+    )
     sections = draft.get("sections")
     if isinstance(sections, dict):
         for lines in sections.values():
@@ -836,7 +933,7 @@ def standard_template_values(draft: dict[str, object]) -> dict[str, str]:
         {
             "profile.fullName": str(draft.get("full_name") or ""),
             "profile.headline": str(draft.get("headline") or draft.get("target_role") or ""),
-            "profile.contactLine": str(draft.get("contact_line") or ""),
+            "profile.contactLine": resume_contact_line(draft),
             "summary.text": str(draft.get("summary") or ""),
         }
     )

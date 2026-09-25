@@ -31,12 +31,20 @@ if (builderPage instanceof HTMLElement) {
   const transcriptPanel = document.querySelector("#source-transcript");
   const transcriptContent = document.querySelector("#source-transcript-content");
   const downloads = document.querySelector("#builder-downloads");
+  const profilePhotoInput = document.querySelector("#profile-photo-input");
+  const profilePhotoPreview = document.querySelector("#profile-photo-preview");
+  const profilePhotoPlaceholder = document.querySelector("#profile-photo-placeholder");
+  const profilePhotoName = document.querySelector("#profile-photo-name");
+  const removeProfilePhoto = document.querySelector("#remove-profile-photo");
   let sourceId = new URLSearchParams(window.location.search).get("source") || "";
   let currentUnmapped = [];
   let workEntrySequence = 0;
   let educationEntrySequence = 0;
   let projectEntrySequence = 0;
   let skillCategorySequence = 0;
+  let pendingProfilePhoto = null;
+  let profilePhotoRemoved = false;
+  let profilePhotoObjectUrl = "";
 
   const api = async (path, options = {}) => {
     const response = await fetch(`${apiBase}${path}`, { credentials: "same-origin", ...options });
@@ -63,6 +71,80 @@ if (builderPage instanceof HTMLElement) {
   const setField = (name, value) => {
     const element = field(name);
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) element.value = value || "";
+  };
+
+  const clearProfilePhotoObjectUrl = () => {
+    if (profilePhotoObjectUrl) URL.revokeObjectURL(profilePhotoObjectUrl);
+    profilePhotoObjectUrl = "";
+  };
+
+  const showProfilePhoto = (url = "", filename = "") => {
+    clearProfilePhotoObjectUrl();
+    if (url.startsWith("blob:")) profilePhotoObjectUrl = url;
+    if (profilePhotoPreview instanceof HTMLImageElement) {
+      profilePhotoPreview.src = url;
+      profilePhotoPreview.hidden = !url;
+    }
+    if (profilePhotoPlaceholder instanceof HTMLElement) profilePhotoPlaceholder.hidden = Boolean(url);
+    if (profilePhotoName instanceof HTMLElement) profilePhotoName.textContent = filename || "No photo selected";
+    if (removeProfilePhoto instanceof HTMLButtonElement) removeProfilePhoto.hidden = !url;
+  };
+
+  const hydrateLegacyContact = (draft) => {
+    const legacy = String(draft.contact_line || "").trim();
+    if (!legacy) return;
+    const parts = legacy.split(/\s*\|\s*/).map((part) => part.trim()).filter(Boolean);
+    parts.forEach((part) => {
+      const lower = part.toLowerCase();
+      if (!String(field("email_address")?.value || "") && part.includes("@")) setField("email_address", part);
+      else if (!String(field("phone_number")?.value || "") && /\d[\d\s().-]{7,}/.test(part)) setField("phone_number", part);
+      else if (!String(field("linkedin_url")?.value || "") && lower.includes("linkedin.com/")) setField("linkedin_url", part.startsWith("http") ? part : `https://${part}`);
+      else if (!String(field("github_url")?.value || "") && lower.includes("github.com/")) setField("github_url", part.startsWith("http") ? part : `https://${part}`);
+      else if (!String(field("location")?.value || "") && !lower.startsWith("http")) setField("location", part);
+    });
+  };
+
+  const loadProfilePhoto = async (source) => {
+    pendingProfilePhoto = null;
+    profilePhotoRemoved = false;
+    if (!(profilePhotoInput instanceof HTMLInputElement)) return;
+    profilePhotoInput.value = "";
+    if (!source.draft.profile_photo_filename) {
+      showProfilePhoto();
+      return;
+    }
+    const response = await fetch(`${apiBase}/api/v1/resumes/${source.id}/profile-photo`, {
+      credentials: "same-origin",
+    });
+    if (response.status === 401) {
+      window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+      return;
+    }
+    if (!response.ok) {
+      showProfilePhoto();
+      return;
+    }
+    showProfilePhoto(URL.createObjectURL(await response.blob()), source.draft.profile_photo_filename);
+  };
+
+  const syncProfilePhoto = async () => {
+    if (!sourceId) return;
+    if (profilePhotoRemoved) {
+      await api(`/api/v1/resumes/${sourceId}/profile-photo`, { method: "DELETE" });
+      profilePhotoRemoved = false;
+    }
+    if (pendingProfilePhoto instanceof File) {
+      const body = new FormData();
+      body.append("photo", pendingProfilePhoto);
+      const updated = await api(`/api/v1/resumes/${sourceId}/profile-photo`, {
+        method: "PUT",
+        body,
+      });
+      pendingProfilePhoto = null;
+      if (profilePhotoName instanceof HTMLElement) {
+        profilePhotoName.textContent = updated.draft.profile_photo_filename || "Profile photo";
+      }
+    }
   };
   const lines = (name) => {
     const element = field(name);
@@ -451,6 +533,13 @@ if (builderPage instanceof HTMLElement) {
       template_id: selectedTemplate instanceof HTMLInputElement ? selectedTemplate.value : "ats-classic",
       full_name: String(field("full_name")?.value || "").trim(),
       headline: String(field("headline")?.value || "").trim(),
+      email_address: String(field("email_address")?.value || "").trim(),
+      phone_number: String(field("phone_number")?.value || "").trim(),
+      location: String(field("location")?.value || "").trim(),
+      linkedin_url: String(field("linkedin_url")?.value || "").trim(),
+      portfolio_url: String(field("portfolio_url")?.value || "").trim(),
+      github_url: String(field("github_url")?.value || "").trim(),
+      other_professional_link: String(field("other_professional_link")?.value || "").trim(),
       contact_line: String(field("contact_line")?.value || "").trim(),
       summary: String(field("summary")?.value || "").trim(),
       extracted_text: String(field("extracted_text")?.value || ""),
@@ -502,6 +591,7 @@ if (builderPage instanceof HTMLElement) {
         });
       sourceId = saved.id;
       window.history.replaceState({}, "", `/app/resume?source=${encodeURIComponent(sourceId)}`);
+      await syncProfilePhoto();
       setField("extracted_text", saved.draft.extracted_text || "");
       renderUnmapped(saved.unmapped_content || []);
       const transcript = saved.draft.extracted_text || "";
@@ -552,7 +642,15 @@ if (builderPage instanceof HTMLElement) {
       setField("target_role", source.target_role || "");
       setField("full_name", source.draft.full_name || "");
       setField("headline", source.draft.headline || "");
+      setField("email_address", source.draft.email_address || "");
+      setField("phone_number", source.draft.phone_number || "");
+      setField("location", source.draft.location || "");
+      setField("linkedin_url", source.draft.linkedin_url || "");
+      setField("portfolio_url", source.draft.portfolio_url || "");
+      setField("github_url", source.draft.github_url || "");
+      setField("other_professional_link", source.draft.other_professional_link || "");
       setField("contact_line", source.draft.contact_line || "");
+      hydrateLegacyContact(source.draft);
       setField("summary", source.draft.summary || "");
       setField("extracted_text", source.draft.extracted_text || "");
       const importedSkills = source.draft.sections?.skills || [];
@@ -590,6 +688,7 @@ if (builderPage instanceof HTMLElement) {
       if (transcriptContent instanceof HTMLElement) transcriptContent.textContent = transcript;
       const variantName = field("variant_name");
       if (variantName instanceof HTMLInputElement) variantName.value = source.target_role ? `${source.target_role} — Master` : source.display_name;
+      await loadProfilePhoto(source);
       setStatus(source.warning || "Resume loaded. Every edit stays in this private source.", "success");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The resume could not be loaded.", "error");
@@ -674,6 +773,27 @@ if (builderPage instanceof HTMLElement) {
     if (!currentUnmapped.length) return;
     addCustomSection({ title: "Imported content", lines: currentUnmapped });
     renderUnmapped([]);
+  });
+  profilePhotoInput?.addEventListener("change", () => {
+    if (!(profilePhotoInput instanceof HTMLInputElement)) return;
+    const photo = profilePhotoInput.files?.[0];
+    if (!photo) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(photo.type) || photo.size > 5 * 1024 * 1024) {
+      profilePhotoInput.value = "";
+      setStatus("Choose a JPEG, PNG, or WebP profile photo no larger than 5 MB.", "error");
+      return;
+    }
+    pendingProfilePhoto = photo;
+    profilePhotoRemoved = false;
+    showProfilePhoto(URL.createObjectURL(photo), photo.name);
+    setStatus("Profile photo selected. Save the draft to upload it privately.");
+  });
+  removeProfilePhoto?.addEventListener("click", () => {
+    pendingProfilePhoto = null;
+    profilePhotoRemoved = Boolean(sourceId);
+    if (profilePhotoInput instanceof HTMLInputElement) profilePhotoInput.value = "";
+    showProfilePhoto();
+    setStatus(sourceId ? "Profile photo will be removed when you save." : "Profile photo removed.");
   });
   saveButton?.addEventListener("click", () => save());
   form?.addEventListener("submit", (event) => {

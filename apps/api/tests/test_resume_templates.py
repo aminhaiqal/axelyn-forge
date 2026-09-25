@@ -16,7 +16,12 @@ class ResumeTemplateTests(unittest.TestCase):
         draft = {
             "full_name": "Taylor Example",
             "headline": "Platform Engineer",
-            "contact_line": "taylor@example.com | Kuala Lumpur",
+            "email_address": "taylor@example.com",
+            "phone_number": "+60 12-345 6789",
+            "location": "Kuala Lumpur, Malaysia",
+            "linkedin_url": "https://linkedin.com/in/taylor-example",
+            "portfolio_url": "https://taylor.example",
+            "github_url": "https://github.com/taylor-example",
             "summary": "Builds reliable systems.",
             "experience_entries": [
                 {
@@ -82,6 +87,12 @@ class ResumeTemplateTests(unittest.TestCase):
         }
 
         template_values = standard_template_values(draft)
+        self.assertEqual(
+            "taylor@example.com | +60 12-345 6789 | Kuala Lumpur, Malaysia | "
+            "https://linkedin.com/in/taylor-example | https://taylor.example | "
+            "https://github.com/taylor-example",
+            template_values["profile.contactLine"],
+        )
         self.assertEqual("Monitorscape", template_values["project.monitorscape.title"])
         self.assertEqual(
             "Python, FastAPI, PostgreSQL, Docker",
@@ -116,6 +127,8 @@ class ResumeTemplateTests(unittest.TestCase):
                 documents.append(xml)
                 for text in (
                     b"Taylor Example",
+                    b"taylor@example.com",
+                    b"https://github.com/taylor-example",
                     b"Structured Systems",
                     b"Reduced recovery time by 40%",
                     b"Built production APIs",
@@ -137,6 +150,18 @@ class ResumeTemplateTests(unittest.TestCase):
             self.assertEqual(3, len(set(documents)))
 
     def test_import_recognizes_custom_sections_and_surfaces_unmapped_lines(self):
+        contact = normalize_resume_text(
+            "Taylor Example\nPlatform Engineer\n"
+            "taylor@example.com | +60 12-345 6789 | Klang, Selangor, Malaysia | "
+            "linkedin.com/in/taylor-example\nSummary\nBuilds reliable systems."
+        )
+        self.assertEqual("taylor@example.com", contact["email_address"])
+        self.assertEqual("+60 12-345 6789", contact["phone_number"])
+        self.assertEqual("Klang, Selangor, Malaysia", contact["location"])
+        self.assertEqual(
+            "https://linkedin.com/in/taylor-example", contact["linkedin_url"]
+        )
+
         normalized = normalize_resume_text(
             "Taylor Example\nPlatform Engineer\ntaylor@example.com\n"
             "Experience\nEngineer | Example\n2022 - Present\n"
@@ -150,6 +175,7 @@ class ResumeTemplateTests(unittest.TestCase):
             ["Languages", "Certifications", "Publications", "Security Clearance"],
             [section["title"] for section in normalized["custom_sections"]],
         )
+        self.assertEqual("taylor@example.com", normalized["email_address"])
         draft = {
             **normalized,
             "extracted_text": (

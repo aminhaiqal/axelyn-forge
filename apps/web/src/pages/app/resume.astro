@@ -45,12 +45,36 @@ if (!isAuthenticated) {
         </section>
 
         <section class="builder-section">
-          <div class="builder-section-heading"><span>01</span><div><h2>Identity</h2><p>Your name, contact details, professional direction, and document settings.</p></div></div>
-          <div class="builder-fields two-up">
-            <label><span>Full name</span><input name="full_name" maxlength="160" autocomplete="name" placeholder="Your full name" required /></label>
-            <label><span>Professional headline</span><input name="headline" maxlength="200" placeholder="Software engineer focused on accessible products" /></label>
+          <div class="builder-section-heading"><span>01</span><div><h2>Basic information</h2><p>The contact details and professional links recruiters need to identify and reach you.</p></div></div>
+          <input name="contact_line" type="hidden" />
+          <div class="identity-fields">
+            <label><span>Full Name *</span><input name="full_name" maxlength="160" minlength="2" autocomplete="name" placeholder="Muhammad Amin Haiqal" required /></label>
+            <label><span>Professional Title</span><input name="headline" maxlength="200" autocomplete="organization-title" placeholder="Software Engineer" /></label>
+            <label><span>Email Address *</span><input name="email_address" type="email" maxlength="254" autocomplete="email" placeholder="amin@example.com" required /></label>
+            <label><span>Phone Number *</span><input name="phone_number" type="tel" maxlength="60" minlength="5" autocomplete="tel" placeholder="+60 12-345 6789" required /></label>
+            <label class="identity-field-wide"><span>Location *</span><input name="location" maxlength="200" minlength="2" autocomplete="address-level2" placeholder="Klang, Selangor, Malaysia" required /><small>City, State, Country</small></label>
+            <label><span>LinkedIn URL <small>optional</small></span><input name="linkedin_url" type="url" maxlength="500" autocomplete="url" placeholder="https://linkedin.com/in/your-name" /></label>
+            <label><span>Portfolio / Personal Website <small>optional</small></span><input name="portfolio_url" type="url" maxlength="500" placeholder="https://yourname.com" /></label>
+            <label><span>GitHub URL <small>optional</small></span><input name="github_url" type="url" maxlength="500" placeholder="https://github.com/your-name" /><small>Especially useful for technical roles.</small></label>
+            <label><span>Other Professional Link <small>optional</small></span><input name="other_professional_link" type="url" maxlength="500" placeholder="https://behance.net/your-name" /><small>Behance, Dribbble, Kaggle, Google Scholar, or another relevant profile.</small></label>
           </div>
-          <label><span>Contact line</span><input name="contact_line" maxlength="300" placeholder="email@example.com | +60 … | Kuala Lumpur | linkedin.com/in/…" /></label>
+
+          <div class="profile-photo-field">
+            <div class="profile-photo-preview" aria-hidden="true">
+              <span id="profile-photo-placeholder">PHOTO</span>
+              <img id="profile-photo-preview" alt="Selected profile photo preview" hidden />
+            </div>
+            <div class="profile-photo-copy">
+              <p>Profile Photo <small>optional</small></p>
+              <span id="profile-photo-name">No photo selected</span>
+              <small>JPEG, PNG, or WebP up to 5 MB. Stored privately; current ATS templates keep photos out of generated files.</small>
+            </div>
+            <div class="profile-photo-actions">
+              <label class="profile-photo-upload" for="profile-photo-input">Upload photo<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" /></label>
+              <button id="remove-profile-photo" type="button" hidden>Remove</button>
+            </div>
+          </div>
+
           <label><span>Professional summary</span><textarea name="summary" rows="5" maxlength="2000" placeholder="Write 2–4 concise sentences about your experience, strengths, and direction."></textarea></label>
 
           <div class="builder-subsection">
