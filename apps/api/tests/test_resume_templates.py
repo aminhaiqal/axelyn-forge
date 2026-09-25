@@ -58,12 +58,14 @@ class ResumeTemplateTests(unittest.TestCase):
         normalized = normalize_resume_text(
             "Taylor Example\nPlatform Engineer\ntaylor@example.com\n"
             "Experience\nEngineer | Example\n2022 - Present\n"
+            "Languages\nEnglish and Malay\n"
+            "Certifications\nAWS Solutions Architect\n"
             "Publications\nReliable Systems Review\n"
             "Security Clearance\nSecret"
         )
 
         self.assertEqual(
-            ["Publications", "Security Clearance"],
+            ["Languages", "Certifications", "Publications", "Security Clearance"],
             [section["title"] for section in normalized["custom_sections"]],
         )
         draft = {

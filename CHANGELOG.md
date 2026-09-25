@@ -10,7 +10,7 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 - Added Classic, Modern, and Compact single-column ATS-friendly templates that render every populated section into Word and PDF.
 - Added authenticated structured resume creation and a public resume-template catalog to the versioned API.
 - Added private source-level Word draft generation so imported PDF or DOCX content can be downloaded as an editable `.docx` before approval.
-- Added section-based browser editing for experience, projects, education, skills, languages, and additional resume content.
+- Added section-based browser editing for identity, education, work experience, projects, skills, and custom resume content.
 - Added a private, resource-bounded LibreOffice conversion service and standard resume generation as matched DOCX/PDF bundles.
 - Added owner-scoped generated-document listing so authenticated users can return to their latest downloads.
 - Added a private job-match workspace for pasted descriptions and PDF, DOCX, TXT, PNG, or JPEG uploads, with three clear match states and evidence-gap guidance.
@@ -19,6 +19,7 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ### Changed
 
+- Reorganized the resume builder into Identity, Educational background, Work experience, Projects, Skills, and a final Custom sections stage, while carrying legacy language and additional fields into editable custom sections.
 - Removed the dark standard-template promotion panel from the resume library and made the source workspace full width.
 - Replaced authenticated workspace headers with a responsive white sidebar that expands on desktop, collapses to a tablet rail, and becomes a compact mobile navigation bar.
 - Updated the responsive resume workspace to expose persistent DOCX and PDF download controls for each approved role version.

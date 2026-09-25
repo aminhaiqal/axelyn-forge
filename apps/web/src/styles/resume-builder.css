@@ -32,6 +32,11 @@
 .builder-section input, .builder-section textarea, .builder-finish input, .custom-section-card input, .custom-section-card textarea { width: 100%; border: 1px solid #bac5c8; border-radius: 0; padding: 13px 14px; color: var(--builder-ink); background: #fbfcfc; outline: none; font-size: .74rem; transition: border-color .16s,box-shadow .16s; }
 .builder-section textarea, .custom-section-card textarea { resize: vertical; line-height: 1.65; }
 .builder-section input:focus, .builder-section textarea:focus, .builder-finish input:focus, .custom-section-card input:focus, .custom-section-card textarea:focus { border-color: var(--color-copper); box-shadow: 0 0 0 3px rgba(231,104,60,.1); }
+.builder-subsection { display: grid; gap: 20px; margin-top: 18px; padding-top: 32px; border-top: 1px solid var(--builder-line); }
+.builder-subsection-heading { display: flex; align-items: end; justify-content: space-between; gap: 30px; }
+.builder-subsection-heading h3 { margin: 0; font: 620 1.15rem var(--font-display); letter-spacing: -.035em; }
+.builder-subsection-heading p { max-width: 620px; margin: 0; color: var(--builder-muted); font-size: .61rem; line-height: 1.6; }
+.builder-field-label { margin: 5px 0 -4px; color: #53656d; font-size: .61rem; font-weight: 800; }
 
 .source-inbox { grid-template-columns: minmax(260px,.8fr) minmax(300px,1.2fr); gap: 45px; align-items: start; margin: 52px clamp(24px,6vw,95px) 0; padding: 30px; border: 1px solid #d7b49f; background: #fff8f4; }
 .source-inbox:not([hidden]) { display: grid; }
@@ -98,6 +103,7 @@
   .builder-header h1 { font-size: clamp(3.2rem,15vw,5.4rem); }
   .builder-section { padding: 45px 20px 55px; }
   .builder-fields.two-up, .custom-section-card, .source-inbox:not([hidden]), .builder-finish { grid-template-columns: 1fr; }
+  .builder-subsection-heading { display: grid; gap: 8px; }
   .source-inbox { margin: 35px 20px 0; padding: 22px; }
   .source-inbox button { grid-column: 1; }
   .custom-heading { grid-template-columns: auto 1fr; }

@@ -34,18 +34,6 @@ if (!isAuthenticated) {
       <form class="resume-builder-form" id="resume-builder-form">
         <textarea name="extracted_text" hidden></textarea>
 
-        <section class="builder-section">
-          <div class="builder-section-heading"><span>01</span><div><h2>Identity</h2><p>How recruiters should identify this resume and its direction.</p></div></div>
-          <div class="builder-fields two-up">
-            <label><span>Library name</span><input name="display_name" maxlength="160" placeholder="My software engineering resume" required /></label>
-            <label><span>Target role <small>optional</small></span><input name="target_role" maxlength="160" placeholder="Frontend Engineer" /></label>
-            <label><span>Full name</span><input name="full_name" maxlength="160" autocomplete="name" placeholder="Your full name" required /></label>
-            <label><span>Professional headline</span><input name="headline" maxlength="200" placeholder="Software engineer focused on accessible products" /></label>
-          </div>
-          <label><span>Contact line</span><input name="contact_line" maxlength="300" placeholder="email@example.com | +60 … | Kuala Lumpur | linkedin.com/in/…" /></label>
-          <label><span>Professional summary</span><textarea name="summary" rows="5" maxlength="2000" placeholder="Write 2–4 concise sentences about your experience, strengths, and direction."></textarea></label>
-        </section>
-
         <section class="source-inbox" id="source-inbox" hidden>
           <div>
             <p>Imported source inbox</p>
@@ -57,55 +45,83 @@ if (!isAuthenticated) {
         </section>
 
         <section class="builder-section">
-          <div class="builder-section-heading"><span>02</span><div><h2>Career content</h2><p>Use one line for each heading, date, skill group, or achievement. Start achievements with • or -.</p></div></div>
-          <label><span>Experience</span><textarea name="section_experience" rows="12" maxlength="30000" placeholder={`Software Engineer | Example Company
+          <div class="builder-section-heading"><span>01</span><div><h2>Identity</h2><p>Your name, contact details, professional direction, and document settings.</p></div></div>
+          <div class="builder-fields two-up">
+            <label><span>Full name</span><input name="full_name" maxlength="160" autocomplete="name" placeholder="Your full name" required /></label>
+            <label><span>Professional headline</span><input name="headline" maxlength="200" placeholder="Software engineer focused on accessible products" /></label>
+          </div>
+          <label><span>Contact line</span><input name="contact_line" maxlength="300" placeholder="email@example.com | +60 … | Kuala Lumpur | linkedin.com/in/…" /></label>
+          <label><span>Professional summary</span><textarea name="summary" rows="5" maxlength="2000" placeholder="Write 2–4 concise sentences about your experience, strengths, and direction."></textarea></label>
+
+          <div class="builder-subsection">
+            <div class="builder-subsection-heading">
+              <h3>Resume settings</h3>
+              <p>Name this source for your private library, set its target role, and choose the ATS-friendly layout.</p>
+            </div>
+            <div class="builder-fields two-up">
+              <label><span>Library name</span><input name="display_name" maxlength="160" placeholder="My software engineering resume" required /></label>
+              <label><span>Target role <small>optional</small></span><input name="target_role" maxlength="160" placeholder="Frontend Engineer" /></label>
+            </div>
+            <p class="builder-field-label">ATS-friendly template</p>
+            <div class="template-options">
+              <label class="template-option">
+                <input type="radio" name="template_id" value="ats-classic" checked />
+                <span class="template-preview classic"><i></i><b></b><b></b><em></em><b></b><b></b></span>
+                <span><strong>Classic ATS</strong><small>Comfortable spacing · centered identity</small></span>
+              </label>
+              <label class="template-option">
+                <input type="radio" name="template_id" value="ats-modern" />
+                <span class="template-preview modern"><i></i><b></b><b></b><em></em><b></b><b></b></span>
+                <span><strong>Modern ATS</strong><small>Balanced spacing · restrained color</small></span>
+              </label>
+              <label class="template-option">
+                <input type="radio" name="template_id" value="ats-compact" />
+                <span class="template-preview compact"><i></i><b></b><b></b><em></em><b></b><b></b></span>
+                <span><strong>Compact ATS</strong><small>Tighter spacing · more content per page</small></span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section class="builder-section">
+          <div class="builder-section-heading"><span>02</span><div><h2>Educational background</h2><p>Add qualifications in reverse chronological order. Keep each institution, qualification, date, and achievement on its own line.</p></div></div>
+          <label><span>Education</span><textarea name="section_education" rows="9" maxlength="12000" placeholder={`BSc Computer Science | University of Example
+Kuala Lumpur | 2020 – 2024
+• First Class Honours
+• Relevant study: Data Structures, Distributed Systems`}></textarea></label>
+        </section>
+
+        <section class="builder-section">
+          <div class="builder-section-heading"><span>03</span><div><h2>Work experience</h2><p>Start with your latest role. Put titles and dates on separate lines, then use bullets for evidence and measurable results.</p></div></div>
+          <label><span>Experience</span><textarea name="section_experience" rows="14" maxlength="30000" placeholder={`Software Engineer | Example Company
 2023 – Present
 • Built an accessible customer portal used by 20,000 people.
 • Reduced page load time by 35%.`}></textarea></label>
-          <label><span>Projects</span><textarea name="section_projects" rows="9" maxlength="30000" placeholder={`Project name | Your role
+        </section>
+
+        <section class="builder-section">
+          <div class="builder-section-heading"><span>04</span><div><h2>Projects</h2><p>Show relevant work outside or across roles. State what you built, the technology used, and the result.</p></div></div>
+          <label><span>Projects</span><textarea name="section_projects" rows="11" maxlength="30000" placeholder={`Project name | Your role
 2024
 • Explain what you built, how, and the result.`}></textarea></label>
-          <div class="builder-fields two-up">
-            <label><span>Education</span><textarea name="section_education" rows="7" maxlength="12000" placeholder={`BSc Computer Science | University
-2020 – 2024`}></textarea></label>
-            <label><span>Skills</span><textarea name="section_skills" rows="7" maxlength="12000" placeholder={`Languages: TypeScript, Python
-Frontend: React, Astro, CSS`}></textarea></label>
-            <label><span>Languages</span><textarea name="section_languages" rows="5" maxlength="8000" placeholder={`English: Professional
-Malay: Native`}></textarea></label>
-            <label><span>Additional details</span><textarea name="section_additional" rows="5" maxlength="12000" placeholder="Certifications, availability, or other relevant information"></textarea></label>
-          </div>
+        </section>
+
+        <section class="builder-section">
+          <div class="builder-section-heading"><span>05</span><div><h2>Skills</h2><p>Group related capabilities so both recruiters and ATS tools can scan them quickly.</p></div></div>
+          <label><span>Skills</span><textarea name="section_skills" rows="9" maxlength="12000" placeholder={`Languages: TypeScript, Python, SQL
+Frontend: React, Astro, HTML, CSS
+Cloud and tools: AWS, Docker, GitHub Actions`}></textarea></label>
         </section>
 
         <section class="builder-section custom-section-area">
-          <div class="builder-section-heading custom-heading"><span>03</span><div><h2>Custom sections</h2><p>Add publications, volunteering, patents, awards, clearances, or anything the standard fields do not cover.</p></div><button type="button" id="add-custom-section">+ Add section</button></div>
+          <div class="builder-section-heading custom-heading"><span>06</span><div><h2>Custom sections</h2><p>Finish with any content that does not fit above, such as languages, certifications, awards, volunteering, publications, or clearances.</p></div><button type="button" id="add-custom-section">+ Add section</button></div>
           <div class="custom-section-list" id="custom-section-list"></div>
-          <p class="custom-empty" id="custom-section-empty">No custom sections yet. Add one whenever your history needs it.</p>
-        </section>
-
-        <section class="builder-section template-section">
-          <div class="builder-section-heading"><span>04</span><div><h2>Choose an ATS-friendly template</h2><p>All layouts use a single reading order, standard headings, selectable text, and no tables, columns, icons, or text boxes.</p></div></div>
-          <div class="template-options">
-            <label class="template-option">
-              <input type="radio" name="template_id" value="ats-classic" checked />
-              <span class="template-preview classic"><i></i><b></b><b></b><em></em><b></b><b></b></span>
-              <span><strong>Classic ATS</strong><small>Comfortable spacing · centered identity</small></span>
-            </label>
-            <label class="template-option">
-              <input type="radio" name="template_id" value="ats-modern" />
-              <span class="template-preview modern"><i></i><b></b><b></b><em></em><b></b><b></b></span>
-              <span><strong>Modern ATS</strong><small>Balanced spacing · restrained color</small></span>
-            </label>
-            <label class="template-option">
-              <input type="radio" name="template_id" value="ats-compact" />
-              <span class="template-preview compact"><i></i><b></b><b></b><em></em><b></b><b></b></span>
-              <span><strong>Compact ATS</strong><small>Tighter spacing · more content per page</small></span>
-            </label>
-          </div>
+          <p class="custom-empty" id="custom-section-empty">No custom sections yet. Add one when your background needs another heading.</p>
         </section>
 
         <section class="builder-finish">
           <div>
-            <p>05 / Finish</p>
+            <p>Ready / Finish</p>
             <h2>Save the source or create finished files.</h2>
             <label><span>Version name <small>needed when generating files</small></span><input name="variant_name" maxlength="160" placeholder="Frontend Engineer — Master" /></label>
             <p class="builder-status" id="builder-status" role="status" aria-live="polite">Your work remains private to your signed-in account.</p>
@@ -128,7 +144,7 @@ Malay: Native`}></textarea></label>
     <template id="custom-section-template">
       <article class="custom-section-card">
         <div><span>Custom section</span><button type="button" data-remove-custom>Remove</button></div>
-        <label><span>Section title</span><input data-custom-title maxlength="80" placeholder="e.g. Publications" required /></label>
+        <label><span>Section title</span><input data-custom-title maxlength="80" placeholder="e.g. Certifications" required /></label>
         <label><span>Content</span><textarea data-custom-lines rows="6" maxlength="20000" placeholder="Keep one item or bullet on each line."></textarea></label>
       </article>
     </template>

@@ -76,6 +76,29 @@ if (builderPage instanceof HTMLElement) {
     if (unmappedContent instanceof HTMLElement) unmappedContent.textContent = currentUnmapped.join("\n");
   };
 
+  const editableCustomSections = (draft) => {
+    const customSections = Array.isArray(draft?.custom_sections)
+      ? draft.custom_sections.map((section) => ({
+        title: section?.title || "",
+        lines: Array.isArray(section?.lines) ? [...section.lines] : [],
+      }))
+      : [];
+    [
+      ["languages", "Languages"],
+      ["additional", "Additional information"],
+    ].forEach(([key, title]) => {
+      const legacyLines = Array.isArray(draft?.sections?.[key]) ? draft.sections[key] : [];
+      if (!legacyLines.length) return;
+      const existing = customSections.find((section) => section.title.toLowerCase() === title.toLowerCase());
+      if (existing) {
+        existing.lines = [...new Set([...existing.lines, ...legacyLines])];
+      } else {
+        customSections.push({ title, lines: legacyLines });
+      }
+    });
+    return customSections;
+  };
+
   const payload = () => {
     if (!(form instanceof HTMLFormElement)) return null;
     const selectedTemplate = form.querySelector("input[name='template_id']:checked");
@@ -99,12 +122,10 @@ if (builderPage instanceof HTMLElement) {
       summary: String(field("summary")?.value || "").trim(),
       extracted_text: String(field("extracted_text")?.value || ""),
       sections: {
+        education: lines("section_education"),
         experience: lines("section_experience"),
         projects: lines("section_projects"),
-        education: lines("section_education"),
         skills: lines("section_skills"),
-        languages: lines("section_languages"),
-        additional: lines("section_additional"),
       },
       custom_sections: customSections,
     };
@@ -193,13 +214,13 @@ if (builderPage instanceof HTMLElement) {
       setField("contact_line", source.draft.contact_line || "");
       setField("summary", source.draft.summary || "");
       setField("extracted_text", source.draft.extracted_text || "");
-      ["experience", "projects", "education", "skills", "languages", "additional"].forEach((name) => {
+      ["education", "experience", "projects", "skills"].forEach((name) => {
         setField(`section_${name}`, (source.draft.sections?.[name] || []).join("\n"));
       });
       const templateInput = form?.querySelector(`input[name='template_id'][value='${source.draft.template_id || "ats-classic"}']`);
       if (templateInput instanceof HTMLInputElement) templateInput.checked = true;
       if (customList instanceof HTMLElement) customList.replaceChildren();
-      (source.draft.custom_sections || []).forEach(addCustomSection);
+      editableCustomSections(source.draft).forEach(addCustomSection);
       updateCustomEmpty();
       renderUnmapped(source.unmapped_content || []);
       const transcript = source.draft.extracted_text || "";

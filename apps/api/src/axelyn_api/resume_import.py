@@ -49,12 +49,14 @@ SECTION_NAMES = {
     "skills": "skills",
     "technical skills": "skills",
     "core skills": "skills",
-    "languages": "languages",
-    "certifications": "additional",
-    "achievements": "additional",
-    "additional information": "additional",
 }
 CUSTOM_SECTION_NAMES = {
+    "languages": "Languages",
+    "language": "Languages",
+    "certifications": "Certifications",
+    "certification": "Certifications",
+    "achievements": "Achievements",
+    "additional information": "Additional Information",
     "awards": "Awards",
     "honors": "Honors",
     "publications": "Publications",
