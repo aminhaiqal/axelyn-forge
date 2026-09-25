@@ -72,6 +72,15 @@ def draft_to_evidence_text(draft: dict[str, object]) -> str:
             lines = sections.get(section)
             if isinstance(lines, list):
                 values.extend(str(line) for line in lines)
+    custom_sections = draft.get("custom_sections")
+    if isinstance(custom_sections, list):
+        for custom in custom_sections:
+            if not isinstance(custom, dict):
+                continue
+            values.append(str(custom.get("title") or ""))
+            lines = custom.get("lines")
+            if isinstance(lines, list):
+                values.extend(str(line) for line in lines)
     text = "\n".join(value.strip() for value in values if value.strip())
     return text or str(draft.get("extracted_text") or "")
 

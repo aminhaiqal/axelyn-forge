@@ -9,7 +9,6 @@ WORKDIR /app
 
 COPY packages/forge-core ./packages/forge-core
 COPY apps/api ./apps/api
-COPY templates ./templates
 RUN python -m pip install ./packages/forge-core ./apps/api
 
 RUN useradd --create-home --uid 10001 forge \

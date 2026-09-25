@@ -13,7 +13,6 @@ import uvicorn
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from forge.docx import render_docx, update_docx_core_properties
 
 from . import __version__
 from .analysis import analyze_forge_brief
@@ -52,6 +51,7 @@ from .models import (
     ResumeImportResponse,
     ResumeSourceDetail,
     ResumeSourceSummary,
+    ResumeTemplateSummary,
     ResumeVariantSummary,
     Service,
     ServiceRequestAccepted,
@@ -66,9 +66,11 @@ from .resume_import import (
     encode_json,
     extract_resume,
     normalize_resume_text,
-    standard_template_values,
+    resume_plain_text,
+    unmapped_resume_content,
 )
 from .resume_store import ResumeStore
+from .resume_templates import render_resume, template_catalog
 from .storage import create_object_store
 from .store import ServiceRequestStore
 
@@ -89,6 +91,16 @@ def _job_document_summary(row: dict[str, object]) -> JobMatchDocumentSummary:
     return JobMatchDocumentSummary(**row)
 
 
+def _source_detail(
+    row: dict[str, object], draft: dict[str, object]
+) -> ResumeSourceDetail:
+    return ResumeSourceDetail(
+        **row,
+        draft=ResumeDraft(**draft),
+        unmapped_content=unmapped_resume_content(draft),
+    )
+
+
 def _safe_filename(value: str, fallback: str) -> str:
     filename = Path(value).name.strip()[:180]
     return filename or fallback
@@ -101,40 +113,41 @@ def _object_prefix(user_id: str) -> str:
 
 def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
     sections = payload.sections
-    if not sections:
-        sections = normalize_resume_text(payload.extracted_text).get("sections", {})
+    custom_sections = [section.model_dump() for section in payload.custom_sections]
+    if not sections and "sections" not in payload.model_fields_set:
+        normalized = normalize_resume_text(payload.extracted_text)
+        sections = normalized.get("sections", {})
+        if not custom_sections and "custom_sections" not in payload.model_fields_set:
+            custom_sections = list(normalized.get("custom_sections", []))
     return {
         "display_name": payload.display_name,
         "target_role": payload.target_role,
+        "template_id": payload.template_id,
         "full_name": payload.full_name,
         "headline": payload.headline,
         "contact_line": payload.contact_line,
         "summary": payload.summary,
         "extracted_text": payload.extracted_text,
         "sections": sections,
+        "custom_sections": custom_sections,
     }
 
 
 def _render_resume_docx(
     *,
-    template: Path,
     draft: dict[str, object],
     title: str,
     description: str,
-) -> bytes:
+) -> tuple[bytes, str, str]:
     with tempfile.TemporaryDirectory() as temporary_directory:
         output = Path(temporary_directory) / "resume.docx"
-        render_docx(template, output, standard_template_values(draft), strict=True)
-        update_docx_core_properties(
-            output,
-            {
-                "title": title,
-                "subject": "Axelyn Forge standard resume",
-                "description": description,
-                "keywords": "resume, axelyn forge",
-            },
+        template_id, template_version = render_resume(
+            draft=draft,
+            output=output,
+            title=title,
+            description=description,
         )
-        return output.read_bytes()
+        return output.read_bytes(), template_id, template_version
 
 
 def create_app(
@@ -260,6 +273,66 @@ def create_app(
         rows = request.app.state.resume_store.list_sources(user_id)
         return [_source_summary(row) for row in rows]
 
+    @app.get(
+        "/api/v1/resume-templates",
+        response_model=list[ResumeTemplateSummary],
+        tags=["resumes"],
+    )
+    def list_resume_templates() -> list[ResumeTemplateSummary]:
+        return [ResumeTemplateSummary(**template) for template in template_catalog()]
+
+    @app.post(
+        "/api/v1/resumes",
+        response_model=ResumeSourceDetail,
+        status_code=status.HTTP_201_CREATED,
+        tags=["resumes"],
+    )
+    def create_resume_from_form(
+        payload: ResumeDraftUpdate,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> ResumeSourceDetail:
+        source_id = "src_" + uuid.uuid4().hex
+        draft = _editable_draft(payload)
+        # A form-created resume has no imported source transcript. The structured
+        # fields are canonical, so later edits cannot appear as false unmapped text.
+        draft["extracted_text"] = ""
+        has_content = bool(resume_plain_text(draft).strip())
+        encoded = encode_json(draft)
+        prefix = f"{_object_prefix(user_id)}/sources/{source_id}"
+        original_key = f"{prefix}/original.forge.json"
+        draft_key = f"{prefix}/draft.json"
+        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", payload.display_name).strip("-.")
+        original_filename = f"{safe_name or 'resume'}.forge.json"
+        stored_keys: list[str] = []
+        try:
+            object_store.put(
+                original_key,
+                encoded,
+                "application/vnd.axelyn.resume+json",
+            )
+            stored_keys.append(original_key)
+            object_store.put(draft_key, encoded, "application/json")
+            stored_keys.append(draft_key)
+            row = resume_store.create_source(
+                source_id=source_id,
+                user_id=user_id,
+                display_name=payload.display_name,
+                target_role=payload.target_role,
+                original_filename=original_filename,
+                media_type="application/vnd.axelyn.resume+json",
+                byte_size=len(encoded),
+                sha256=hashlib.sha256(encoded).hexdigest(),
+                original_object_key=original_key,
+                draft_object_key=draft_key,
+                status="needs_review" if has_content else "needs_ocr",
+                warning=None if has_content else "Content is required.",
+            )
+        except Exception:
+            for key in stored_keys:
+                object_store.delete(key)
+            raise
+        return _source_detail(row, draft)
+
     @app.post(
         "/api/v1/resumes/imports",
         response_model=ResumeImportResponse,
@@ -361,7 +434,7 @@ def create_app(
             draft = decode_json(object_store.get(str(row["draft_object_key"])))
         except KeyError as error:
             raise HTTPException(status_code=503, detail="Resume draft is unavailable.") from error
-        return ResumeSourceDetail(**row, draft=ResumeDraft(**draft))
+        return _source_detail(row, draft)
 
     @app.get(
         "/api/v1/resumes/{source_id}/editable.docx",
@@ -374,20 +447,16 @@ def create_app(
         row = resume_store.get_source(user_id, source_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
-        template = resolved_settings.resume_template_path
-        if not template.is_file():
-            raise HTTPException(status_code=503, detail="The standard resume template is unavailable.")
         try:
             draft = decode_json(object_store.get(str(row["draft_object_key"])))
         except KeyError as error:
             raise HTTPException(status_code=503, detail="Resume draft is unavailable.") from error
-        if not str(draft.get("extracted_text") or "").strip():
+        if not resume_plain_text(draft).strip():
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Add resume text before creating an editable Word draft.",
+                detail="Add resume content before creating an editable Word draft.",
             )
-        payload = _render_resume_docx(
-            template=template,
+        document_payload, _, _ = _render_resume_docx(
             draft=draft,
             title=str(row["display_name"]),
             description="Editable Word draft generated from a private resume source.",
@@ -397,7 +466,7 @@ def create_app(
         ).strip("-.")
         filename = f"{safe_stem or 'resume'}-editable.docx"
         return Response(
-            payload,
+            document_payload,
             media_type=DOCX_MEDIA_TYPE,
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"',
@@ -420,6 +489,17 @@ def create_app(
         if row is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
         draft = _editable_draft(payload)
+        try:
+            original_draft = decode_json(
+                object_store.get(str(row["draft_object_key"]))
+            )
+        except KeyError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="Resume draft is unavailable.",
+            ) from error
+        draft["extracted_text"] = str(original_draft.get("extracted_text") or "")
+        has_content = bool(resume_plain_text(draft).strip())
         object_store.put(str(row["draft_object_key"]), encode_json(draft), "application/json")
         updated = resume_store.update_source(
             user_id=user_id,
@@ -427,11 +507,11 @@ def create_app(
             display_name=payload.display_name,
             target_role=payload.target_role,
             draft_object_key=str(row["draft_object_key"]),
-            status="needs_review" if payload.extracted_text else "needs_ocr",
-            warning=None if payload.extracted_text else str(row.get("warning") or "Text is required."),
+            status="needs_review" if has_content else "needs_ocr",
+            warning=None if has_content else str(row.get("warning") or "Content is required."),
         )
         assert updated is not None
-        return ResumeSourceDetail(**updated, draft=ResumeDraft(**draft))
+        return _source_detail(updated, draft)
 
     @app.post(
         "/api/v1/resumes/{source_id}/accept",
@@ -446,12 +526,22 @@ def create_app(
         row = resume_store.get_source(user_id, source_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
-        if not payload.extracted_text.strip():
+        draft = _editable_draft(payload)
+        try:
+            original_draft = decode_json(
+                object_store.get(str(row["draft_object_key"]))
+            )
+        except KeyError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="Resume draft is unavailable.",
+            ) from error
+        draft["extracted_text"] = str(original_draft.get("extracted_text") or "")
+        if not resume_plain_text(draft).strip():
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Add resume text before accepting this version.",
+                detail="Add resume content before accepting this version.",
             )
-        draft = _editable_draft(payload)
         normalized_key = f"{_object_prefix(user_id)}/variants/{source_id}/resume.json"
         object_store.put(normalized_key, encode_json(draft), "application/json")
         object_store.put(str(row["draft_object_key"]), encode_json(draft), "application/json")
@@ -520,9 +610,6 @@ def create_app(
         variant = resume_store.get_variant(user_id, variant_id)
         if variant is None:
             raise HTTPException(status_code=404, detail="Resume version not found.")
-        template = resolved_settings.resume_template_path
-        if not template.is_file():
-            raise HTTPException(status_code=503, detail="The standard resume template is unavailable.")
         try:
             normalized = decode_json(
                 object_store.get(str(variant["normalized_object_key"]))
@@ -530,8 +617,7 @@ def create_app(
         except KeyError as error:
             raise HTTPException(status_code=503, detail="Resume data is unavailable.") from error
 
-        document_payload = _render_resume_docx(
-            template=template,
+        document_payload, template_id, template_version = _render_resume_docx(
             draft=normalized,
             title=str(variant["name"]),
             description="Resume generated from user-approved source material.",
@@ -583,8 +669,8 @@ def create_app(
                         "filename": str(artifact["filename"]),
                         "media_type": str(artifact["media_type"]),
                         "object_key": str(artifact["object_key"]),
-                        "template_id": "axelyn-standard-resume",
-                        "template_version": "1",
+                        "template_id": template_id,
+                        "template_version": template_version,
                     }
                     for artifact in artifacts
                 ],
@@ -782,9 +868,6 @@ def create_app(
         source = resume_store.get_source(user_id, str(match["source_id"]))
         if source is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
-        template = resolved_settings.resume_template_path
-        if not template.is_file():
-            raise HTTPException(status_code=503, detail="The standard resume template is unavailable.")
         try:
             draft = decode_json(
                 object_store.get(str(match["resume_snapshot_object_key"]))
@@ -799,8 +882,7 @@ def create_app(
             target_role=str(match["target_role"]),
             matched_keywords=analysis.matched_keywords,
         )
-        document_payload = _render_resume_docx(
-            template=template,
+        document_payload, _, _ = _render_resume_docx(
             draft=tailored,
             title=f"{source['display_name']} — {match['target_role']}",
             description="Evidence-grounded tailored resume generated by Axelyn Forge.",

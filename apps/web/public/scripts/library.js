@@ -10,16 +10,9 @@ if (page instanceof HTMLElement) {
   const fileSelection = document.querySelector("#file-selection");
   const uploadStatus = document.querySelector("#upload-status");
   const dropZone = document.querySelector("#resume-drop-zone");
-  const reviewDialog = document.querySelector("#resume-review-dialog");
-  const reviewForm = document.querySelector("#resume-review-form");
-  const reviewStatus = document.querySelector("#review-status");
-  const saveDraftButton = document.querySelector("#save-draft");
 
   const api = async (path, options = {}) => {
-    const response = await fetch(`${apiBase}${path}`, {
-      credentials: "same-origin",
-      ...options,
-    });
+    const response = await fetch(`${apiBase}${path}`, { credentials: "same-origin", ...options });
     if (response.status === 401) {
       window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`);
       throw new Error("Your session has expired.");
@@ -33,26 +26,17 @@ if (page instanceof HTMLElement) {
     return result;
   };
 
+  const setStatus = (message, state = "") => {
+    if (!(uploadStatus instanceof HTMLElement)) return;
+    uploadStatus.textContent = message;
+    if (state) uploadStatus.dataset.state = state;
+    else uploadStatus.removeAttribute("data-state");
+  };
+
   const formatBytes = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const setStatus = (element, message, state = "") => {
-    if (!(element instanceof HTMLElement)) return;
-    element.textContent = message;
-    if (state) element.dataset.state = state;
-    else element.removeAttribute("data-state");
-  };
-
-  const button = (label, action, id) => {
-    const element = document.createElement("button");
-    element.type = "button";
-    element.textContent = label;
-    element.dataset.action = action;
-    element.dataset.id = id;
-    return element;
   };
 
   const renderSources = (sources) => {
@@ -69,7 +53,9 @@ if (page instanceof HTMLElement) {
       card.className = "source-card";
       const filetype = document.createElement("span");
       filetype.className = "source-filetype";
-      filetype.textContent = source.original_filename.split(".").pop()?.toUpperCase() || "FILE";
+      filetype.textContent = source.media_type === "application/vnd.axelyn.resume+json"
+        ? "FORM"
+        : source.original_filename.split(".").pop()?.toUpperCase() || "FILE";
       const body = document.createElement("div");
       body.className = "source-body";
       const title = document.createElement("strong");
@@ -79,16 +65,19 @@ if (page instanceof HTMLElement) {
       const role = document.createElement("span");
       role.textContent = source.target_role || "No role assigned";
       const size = document.createElement("span");
-      size.textContent = formatBytes(source.byte_size);
+      size.textContent = source.media_type === "application/vnd.axelyn.resume+json" ? "Created in Forge" : formatBytes(source.byte_size);
       const state = document.createElement("span");
       state.className = "status-pill";
       state.dataset.ready = String(source.status === "ready");
-      state.textContent = source.status === "ready" ? "Approved" : source.status === "needs_ocr" ? "Needs text" : "Review needed";
+      state.textContent = source.status === "ready" ? "Approved" : source.status === "needs_ocr" ? "Needs content" : "Draft";
       meta.append(role, size, state);
       body.append(title, meta);
       const actions = document.createElement("div");
       actions.className = "source-actions";
-      actions.append(button(source.status === "ready" ? "Edit content" : "Review", "review", source.id));
+      const edit = document.createElement("a");
+      edit.href = `/app/resume?source=${encodeURIComponent(source.id)}`;
+      edit.textContent = source.status === "ready" ? "Edit resume" : "Continue editing";
+      actions.append(edit);
       if (source.status !== "needs_ocr") {
         const word = document.createElement("a");
         word.href = `${apiBase}/api/v1/resumes/${source.id}/editable.docx`;
@@ -96,7 +85,12 @@ if (page instanceof HTMLElement) {
         word.setAttribute("download", "");
         actions.append(word);
       }
-      actions.append(button("Delete", "delete", source.id));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Delete";
+      remove.dataset.action = "delete";
+      remove.dataset.id = source.id;
+      actions.append(remove);
       card.append(filetype, body, actions);
       sourceList.append(card);
     });
@@ -108,7 +102,7 @@ if (page instanceof HTMLElement) {
     if (!variants.length) {
       const empty = document.createElement("p");
       empty.className = "variant-empty";
-      empty.textContent = "Approved role versions will appear here, ready for the Axelyn standard template.";
+      empty.textContent = "Approved resume versions will appear here with their latest Word and PDF files.";
       variantList.append(empty);
       return;
     }
@@ -126,11 +120,9 @@ if (page instanceof HTMLElement) {
       const downloads = document.createElement("div");
       downloads.className = "variant-downloads";
       const latest = new Map();
-      documents
-        .filter((document) => document.variant_id === variant.id)
-        .forEach((document) => {
-          if (!latest.has(document.media_type)) latest.set(document.media_type, document);
-        });
+      documents.filter((item) => item.variant_id === variant.id).forEach((item) => {
+        if (!latest.has(item.media_type)) latest.set(item.media_type, item);
+      });
       [
         ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "DOCX"],
         ["application/pdf", "PDF"],
@@ -143,10 +135,11 @@ if (page instanceof HTMLElement) {
         link.setAttribute("download", artifact.filename);
         downloads.append(link);
       });
-      const generate = button("Generate DOCX + PDF", "render", variant.id);
-      const arrow = document.createElement("span");
-      arrow.textContent = "↓";
-      generate.append(arrow);
+      const generate = document.createElement("button");
+      generate.type = "button";
+      generate.dataset.action = "render";
+      generate.dataset.id = variant.id;
+      generate.innerHTML = "Generate Word + PDF <span aria-hidden=\"true\">↓</span>";
       actions.append(downloads, generate);
       card.append(copy, actions);
       variantList.append(card);
@@ -163,105 +156,25 @@ if (page instanceof HTMLElement) {
     renderVariants(variants, documents);
   };
 
-  const formPayload = () => {
-    if (!(reviewForm instanceof HTMLFormElement)) return null;
-    const data = new FormData(reviewForm);
-    const sectionLines = (name) => String(data.get(name) || "")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    return {
-      display_name: String(data.get("display_name") || ""),
-      target_role: String(data.get("target_role") || "") || null,
-      full_name: String(data.get("full_name") || ""),
-      headline: String(data.get("headline") || ""),
-      contact_line: String(data.get("contact_line") || ""),
-      summary: String(data.get("summary") || ""),
-      extracted_text: String(data.get("extracted_text") || ""),
-      sections: {
-        experience: sectionLines("section_experience"),
-        projects: sectionLines("section_projects"),
-        education: sectionLines("section_education"),
-        skills: sectionLines("section_skills"),
-        languages: sectionLines("section_languages"),
-        additional: sectionLines("section_additional"),
-      },
-    };
-  };
-
-  const openReview = async (sourceId) => {
-    if (!(reviewDialog instanceof HTMLDialogElement) || !(reviewForm instanceof HTMLFormElement)) return;
-    setStatus(reviewStatus, "Loading extracted content…");
-    reviewDialog.showModal();
-    try {
-      const source = await api(`/api/v1/resumes/${sourceId}`);
-      const values = {
-        source_id: source.id,
-        display_name: source.display_name,
-        target_role: source.target_role || "",
-        full_name: source.draft.full_name || "",
-        headline: source.draft.headline || "",
-        contact_line: source.draft.contact_line || "",
-        summary: source.draft.summary || "",
-        extracted_text: source.draft.extracted_text || "",
-        section_experience: (source.draft.sections?.experience || []).join("\n"),
-        section_projects: (source.draft.sections?.projects || []).join("\n"),
-        section_education: (source.draft.sections?.education || []).join("\n"),
-        section_skills: (source.draft.sections?.skills || []).join("\n"),
-        section_languages: (source.draft.sections?.languages || []).join("\n"),
-        section_additional: (source.draft.sections?.additional || []).join("\n"),
-        variant_name: source.target_role ? `${source.target_role} — Master` : source.display_name,
-      };
-      Object.entries(values).forEach(([key, value]) => {
-        const field = reviewForm.elements.namedItem(key);
-        if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) field.value = value;
-      });
-      setStatus(reviewStatus, source.warning || "Edit the content fields, then approve this version or download a Word draft.");
-    } catch (error) {
-      setStatus(reviewStatus, error instanceof Error ? error.message : "The resume could not be loaded.", "error");
-    }
-  };
-
-  const saveDraft = async () => {
-    if (!(reviewForm instanceof HTMLFormElement)) return;
-    const sourceId = String(new FormData(reviewForm).get("source_id") || "");
-    const payload = formPayload();
-    if (!sourceId || !payload) return;
-    if (saveDraftButton instanceof HTMLButtonElement) saveDraftButton.disabled = true;
-    setStatus(reviewStatus, "Saving your review…");
-    try {
-      await api(`/api/v1/resumes/${sourceId}/draft`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      setStatus(reviewStatus, "Review saved.", "success");
-      await refresh();
-    } catch (error) {
-      setStatus(reviewStatus, error instanceof Error ? error.message : "The review could not be saved.", "error");
-    } finally {
-      if (saveDraftButton instanceof HTMLButtonElement) saveDraftButton.disabled = false;
-    }
-  };
-
   fileInput?.addEventListener("change", () => {
     if (!(fileInput instanceof HTMLInputElement) || !(fileSelection instanceof HTMLElement)) return;
     const names = Array.from(fileInput.files || []).map((file) => file.name);
     fileSelection.hidden = !names.length;
     fileSelection.textContent = names.join(" · ");
   });
-
-  ["dragenter", "dragover"].forEach((eventName) => dropZone?.addEventListener(eventName, (event) => {
+  ["dragenter", "dragover"].forEach((name) => dropZone?.addEventListener(name, (event) => {
     event.preventDefault();
     if (dropZone instanceof HTMLElement) dropZone.dataset.dragging = "true";
   }));
-  ["dragleave", "drop"].forEach((eventName) => dropZone?.addEventListener(eventName, (event) => {
+  ["dragleave", "drop"].forEach((name) => dropZone?.addEventListener(name, (event) => {
     event.preventDefault();
     if (dropZone instanceof HTMLElement) dropZone.dataset.dragging = "false";
   }));
   dropZone?.addEventListener("drop", (event) => {
     if (!(event instanceof DragEvent) || !(fileInput instanceof HTMLInputElement) || !event.dataTransfer) return;
-    fileInput.files = event.dataTransfer.files;
+    const transfer = new DataTransfer();
+    Array.from(event.dataTransfer.files).slice(0, 5).forEach((file) => transfer.items.add(file));
+    fileInput.files = transfer.files;
     fileInput.dispatchEvent(new Event("change"));
   });
 
@@ -270,21 +183,21 @@ if (page instanceof HTMLElement) {
     if (!(uploadForm instanceof HTMLFormElement)) return;
     const submit = uploadForm.querySelector("button[type='submit']");
     if (submit instanceof HTMLButtonElement) submit.disabled = true;
-    setStatus(uploadStatus, "Reading and securing your resume files…");
+    setStatus("Reading and securing your resume files…");
     try {
       const result = await api("/api/v1/resumes/imports", { method: "POST", body: new FormData(uploadForm) });
       const rejected = result.items.filter((item) => item.status === "rejected");
       const stored = result.items.length - rejected.length;
       if (rejected.length) {
-        setStatus(uploadStatus, `${stored} imported. ${rejected.map((item) => `${item.filename}: ${item.error}`).join(" ")}`, "error");
+        setStatus(`${stored} imported. ${rejected.map((item) => `${item.filename}: ${item.error}`).join(" ")}`, "error");
       } else {
-        setStatus(uploadStatus, `${stored} resume${stored === 1 ? "" : "s"} converted into editable content. Review each one before approval.`, "success");
+        setStatus(`${stored} resume${stored === 1 ? "" : "s"} converted into editable content.`, "success");
         uploadForm.reset();
         if (fileSelection instanceof HTMLElement) fileSelection.hidden = true;
       }
       await refresh();
     } catch (error) {
-      setStatus(uploadStatus, error instanceof Error ? error.message : "The files could not be imported.", "error");
+      setStatus(error instanceof Error ? error.message : "The files could not be imported.", "error");
     } finally {
       if (submit instanceof HTMLButtonElement) submit.disabled = false;
     }
@@ -292,68 +205,38 @@ if (page instanceof HTMLElement) {
 
   sourceList?.addEventListener("click", async (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement)) return;
-    const { action, id } = target.dataset;
-    if (!id) return;
-    if (action === "review") await openReview(id);
-    if (action === "delete" && window.confirm("Delete this resume source and its generated documents?")) {
-      target.disabled = true;
-      try {
-        await api(`/api/v1/resumes/${id}`, { method: "DELETE" });
-        await refresh();
-      } catch (error) {
-        setStatus(uploadStatus, error instanceof Error ? error.message : "The resume could not be deleted.", "error");
-        target.disabled = false;
-      }
-    }
-  });
-
-  saveDraftButton?.addEventListener("click", saveDraft);
-  reviewForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!(reviewForm instanceof HTMLFormElement)) return;
-    const data = new FormData(reviewForm);
-    const sourceId = String(data.get("source_id") || "");
-    const payload = { ...formPayload(), variant_name: String(data.get("variant_name") || "") };
-    const submit = reviewForm.querySelector("button[type='submit']");
-    if (submit instanceof HTMLButtonElement) submit.disabled = true;
-    setStatus(reviewStatus, "Approving this resume version…");
+    if (!(target instanceof HTMLButtonElement) || target.dataset.action !== "delete" || !target.dataset.id) return;
+    if (!window.confirm("Delete this resume source and its generated documents?")) return;
+    target.disabled = true;
     try {
-      await api(`/api/v1/resumes/${sourceId}/accept`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      setStatus(reviewStatus, "Version approved and ready to forge.", "success");
+      await api(`/api/v1/resumes/${target.dataset.id}`, { method: "DELETE" });
       await refresh();
-      window.setTimeout(() => reviewDialog instanceof HTMLDialogElement && reviewDialog.close(), 450);
     } catch (error) {
-      setStatus(reviewStatus, error instanceof Error ? error.message : "The version could not be approved.", "error");
-    } finally {
-      if (submit instanceof HTMLButtonElement) submit.disabled = false;
+      setStatus(error instanceof Error ? error.message : "The resume could not be deleted.", "error");
+      target.disabled = false;
     }
   });
 
   variantList?.addEventListener("click", async (event) => {
     const target = event.target instanceof Element ? event.target.closest("button[data-action='render']") : null;
     if (!(target instanceof HTMLButtonElement) || !target.dataset.id) return;
-    const original = target.textContent;
+    const original = target.innerHTML;
     target.disabled = true;
     target.textContent = "Rendering with LibreOffice…";
     try {
       const bundle = await api(`/api/v1/resume-variants/${target.dataset.id}/render`, { method: "POST" });
       await refresh();
-      setStatus(uploadStatus, `${bundle.documents.length} files are ready: editable DOCX and layout-stable PDF.`, "success");
+      setStatus(`${bundle.documents.length} files are ready: editable Word and layout-stable PDF.`, "success");
     } catch (error) {
-      setStatus(uploadStatus, error instanceof Error ? error.message : "The standard resume files could not be generated.", "error");
+      setStatus(error instanceof Error ? error.message : "The resume files could not be generated.", "error");
     } finally {
       target.disabled = false;
-      target.textContent = original;
+      target.innerHTML = original;
     }
   });
 
   refresh().catch((error) => {
-    setStatus(uploadStatus, error instanceof Error ? error.message : "Your library could not be loaded.", "error");
+    setStatus(error instanceof Error ? error.message : "Your library could not be loaded.", "error");
     if (sourceCount) sourceCount.textContent = "Unavailable";
   });
 }

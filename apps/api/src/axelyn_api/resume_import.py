@@ -54,6 +54,22 @@ SECTION_NAMES = {
     "achievements": "additional",
     "additional information": "additional",
 }
+CUSTOM_SECTION_NAMES = {
+    "awards": "Awards",
+    "honors": "Honors",
+    "publications": "Publications",
+    "patents": "Patents",
+    "volunteering": "Volunteering",
+    "volunteer experience": "Volunteer Experience",
+    "professional memberships": "Professional Memberships",
+    "professional affiliations": "Professional Affiliations",
+    "open source": "Open Source",
+    "speaking": "Speaking",
+    "conferences": "Conferences",
+    "military service": "Military Service",
+    "security clearance": "Security Clearance",
+    "interests": "Interests",
+}
 
 
 class ResumeImportError(ValueError):
@@ -182,6 +198,11 @@ def _heading_key(line: str) -> str | None:
     return SECTION_NAMES.get(normalized)
 
 
+def _custom_heading(line: str) -> str | None:
+    normalized = re.sub(r"[^a-z ]", "", line.casefold()).strip()
+    return CUSTOM_SECTION_NAMES.get(normalized)
+
+
 def normalize_resume_text(text: str) -> dict[str, object]:
     lines = _clean_lines(text.splitlines())
     if not lines:
@@ -198,7 +219,14 @@ def normalize_resume_text(text: str) -> dict[str, object]:
     links = [line for line in lines if "linkedin.com/" in line.casefold()][:1]
     contact_parts = [value for value in (email, phone, *links) if value]
 
-    first_heading = next((index for index, line in enumerate(lines) if _heading_key(line)), len(lines))
+    first_heading = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if _heading_key(line) or _custom_heading(line)
+        ),
+        len(lines),
+    )
     header = [
         line
         for line in lines[:first_heading]
@@ -210,12 +238,25 @@ def normalize_resume_text(text: str) -> dict[str, object]:
     headline = header[1] if len(header) > 1 else ""
 
     sections: dict[str, list[str]] = {}
+    custom_sections: list[dict[str, object]] = []
     current = "additional"
+    current_custom: dict[str, object] | None = None
     for line in lines[first_heading:]:
         heading = _heading_key(line)
         if heading:
             current = heading
+            current_custom = None
             sections.setdefault(current, [])
+            continue
+        custom_heading = _custom_heading(line)
+        if custom_heading:
+            current_custom = {"title": custom_heading, "lines": []}
+            custom_sections.append(current_custom)
+            continue
+        if current_custom is not None:
+            custom_lines = current_custom["lines"]
+            assert isinstance(custom_lines, list)
+            custom_lines.append(line)
             continue
         sections.setdefault(current, []).append(line)
 
@@ -229,6 +270,7 @@ def normalize_resume_text(text: str) -> dict[str, object]:
         "contact_line": " | ".join(contact_parts)[:300],
         "summary": summary[:2_000],
         "sections": sections,
+        "custom_sections": custom_sections,
     }
 
 
@@ -242,9 +284,93 @@ def draft_payload(
     return {
         "display_name": display_name,
         "target_role": target_role,
+        "template_id": "ats-classic",
         "extracted_text": extracted_text,
         **normalized,
     }
+
+
+def resume_plain_text(draft: dict[str, object]) -> str:
+    """Create a durable text transcript from structured manual-entry content."""
+    values = [
+        str(draft.get("full_name") or ""),
+        str(draft.get("headline") or ""),
+        str(draft.get("contact_line") or ""),
+    ]
+    summary = str(draft.get("summary") or "").strip()
+    if summary:
+        values.extend(["Professional Summary", summary])
+    sections = draft.get("sections")
+    if isinstance(sections, dict):
+        for key, title in (
+            ("experience", "Experience"),
+            ("projects", "Projects"),
+            ("education", "Education"),
+            ("skills", "Skills"),
+            ("languages", "Languages"),
+            ("additional", "Additional Information"),
+        ):
+            lines = sections.get(key)
+            if isinstance(lines, list) and lines:
+                values.append(title)
+                values.extend(str(line) for line in lines)
+    custom_sections = draft.get("custom_sections")
+    if isinstance(custom_sections, list):
+        for custom in custom_sections:
+            if not isinstance(custom, dict):
+                continue
+            title = str(custom.get("title") or "").strip()
+            lines = custom.get("lines")
+            if title and isinstance(lines, list) and lines:
+                values.append(title)
+                values.extend(str(line) for line in lines)
+    return "\n".join(value.strip() for value in values if value.strip())
+
+
+def unmapped_resume_content(draft: dict[str, object]) -> list[str]:
+    """Return source lines not represented by any editable field."""
+    source = str(draft.get("extracted_text") or "")
+    if not source.strip():
+        return []
+
+    def normalized(value: object) -> str:
+        return re.sub(r"\s+", " ", str(value).lstrip("•-–* ").strip()).casefold()
+
+    represented = {
+        normalized(draft.get("full_name")),
+        normalized(draft.get("headline")),
+        normalized(draft.get("contact_line")),
+        normalized(draft.get("summary")),
+    }
+    sections = draft.get("sections")
+    if isinstance(sections, dict):
+        for lines in sections.values():
+            if isinstance(lines, list):
+                represented.update(normalized(line) for line in lines)
+    custom_sections = draft.get("custom_sections")
+    if isinstance(custom_sections, list):
+        for custom in custom_sections:
+            if not isinstance(custom, dict):
+                continue
+            represented.add(normalized(custom.get("title")))
+            lines = custom.get("lines")
+            if isinstance(lines, list):
+                represented.update(normalized(line) for line in lines)
+    represented.discard("")
+
+    unmatched: list[str] = []
+    for line in _clean_lines(source.splitlines()):
+        if _heading_key(line) or _custom_heading(line):
+            continue
+        candidate = normalized(line)
+        if not candidate:
+            continue
+        if candidate in represented or any(
+            len(candidate) >= 4 and candidate in value for value in represented
+        ):
+            continue
+        unmatched.append(line)
+    return unmatched[:100]
 
 
 def encode_json(payload: dict[str, object]) -> bytes:

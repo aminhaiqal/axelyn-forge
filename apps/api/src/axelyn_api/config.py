@@ -17,7 +17,6 @@ class Settings:
     storage_path: Path = Path(".state/objects")
     storage_endpoint: Optional[str] = None
     storage_token: Optional[str] = None
-    resume_template_path: Path = Path("templates/Axelyn_Standard_Resume_v1.docx")
     max_resume_bytes: int = 10 * 1024 * 1024
     max_resume_files: int = 5
     converter_endpoint: Optional[str] = None
@@ -56,13 +55,6 @@ class Settings:
             storage_endpoint=(values.get("FORGE_STORAGE_ENDPOINT") or "").rstrip("/")
             or None,
             storage_token=values.get("FORGE_STORAGE_TOKEN") or None,
-            resume_template_path=Path(
-                values.get(
-                    "FORGE_RESUME_TEMPLATE",
-                    "templates/Axelyn_Standard_Resume_v1.docx",
-                ).strip()
-                or "templates/Axelyn_Standard_Resume_v1.docx"
-            ),
             max_resume_bytes=int(
                 values.get("FORGE_MAX_RESUME_BYTES", str(10 * 1024 * 1024))
             ),

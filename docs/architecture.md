@@ -12,7 +12,7 @@ flowchart LR
     API --> Intake[(SQLite intake store)]
     API -->|Server-only bearer token| StorageWorker[Private storage Worker]
     StorageWorker --> R2[(Private R2 bucket)]
-    API --> Core[Forge DOCX renderer]
+    API --> ResumeRenderer[ATS resume renderer]
     API -->|Private Compose network| Converter[Converter service]
     Converter --> LibreOffice[Headless LibreOffice Writer]
     Converter --> Tesseract[Tesseract OCR]
@@ -45,12 +45,13 @@ flowchart LR
 
 ## Resume library flow
 
-1. The signed-in browser sends up to five DOCX/PDF files to the same-origin import endpoint.
-2. FastAPI validates signatures and size limits, defensively extracts text, and writes the original plus structured editable content to private object storage.
-3. The user edits profile, experience, project, education, skill, language, and additional sections in the browser. Forge can render the latest saved draft as an editable Word document at any time.
-4. The user approves a named role version. The API maps that approved content to the fixed Axelyn template bindings and renders a DOCX.
-5. The API sends that DOCX to the private converter, which uses headless LibreOffice and returns a validated PDF.
-6. The API stores both files as one generated bundle. Download authorization checks both the document ID and Clerk user ID. Storage credentials and R2 object keys never reach browser code.
+1. The signed-in user creates a first resume with the guided form or sends up to five DOCX/PDF files to the same-origin import endpoint.
+2. FastAPI validates imported signatures and size limits, defensively extracts text, and writes the original plus structured editable content to private object storage. A form-created source stores the structured record directly.
+3. One builder edits both source types. Standard fields cover common resume content; custom sections preserve publications, awards, volunteering, clearances, and other uncommon material.
+4. For imports, the original extracted transcript stays read-only. Lines that are not represented by a standard or custom field appear in a source inbox, so an edit cannot silently discard them.
+5. The user selects Classic, Modern, or Compact. Each renderer uses a single reading order, selectable text, standard headings, and no tables, columns, icons, or text boxes.
+6. The user approves a named role version. The API renders every populated section into DOCX, then sends it to the private converter, where headless LibreOffice returns a validated PDF.
+7. The API stores both files as one generated bundle. Download authorization checks both the document ID and Clerk user ID. Storage credentials and R2 object keys never reach browser code.
 
 ## Job match and tailoring flow
 
@@ -58,7 +59,7 @@ flowchart LR
 2. FastAPI extracts document text and sends images to the private Tesseract service. It compares the role language with the latest saved resume sections and records Match at 70–100%, Some match at 40–69%, or No match at 0–39%.
 3. The result explains supported terms, missing terms, source evidence, and specific improvement directions. It never treats an unsupported requirement as candidate experience.
 4. Match results generate automatically; Some match results offer generation; No match results stop before generation.
-5. Tailoring prioritizes existing roles, projects, bullets, and skills without rewriting claims. The standard renderer creates DOCX, LibreOffice creates PDF, and both files remain owner-scoped through download.
+5. Tailoring prioritizes existing roles, projects, bullets, skills, and custom sections without rewriting claims. The selected ATS renderer creates DOCX, LibreOffice creates PDF, and both files remain owner-scoped through download.
 
 ## Delivery
 

@@ -82,6 +82,7 @@ class ForgeBriefAccepted(ForgeBriefAnalysis):
 
 
 ResumeSourceStatus = Literal["needs_review", "needs_ocr", "ready"]
+ResumeTemplateId = Literal["ats-classic", "ats-modern", "ats-compact"]
 RESUME_SECTION_NAMES = {
     "summary",
     "experience",
@@ -93,15 +94,39 @@ RESUME_SECTION_NAMES = {
 }
 
 
+class ResumeCustomSection(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    title: str = Field(min_length=1, max_length=80)
+    lines: List[str] = Field(default_factory=list, max_length=100)
+
+    @field_validator("lines")
+    @classmethod
+    def lines_are_bounded(cls, value: List[str]) -> List[str]:
+        cleaned = []
+        for line in value:
+            normalized = line.strip()
+            if len(normalized) > 2_000:
+                raise ValueError("custom section lines are limited to 2,000 characters")
+            if normalized:
+                cleaned.append(normalized)
+        return cleaned
+
+
 class ResumeDraft(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
+    template_id: ResumeTemplateId = "ats-classic"
     full_name: str = Field(default="", max_length=160)
     headline: str = Field(default="", max_length=200)
     contact_line: str = Field(default="", max_length=300)
     summary: str = Field(default="", max_length=2_000)
     extracted_text: str = Field(default="", max_length=100_000)
     sections: dict[str, List[str]] = Field(default_factory=dict)
+    custom_sections: List[ResumeCustomSection] = Field(
+        default_factory=list,
+        max_length=12,
+    )
 
     @field_validator("sections")
     @classmethod
@@ -140,6 +165,14 @@ class ResumeSourceSummary(BaseModel):
 
 class ResumeSourceDetail(ResumeSourceSummary):
     draft: ResumeDraft
+    unmapped_content: List[str] = Field(default_factory=list)
+
+
+class ResumeTemplateSummary(BaseModel):
+    id: ResumeTemplateId
+    name: str
+    description: str
+    density: Literal["comfortable", "balanced", "compact"]
 
 
 class ResumeImportItem(BaseModel):

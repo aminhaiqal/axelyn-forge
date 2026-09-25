@@ -117,18 +117,12 @@ class ApiTests(unittest.TestCase):
         self.addCleanup(self.temp_dir.cleanup)
         self.database = Path(self.temp_dir.name) / "forge.sqlite3"
         self.storage = Path(self.temp_dir.name) / "objects"
-        self.template = (
-            Path(__file__).resolve().parents[3]
-            / "templates"
-            / "Axelyn_Standard_Resume_v1.docx"
-        )
         self.document_converter = FakeDocumentConverter()
         app = create_app(
             Settings(
                 environment="test",
                 database_path=self.database,
                 storage_path=self.storage,
-                resume_template_path=self.template,
                 cors_origins=(),
             ),
             authenticate_user=self.authenticate_user,
@@ -313,6 +307,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(200, detail.status_code)
         source = detail.json()
         self.assertEqual("Taylor Example", source["draft"]["full_name"])
+        original_transcript = source["draft"]["extracted_text"]
         source["draft"]["sections"]["experience"][-1] = (
             "• Delivered editable resume content through Forge."
         )
@@ -321,12 +316,14 @@ class ApiTests(unittest.TestCase):
             headers=headers,
             json={
                 **source["draft"],
+                "extracted_text": "Attempted transcript replacement",
                 "display_name": "Backend resume",
                 "target_role": "Backend Engineer",
             },
         )
         self.assertEqual(200, saved.status_code, saved.text)
         source = saved.json()
+        self.assertEqual(original_transcript, source["draft"]["extracted_text"])
 
         editable_word = self.client.get(
             f"/api/v1/resumes/{source_id}/editable.docx",
@@ -427,6 +424,88 @@ class ApiTests(unittest.TestCase):
             document_xml = archive.read("word/document.xml")
         self.assertIn(b"Taylor Example", document_xml)
         self.assertIn(b"Built production APIs", document_xml)
+
+    def test_manual_resume_form_keeps_custom_sections_and_selected_template(self):
+        headers = {"Authorization": "Bearer test-session"}
+        templates = self.client.get("/api/v1/resume-templates")
+
+        self.assertEqual(200, templates.status_code)
+        self.assertEqual(
+            ["ats-classic", "ats-modern", "ats-compact"],
+            [item["id"] for item in templates.json()],
+        )
+
+        created = self.client.post(
+            "/api/v1/resumes",
+            headers=headers,
+            json={
+                "display_name": "First resume",
+                "target_role": "Platform Engineer",
+                "template_id": "ats-modern",
+                "full_name": "Taylor Example",
+                "headline": "Platform Engineer",
+                "contact_line": "taylor@example.com | Kuala Lumpur",
+                "summary": "Builds reliable systems.",
+                "sections": {
+                    "experience": [
+                        "Engineer | Example Systems",
+                        "2022 - Present",
+                        "• Built production APIs.",
+                    ],
+                    "skills": ["Python, PostgreSQL, Docker"],
+                },
+                "custom_sections": [
+                    {
+                        "title": "Publications",
+                        "lines": ["Reliable Systems Review | 2025"],
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(201, created.status_code, created.text)
+        source = created.json()
+        source_id = source["id"]
+        self.assertEqual("application/vnd.axelyn.resume+json", source["media_type"])
+        self.assertEqual([], source["unmapped_content"])
+        self.assertEqual("", source["draft"]["extracted_text"])
+        self.assertEqual("ats-modern", source["draft"]["template_id"])
+        self.assertEqual(
+            "Publications", source["draft"]["custom_sections"][0]["title"]
+        )
+
+        accepted = self.client.post(
+            f"/api/v1/resumes/{source_id}/accept",
+            headers=headers,
+            json={
+                **source["draft"],
+                "display_name": "First resume",
+                "target_role": "Platform Engineer",
+                "variant_name": "Platform Engineer — Master",
+            },
+        )
+        self.assertEqual(200, accepted.status_code, accepted.text)
+
+        rendered = self.client.post(
+            f"/api/v1/resume-variants/{accepted.json()['id']}/render",
+            headers=headers,
+        )
+        self.assertEqual(201, rendered.status_code, rendered.text)
+        self.assertEqual(
+            {"ats-modern"},
+            {document["template_id"] for document in rendered.json()["documents"]},
+        )
+        with zipfile.ZipFile(BytesIO(self.document_converter.requests[-1][0])) as archive:
+            document_xml = archive.read("word/document.xml")
+        self.assertIn(b"PUBLICATIONS", document_xml)
+        self.assertIn(b"Reliable Systems Review", document_xml)
+        self.assertIn("• Built production APIs".encode(), document_xml)
+
+        other_read = self.client.get(
+            f"/api/v1/resumes/{source_id}",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        self.assertEqual(404, other_read.status_code)
 
     def test_resume_import_rejects_unsupported_files_and_requires_auth(self):
         unsupported = self.client.post(
