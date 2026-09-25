@@ -13,6 +13,7 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ### Changed
 
+- Replaced authenticated workspace headers with a responsive white sidebar that expands on desktop, collapses to a tablet rail, and becomes a compact mobile navigation bar.
 - Updated the responsive resume workspace to expose persistent DOCX and PDF download controls for each approved role version.
 
 ## 0.3.0 — 2026-09-25

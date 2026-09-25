@@ -1,5 +1,5 @@
 ---
-import { UserButton } from "@clerk/astro/components";
+import AppSidebar from "../components/AppSidebar.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import "../styles/resume-library.css";
 
@@ -15,22 +15,8 @@ if (!isAuthenticated) {
   title="Resume library — Axelyn Forge"
   description="Keep private resume versions, review imported content, and render the Axelyn standard in DOCX and PDF."
 >
-  <div class="library-page" data-api-base={apiBase}>
-    <header class="library-header">
-      <a class="brand" href="/" aria-label="Axelyn Forge home">
-        <svg aria-hidden="true" viewBox="0 0 38 38" class="brand-mark">
-          <path d="M5 3h21l7 7v25H5z" fill="currentColor"></path>
-          <path d="M26 3v8h7" fill="none" stroke="var(--color-copper)" stroke-width="3"></path>
-          <path d="M11 25h16M14 19h10M17 13h7" fill="none" stroke="white" stroke-width="2.4"></path>
-        </svg>
-        <span>Axelyn <strong>Forge</strong></span>
-      </a>
-      <nav aria-label="Workspace navigation">
-        <a aria-current="page" href="/app">Resumes</a>
-        <a href="/app/forge">Evidence brief</a>
-        <UserButton />
-      </nav>
-    </header>
+  <div class="library-page" data-api-base={apiBase} data-workspace-shell>
+    <AppSidebar active="resumes" />
 
     <main class="library-shell">
       <section class="library-intro">

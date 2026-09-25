@@ -1,0 +1,96 @@
+---
+import { UserButton } from "@clerk/astro/components";
+import "../styles/app-sidebar.css";
+
+interface Props {
+  active: "resumes" | "forge";
+}
+
+const { active } = Astro.props;
+---
+
+<aside class="workspace-sidebar" aria-label="Forge workspace navigation">
+  <div class="sidebar-head">
+    <a class="sidebar-brand" href="/app" aria-label="Axelyn Forge workspace">
+      <svg aria-hidden="true" viewBox="0 0 38 38" class="sidebar-brand-mark">
+        <path d="M5 3h21l7 7v25H5z" fill="currentColor"></path>
+        <path d="M26 3v8h7" fill="none" stroke="var(--color-copper)" stroke-width="3"></path>
+        <path d="M11 25h16M14 19h10M17 13h7" fill="none" stroke="white" stroke-width="2.4"></path>
+      </svg>
+      <span class="sidebar-brand-copy">Axelyn <strong>Forge</strong></span>
+    </a>
+    <button
+      class="sidebar-toggle"
+      id="workspace-sidebar-toggle"
+      type="button"
+      aria-label="Collapse sidebar"
+      aria-expanded="true"
+      title="Collapse sidebar"
+    >
+      <svg aria-hidden="true" viewBox="0 0 20 20">
+        <rect x="2.5" y="3" width="15" height="14" rx="2"></rect>
+        <path d="M7.5 3v14M12.5 7.25 9.75 10l2.75 2.75"></path>
+      </svg>
+    </button>
+  </div>
+
+  <div class="sidebar-content">
+    <a class="sidebar-primary-action" href="/app#resume-upload-form" title="Import resume">
+      <svg aria-hidden="true" viewBox="0 0 20 20">
+        <path d="M4 2.75h7l4 4V17.25H4zM11 2.75v4h4M10 9v5M7.5 11.5h5"></path>
+      </svg>
+      <span class="sidebar-copy">Import resume</span>
+      <kbd class="sidebar-copy">+</kbd>
+    </a>
+
+    <nav class="sidebar-nav" aria-label="Workspace">
+      <p class="sidebar-section-label">Workspace</p>
+      <a
+        class="sidebar-link"
+        href="/app"
+        aria-current={active === "resumes" ? "page" : undefined}
+        title="Resume library"
+      >
+        <svg aria-hidden="true" viewBox="0 0 20 20">
+          <path d="M3 5.25 10 2l7 3.25L10 8.5zM3 9.25l7 3.25 7-3.25M3 13.25l7 3.25 7-3.25"></path>
+        </svg>
+        <span class="sidebar-link-copy"><strong>Resume library</strong><small>Sources and versions</small></span>
+      </a>
+      <a
+        class="sidebar-link"
+        href="/app/forge"
+        aria-current={active === "forge" ? "page" : undefined}
+        title="Evidence brief"
+      >
+        <svg aria-hidden="true" viewBox="0 0 20 20">
+          <path d="M6 3.25h8M6 6.25h8M5 2.5h10a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 15 17.5H5A1.5 1.5 0 0 1 3.5 16V4A1.5 1.5 0 0 1 5 2.5ZM6 11h3M6 14h6"></path>
+        </svg>
+        <span class="sidebar-link-copy"><strong>Evidence brief</strong><small>Role alignment</small></span>
+      </a>
+
+      <p class="sidebar-section-label sidebar-system-label">System</p>
+      <a class="sidebar-link sidebar-home-link" href="/" title="Axelyn Forge website">
+        <svg aria-hidden="true" viewBox="0 0 20 20">
+          <path d="m2.75 9.25 7.25-6 7.25 6M4.5 8v8.5h11V8M8 16.5v-5h4v5"></path>
+        </svg>
+        <span class="sidebar-link-copy"><strong>Forge website</strong><small>Services and information</small></span>
+      </a>
+    </nav>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="sidebar-privacy">
+      <svg aria-hidden="true" viewBox="0 0 20 20">
+        <path d="M5.5 8V6.5a4.5 4.5 0 0 1 9 0V8M4 8h12v9H4z"></path>
+      </svg>
+      <span class="sidebar-copy"><strong>Private workspace</strong><small>Your files stay account-scoped.</small></span>
+    </div>
+    <div class="sidebar-account">
+      <UserButton />
+      <span class="sidebar-copy"><strong>My account</strong><small>Profile and session</small></span>
+      <i class="sidebar-copy" aria-hidden="true"></i>
+    </div>
+  </div>
+</aside>
+
+<script is:inline src="/scripts/app-sidebar.js" defer></script>
