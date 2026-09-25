@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["apps/api", "packages/forge-core"]
+members = ["apps/api", "apps/converter", "packages/forge-core"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/forge-core/tests", "apps/api/tests"]
+testpaths = ["packages/forge-core/tests", "apps/api/tests", "apps/converter/tests"]

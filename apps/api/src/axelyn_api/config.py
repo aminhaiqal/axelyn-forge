@@ -20,6 +20,8 @@ class Settings:
     resume_template_path: Path = Path("templates/Axelyn_Standard_Resume_v1.docx")
     max_resume_bytes: int = 10 * 1024 * 1024
     max_resume_files: int = 5
+    converter_endpoint: Optional[str] = None
+    converter_timeout_seconds: int = 150
     cors_origins: Tuple[str, ...] = (
         "http://localhost:4321",
         "http://localhost:8080",
@@ -65,6 +67,11 @@ class Settings:
                 values.get("FORGE_MAX_RESUME_BYTES", str(10 * 1024 * 1024))
             ),
             max_resume_files=int(values.get("FORGE_MAX_RESUME_FILES", "5")),
+            converter_endpoint=(values.get("FORGE_CONVERTER_ENDPOINT") or "").rstrip("/")
+            or None,
+            converter_timeout_seconds=int(
+                values.get("FORGE_CONVERTER_TIMEOUT_SECONDS", "150")
+            ),
             cors_origins=_origins(
                 values.get(
                     "FORGE_CORS_ORIGINS",

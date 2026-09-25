@@ -1,6 +1,6 @@
 # Axelyn Forge
 
-Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library for importing private PDF/DOCX sources, reviewing extracted content, organizing role versions, and rendering the Axelyn standard DOCX. The earlier evidence-alignment tool remains available at `/app/forge`. FastAPI verifies the same Clerk session for every private operation.
+Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library for importing private PDF/DOCX sources, reviewing extracted content, organizing role versions, and rendering the Axelyn standard as DOCX and PDF. The earlier evidence-alignment tool remains available at `/app/forge`. FastAPI verifies the same Clerk session for every private operation.
 
 The active product no longer depends on Discord.
 
@@ -9,6 +9,7 @@ The active product no longer depends on Discord.
 ```text
 apps/
   api/                     FastAPI HTTP service and API tests
+  converter/               Private LibreOffice conversion service
   web/                     Astro SSR app, Tailwind UI, and Clerk controls
 packages/
   forge-core/              Document engine, CLI, and core tests
@@ -31,7 +32,7 @@ Python 3.10 or newer and Node.js 24 are required. The project is linked to the C
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -e "./packages/forge-core[dev]" -e "./apps/api[dev]"
+.venv/bin/pip install -e "./packages/forge-core[dev]" -e "./apps/api[dev]" -e "./apps/converter[dev]"
 npm install
 npm install --global clerk
 clerk auth login
@@ -44,6 +45,7 @@ Load the Clerk development values without committing them, then start the API:
 set -a
 source apps/web/.env
 set +a
+.venv/bin/forge-converter &
 .venv/bin/forge-api
 ```
 
@@ -74,7 +76,8 @@ The first public contract is versioned under `/api/v1`.
 | `PUT` | `/api/v1/resumes/{id}/draft` | Save corrections to an owned resume review draft. |
 | `POST` | `/api/v1/resumes/{id}/accept` | Approve a reviewed source as a named role version. |
 | `GET` | `/api/v1/resume-variants` | List the signed-in user's approved versions. |
-| `POST` | `/api/v1/resume-variants/{id}/render` | Render an owned version through the standard template. |
+| `GET` | `/api/v1/generated-documents` | List private generated files owned by the signed-in user. |
+| `POST` | `/api/v1/resume-variants/{id}/render` | Render an owned version as a private DOCX/PDF bundle. |
 | `GET` | `/api/v1/documents/{id}/download` | Download an owned generated document. |
 
 Example request:
@@ -98,7 +101,7 @@ Service submissions receive an opaque `req_…` reference. Forge workspace brief
 
 ## Containers
 
-The Compose stack builds the FastAPI service, Astro SSR frontend, and Nginx gateway. Nginx rate-limits write endpoints, while SQLite state remains in a named volume. Local resume objects use the private state volume. Production uses the authenticated `axelyn-forge-storage` Worker and a private R2 bucket; its bearer token stays server-only. A separate core image in `infra/docker/core.Dockerfile` provides the `forge` CLI and LibreOffice without baking private candidate files into any image.
+The Compose stack builds the FastAPI service, private LibreOffice converter, Astro SSR frontend, and Nginx gateway. Nginx rate-limits write endpoints, while SQLite state remains in a named volume. Local resume objects use the private state volume. Production uses the authenticated `axelyn-forge-storage` Worker and a private R2 bucket; its bearer token stays server-only. The converter has no published port, uses a read-only filesystem and bounded concurrency, and validates each PDF before the API stores it. A separate core image in `infra/docker/core.Dockerfile` provides the `forge` CLI without baking private candidate files into any image.
 
 ```bash
 docker compose --env-file apps/web/.env -f infra/compose.yaml up --build
@@ -110,6 +113,7 @@ For a single-host production deployment behind a dedicated Cloudflare Tunnel, us
 
 ```bash
 FORGE_API_IMAGE=ghcr.io/aminhaiqal/axelyn-forge-api:sha-<commit> \
+FORGE_CONVERTER_IMAGE=ghcr.io/aminhaiqal/axelyn-forge-converter:sha-<commit> \
 FORGE_FRONTEND_IMAGE=ghcr.io/aminhaiqal/axelyn-forge-frontend:sha-<commit> \
 FORGE_WEB_IMAGE=ghcr.io/aminhaiqal/axelyn-forge-web:sha-<commit> \
 CLOUDFLARE_TUNNEL_TOKEN_FILE=/run/secrets/axelyn-forge-tunnel \
@@ -117,7 +121,7 @@ docker compose --env-file /path/to/forge-production.env \
   -f infra/compose.production.yaml up -d
 ```
 
-The production environment file must contain the Clerk **production-instance** publishable and secret keys. The production stack does not publish a host port. Cloudflare Tunnel connects directly to the internal `web:8080` gateway, while the frontend, API, and SQLite volume stay private.
+The production environment file must contain the Clerk **production-instance** publishable and secret keys. The production stack does not publish a host port. Cloudflare Tunnel connects directly to the internal `web:8080` gateway, while the frontend, API, converter, and SQLite volume stay private.
 
 It must also contain `FORGE_STORAGE_ENDPOINT` and `FORGE_STORAGE_TOKEN`. Deploy the private R2 gateway with `infra/cloudflare/storage.wrangler.jsonc`; store `FORGE_STORAGE_TOKEN` with `wrangler secret put`, never in the Wrangler config.
 
@@ -172,7 +176,7 @@ docker compose -f infra/compose.yaml config
 clerk doctor
 ```
 
-CI runs the Python tests, checks and builds the Astro app, and builds the API, frontend, gateway, and core container images. Pushes to `main` and version tags publish all four images to GitHub Container Registry.
+CI runs the Python tests, checks and builds the Astro app, and builds the API, converter, frontend, gateway, and core container images. Pushes to `main` and version tags publish all five images to GitHub Container Registry.
 
 ## Private data
 

@@ -150,3 +150,7 @@ class GeneratedDocumentSummary(BaseModel):
     template_id: str
     template_version: str
     created_at: str
+
+
+class GeneratedDocumentBundle(BaseModel):
+    documents: List[GeneratedDocumentSummary]

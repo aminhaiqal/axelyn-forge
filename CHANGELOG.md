@@ -4,6 +4,15 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ## Unreleased
 
+### Added
+
+- Added a private, resource-bounded LibreOffice conversion service and standard resume generation as matched DOCX/PDF bundles.
+- Added owner-scoped generated-document listing so authenticated users can return to their latest downloads.
+
+### Changed
+
+- Updated the responsive resume workspace to expose persistent DOCX and PDF download controls for each approved role version.
+
 ## 0.3.0 — 2026-09-25
 
 ### Added

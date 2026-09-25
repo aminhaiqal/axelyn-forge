@@ -14,6 +14,29 @@ x-runtime-security: &runtime-security
       max-file: "3"
 
 services:
+  converter:
+    <<: *runtime-security
+    image: ${FORGE_CONVERTER_IMAGE:-ghcr.io/aminhaiqal/axelyn-forge-converter:latest}
+    environment:
+      FORGE_CONVERTER_CONCURRENCY: ${FORGE_CONVERTER_CONCURRENCY:-1}
+      FORGE_CONVERTER_MAX_DOCX_BYTES: ${FORGE_CONVERTER_MAX_DOCX_BYTES:-12582912}
+    cpus: 1.0
+    mem_limit: 768m
+    pids_limit: 128
+    tmpfs:
+      - /tmp:size=384m,mode=1777
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
   api:
     <<: *runtime-security
     image: ${FORGE_API_IMAGE:-ghcr.io/aminhaiqal/axelyn-forge-api:latest}
@@ -24,12 +47,17 @@ services:
       FORGE_STORAGE_ENDPOINT: ${FORGE_STORAGE_ENDPOINT:?Set FORGE_STORAGE_ENDPOINT}
       FORGE_STORAGE_TOKEN: ${FORGE_STORAGE_TOKEN:?Set FORGE_STORAGE_TOKEN}
       FORGE_RESUME_TEMPLATE: /app/templates/Axelyn_Standard_Resume_v1.docx
+      FORGE_CONVERTER_ENDPOINT: http://converter:8100
+      FORGE_CONVERTER_TIMEOUT_SECONDS: ${FORGE_CONVERTER_TIMEOUT_SECONDS:-150}
       FORGE_CORS_ORIGINS: https://forge.axelyn.com
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?Set CLERK_SECRET_KEY}
       CLERK_JWT_KEY: ${CLERK_JWT_KEY:-}
       CLERK_AUTHORIZED_PARTIES: https://forge.axelyn.com
     volumes:
       - forge-state:/state
+    depends_on:
+      converter:
+        condition: service_healthy
     cpus: 1.0
     mem_limit: 1g
     pids_limit: 128

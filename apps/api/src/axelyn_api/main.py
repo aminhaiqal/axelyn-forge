@@ -20,11 +20,17 @@ from .analysis import analyze_forge_brief
 from .auth import ClerkAuthenticator, UserAuthenticator
 from .catalog import SERVICE_IDS, SERVICES
 from .config import Settings
+from .converter import (
+    DocumentConversionError,
+    DocumentConverter,
+    create_document_converter,
+)
 from .models import (
     HealthResponse,
     AuthenticatedUser,
     ForgeBriefAccepted,
     ForgeBriefCreate,
+    GeneratedDocumentBundle,
     GeneratedDocumentSummary,
     ResumeAcceptRequest,
     ResumeDraft,
@@ -40,6 +46,7 @@ from .models import (
 )
 from .resume_import import (
     DOCX_MEDIA_TYPE,
+    PDF_MEDIA_TYPE,
     ResumeImportError,
     decode_json,
     draft_payload,
@@ -92,6 +99,7 @@ def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
 def create_app(
     settings: Optional[Settings] = None,
     authenticate_user: Optional[UserAuthenticator] = None,
+    document_converter: Optional[DocumentConverter] = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings.from_environ()
     store = ServiceRequestStore(resolved_settings.database_path)
@@ -102,6 +110,10 @@ def create_app(
         token=resolved_settings.storage_token,
     )
     user_authenticator = authenticate_user or ClerkAuthenticator(resolved_settings)
+    converter = document_converter or create_document_converter(
+        resolved_settings.converter_endpoint,
+        resolved_settings.converter_timeout_seconds,
+    )
 
     def require_user(request: Request) -> str:
         return user_authenticator(request)
@@ -129,6 +141,7 @@ def create_app(
     app.state.service_request_store = store
     app.state.resume_store = resume_store
     app.state.object_store = object_store
+    app.state.document_converter = converter
 
     if resolved_settings.cors_origins:
         app.add_middleware(
@@ -398,16 +411,28 @@ def create_app(
             _variant_summary(row) for row in resume_store.list_variants(user_id)
         ]
 
+    @app.get(
+        "/api/v1/generated-documents",
+        response_model=list[GeneratedDocumentSummary],
+        tags=["resumes"],
+    )
+    def list_generated_documents(
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> list[GeneratedDocumentSummary]:
+        return [
+            _document_summary(row) for row in resume_store.list_documents(user_id)
+        ]
+
     @app.post(
         "/api/v1/resume-variants/{variant_id}/render",
-        response_model=GeneratedDocumentSummary,
+        response_model=GeneratedDocumentBundle,
         status_code=status.HTTP_201_CREATED,
         tags=["resumes"],
     )
     def render_resume_variant(
         variant_id: str,
         user_id: Annotated[str, Depends(require_user)],
-    ) -> GeneratedDocumentSummary:
+    ) -> GeneratedDocumentBundle:
         variant = resume_store.get_variant(user_id, variant_id)
         if variant is None:
             raise HTTPException(status_code=404, detail="Resume version not found.")
@@ -436,23 +461,65 @@ def create_app(
             document_payload = output.read_bytes()
 
         safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", str(variant["name"])).strip("-.")
-        filename = f"{safe_stem or 'resume'}-axelyn-forge.docx"
-        document_key = (
-            f"{_object_prefix(user_id)}/documents/{variant_id}/"
-            f"{uuid.uuid4().hex}.docx"
+        base_filename = f"{safe_stem or 'resume'}-axelyn-forge"
+        try:
+            pdf_payload = converter.docx_to_pdf(
+                document_payload,
+                f"{base_filename}.docx",
+            )
+        except DocumentConversionError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The LibreOffice PDF converter is temporarily unavailable.",
+            ) from error
+
+        generation_id = uuid.uuid4().hex
+        object_prefix = f"{_object_prefix(user_id)}/documents/{variant_id}/{generation_id}"
+        artifacts = [
+            {
+                "filename": f"{base_filename}.docx",
+                "media_type": DOCX_MEDIA_TYPE,
+                "object_key": f"{object_prefix}.docx",
+                "payload": document_payload,
+            },
+            {
+                "filename": f"{base_filename}.pdf",
+                "media_type": PDF_MEDIA_TYPE,
+                "object_key": f"{object_prefix}.pdf",
+                "payload": pdf_payload,
+            },
+        ]
+        stored_keys: list[str] = []
+        try:
+            for artifact in artifacts:
+                object_store.put(
+                    str(artifact["object_key"]),
+                    bytes(artifact["payload"]),
+                    str(artifact["media_type"]),
+                )
+                stored_keys.append(str(artifact["object_key"]))
+            rows = resume_store.create_documents(
+                user_id=user_id,
+                variant_id=variant_id,
+                documents=[
+                    {
+                        "filename": str(artifact["filename"]),
+                        "media_type": str(artifact["media_type"]),
+                        "object_key": str(artifact["object_key"]),
+                        "template_id": "axelyn-standard-resume",
+                        "template_version": "1",
+                    }
+                    for artifact in artifacts
+                ],
+            )
+        except Exception:
+            for key in stored_keys:
+                object_store.delete(key)
+            raise
+        assert rows is not None
+        return GeneratedDocumentBundle(
+            documents=[_document_summary(row) for row in rows]
         )
-        object_store.put(document_key, document_payload, DOCX_MEDIA_TYPE)
-        document = resume_store.create_document(
-            user_id=user_id,
-            variant_id=variant_id,
-            filename=filename,
-            media_type=DOCX_MEDIA_TYPE,
-            object_key=document_key,
-            template_id="axelyn-standard-resume",
-            template_version="1",
-        )
-        assert document is not None
-        return _document_summary(document)
 
     @app.get(
         "/api/v1/documents/{document_id}/download",

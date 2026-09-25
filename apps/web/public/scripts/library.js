@@ -94,7 +94,7 @@ if (page instanceof HTMLElement) {
     });
   };
 
-  const renderVariants = (variants) => {
+  const renderVariants = (variants, documents) => {
     if (!(variantList instanceof HTMLElement)) return;
     variantList.replaceChildren();
     if (!variants.length) {
@@ -113,22 +113,46 @@ if (page instanceof HTMLElement) {
       const name = document.createElement("h3");
       name.textContent = variant.name;
       copy.append(role, name);
-      const generate = button("Generate standard DOCX", "render", variant.id);
+      const actions = document.createElement("div");
+      actions.className = "variant-actions";
+      const downloads = document.createElement("div");
+      downloads.className = "variant-downloads";
+      const latest = new Map();
+      documents
+        .filter((document) => document.variant_id === variant.id)
+        .forEach((document) => {
+          if (!latest.has(document.media_type)) latest.set(document.media_type, document);
+        });
+      [
+        ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "DOCX"],
+        ["application/pdf", "PDF"],
+      ].forEach(([mediaType, label]) => {
+        const artifact = latest.get(mediaType);
+        if (!artifact) return;
+        const link = document.createElement("a");
+        link.href = `${apiBase}/api/v1/documents/${artifact.id}/download`;
+        link.textContent = `Download ${label}`;
+        link.setAttribute("download", artifact.filename);
+        downloads.append(link);
+      });
+      const generate = button("Generate DOCX + PDF", "render", variant.id);
       const arrow = document.createElement("span");
       arrow.textContent = "↓";
       generate.append(arrow);
-      card.append(copy, generate);
+      actions.append(downloads, generate);
+      card.append(copy, actions);
       variantList.append(card);
     });
   };
 
   const refresh = async () => {
-    const [sources, variants] = await Promise.all([
+    const [sources, variants, documents] = await Promise.all([
       api("/api/v1/resumes"),
       api("/api/v1/resume-variants"),
+      api("/api/v1/generated-documents"),
     ]);
     renderSources(sources);
-    renderVariants(variants);
+    renderVariants(variants, documents);
   };
 
   const formPayload = () => {
@@ -290,12 +314,13 @@ if (page instanceof HTMLElement) {
     if (!(target instanceof HTMLButtonElement) || !target.dataset.id) return;
     const original = target.textContent;
     target.disabled = true;
-    target.textContent = "Building your DOCX…";
+    target.textContent = "Rendering with LibreOffice…";
     try {
-      const document = await api(`/api/v1/resume-variants/${target.dataset.id}/render`, { method: "POST" });
-      window.location.assign(`${apiBase}/api/v1/documents/${document.id}/download`);
+      const bundle = await api(`/api/v1/resume-variants/${target.dataset.id}/render`, { method: "POST" });
+      await refresh();
+      setStatus(uploadStatus, `${bundle.documents.length} files are ready: editable DOCX and layout-stable PDF.`, "success");
     } catch (error) {
-      setStatus(uploadStatus, error instanceof Error ? error.message : "The standard resume could not be generated.", "error");
+      setStatus(uploadStatus, error instanceof Error ? error.message : "The standard resume files could not be generated.", "error");
     } finally {
       target.disabled = false;
       target.textContent = original;

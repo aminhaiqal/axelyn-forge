@@ -1,6 +1,42 @@
 name: axelyn-forge
 
 services:
+  converter:
+    build:
+      context: ..
+      dockerfile: infra/docker/converter.Dockerfile
+    image: axelyn-forge-converter:local
+    restart: unless-stopped
+    environment:
+      FORGE_CONVERTER_CONCURRENCY: ${FORGE_CONVERTER_CONCURRENCY:-1}
+      FORGE_CONVERTER_MAX_DOCX_BYTES: ${FORGE_CONVERTER_MAX_DOCX_BYTES:-12582912}
+    cpus: 1.0
+    mem_limit: 768m
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=384m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
   api:
     build:
       context: ..
@@ -19,10 +55,15 @@ services:
       FORGE_STORAGE_ENDPOINT: ${FORGE_STORAGE_ENDPOINT:-}
       FORGE_STORAGE_TOKEN: ${FORGE_STORAGE_TOKEN:-}
       FORGE_RESUME_TEMPLATE: /app/templates/Axelyn_Standard_Resume_v1.docx
+      FORGE_CONVERTER_ENDPOINT: http://converter:8100
+      FORGE_CONVERTER_TIMEOUT_SECONDS: ${FORGE_CONVERTER_TIMEOUT_SECONDS:-150}
       FORGE_CORS_ORIGINS: ${FORGE_CORS_ORIGINS:-http://localhost:8080}
       CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-http://localhost:8080,http://127.0.0.1:8080}
     volumes:
       - forge-state:/state
+    depends_on:
+      converter:
+        condition: service_healthy
     cpus: 1.0
     mem_limit: 1g
     pids_limit: 128

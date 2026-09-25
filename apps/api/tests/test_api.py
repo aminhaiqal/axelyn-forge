@@ -12,6 +12,18 @@ from axelyn_api.config import Settings
 from axelyn_api.main import create_app
 
 
+VALID_PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\nstartxref\n0\n%%EOF\n"
+
+
+class FakeDocumentConverter:
+    def __init__(self):
+        self.requests: list[tuple[bytes, str]] = []
+
+    def docx_to_pdf(self, payload: bytes, filename: str) -> bytes:
+        self.requests.append((payload, filename))
+        return VALID_PDF
+
+
 class ApiTests(unittest.TestCase):
     @staticmethod
     def authenticate_user(request: Request) -> str:
@@ -60,6 +72,7 @@ class ApiTests(unittest.TestCase):
             / "templates"
             / "Axelyn_Standard_Resume_v1.docx"
         )
+        self.document_converter = FakeDocumentConverter()
         app = create_app(
             Settings(
                 environment="test",
@@ -69,6 +82,7 @@ class ApiTests(unittest.TestCase):
                 cors_origins=(),
             ),
             authenticate_user=self.authenticate_user,
+            document_converter=self.document_converter,
         )
         self.client_context = TestClient(app)
         self.client = self.client_context.__enter__()
@@ -267,18 +281,45 @@ class ApiTests(unittest.TestCase):
             headers=headers,
         )
         self.assertEqual(201, rendered.status_code, rendered.text)
-        document_id = rendered.json()["id"]
-        download = self.client.get(
-            f"/api/v1/documents/{document_id}/download",
-            headers=headers,
+        documents = rendered.json()["documents"]
+        self.assertEqual(2, len(documents))
+        self.assertEqual(
+            {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/pdf",
+            },
+            {document["media_type"] for document in documents},
         )
-        other_download = self.client.get(
-            f"/api/v1/documents/{document_id}/download",
+        self.assertEqual(1, len(self.document_converter.requests))
+        self.assertTrue(self.document_converter.requests[0][0].startswith(b"PK"))
+
+        downloads = {}
+        for document in documents:
+            response = self.client.get(
+                f"/api/v1/documents/{document['id']}/download",
+                headers=headers,
+            )
+            self.assertEqual(200, response.status_code)
+            self.assertIn("attachment", response.headers["content-disposition"])
+            downloads[document["media_type"]] = response.content
+        self.assertTrue(
+            downloads[
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ].startswith(b"PK")
+        )
+        self.assertEqual(VALID_PDF, downloads["application/pdf"])
+
+        listed = self.client.get("/api/v1/generated-documents", headers=headers)
+        other_listed = self.client.get(
+            "/api/v1/generated-documents",
             headers={"Authorization": "Bearer other-session"},
         )
-        self.assertEqual(200, download.status_code)
-        self.assertTrue(download.content.startswith(b"PK"))
-        self.assertIn("attachment", download.headers["content-disposition"])
+        self.assertEqual(2, len(listed.json()))
+        self.assertEqual([], other_listed.json())
+        other_download = self.client.get(
+            f"/api/v1/documents/{documents[0]['id']}/download",
+            headers={"Authorization": "Bearer other-session"},
+        )
         self.assertEqual(404, other_download.status_code)
 
     def test_resume_import_rejects_unsupported_files_and_requires_auth(self):

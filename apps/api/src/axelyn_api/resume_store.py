@@ -6,7 +6,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 
 def _now() -> str:
@@ -322,6 +322,79 @@ class ResumeStore:
                 ),
             )
         return self.get_document(user_id, document_id)
+
+    def create_documents(
+        self,
+        *,
+        user_id: str,
+        variant_id: str,
+        documents: Sequence[dict[str, str]],
+    ) -> list[dict[str, Any]] | None:
+        """Record one generated bundle in a single metadata transaction."""
+        if self.get_variant(user_id, variant_id) is None:
+            return None
+        created_at = _now()
+        rows = [
+            {
+                "id": _identifier("doc"),
+                "filename": document["filename"],
+                "media_type": document["media_type"],
+                "object_key": document["object_key"],
+                "template_id": document["template_id"],
+                "template_version": document["template_version"],
+            }
+            for document in documents
+        ]
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO generated_documents (
+                    id, user_id, variant_id, filename, media_type, object_key,
+                    template_id, template_version, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        row["id"],
+                        user_id,
+                        variant_id,
+                        row["filename"],
+                        row["media_type"],
+                        row["object_key"],
+                        row["template_id"],
+                        row["template_version"],
+                        created_at,
+                    )
+                    for row in rows
+                ],
+            )
+        return [
+            {
+                **row,
+                "user_id": user_id,
+                "variant_id": variant_id,
+                "created_at": created_at,
+            }
+            for row in rows
+        ]
+
+    def list_documents(
+        self,
+        user_id: str,
+        variant_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT * FROM generated_documents
+            WHERE user_id = ?
+        """
+        parameters: tuple[str, ...] = (user_id,)
+        if variant_id is not None:
+            query += " AND variant_id = ?"
+            parameters = (user_id, variant_id)
+        query += " ORDER BY created_at DESC, rowid DESC"
+        with self._connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [dict(row) for row in rows]
 
     def get_document(self, user_id: str, document_id: str) -> dict[str, Any] | None:
         with self._connect() as connection:

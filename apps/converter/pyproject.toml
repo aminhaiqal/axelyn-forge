@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "axelyn-forge-converter"
+version = "0.1.0"
+description = "Internal LibreOffice document conversion service for Axelyn Forge"
+requires-python = ">=3.10"
+dependencies = [
+  "axelyn-forge-core==0.3.0",
+  "fastapi>=0.115,<1",
+  "python-multipart>=0.0.20,<1",
+  "uvicorn[standard]>=0.32,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8,<10",
+]
+
+[project.scripts]
+forge-converter = "axelyn_converter.main:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["axelyn_converter*"]

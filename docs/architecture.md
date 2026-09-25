@@ -1,6 +1,6 @@
 # Architecture
 
-Axelyn Forge is organized around three independently testable and deployable boundaries.
+Axelyn Forge is organized around independently testable and deployable application boundaries.
 
 ```mermaid
 flowchart LR
@@ -13,6 +13,8 @@ flowchart LR
     API -->|Server-only bearer token| StorageWorker[Private storage Worker]
     StorageWorker --> R2[(Private R2 bucket)]
     API --> Core[Forge DOCX renderer]
+    API -->|Private Compose network| Converter[Converter service]
+    Converter --> LibreOffice[Headless LibreOffice Writer]
 
     CLI[Forge CLI] --> Core
     Core --> Evidence[(Evidence and usage SQLite)]
@@ -26,9 +28,11 @@ flowchart LR
 
 `apps/api` owns HTTP concerns: request validation, CORS, Clerk session verification, public route versioning, service catalog exposure, resume metadata, and intake persistence. Every private resume query includes the authenticated Clerk user ID. Originals, review drafts, normalized versions, and generated documents use opaque object keys behind the server-only storage gateway.
 
+`apps/converter` owns resource-bounded office document conversion. It has no public route or published port. Each request uses an isolated temporary LibreOffice profile, validates the DOCX input and PDF output, and runs under a one-conversion default concurrency limit.
+
 `packages/forge-core` owns document-domain behavior. It remains independent of HTTP and can be driven through the `forge` CLI or imported by a later background worker. Template inspection, evidence selection, semantic operations, DOCX rendering, PDF conversion, and usage accounting stay in this package.
 
-`infra` owns runtime assembly. Nginx routes pages to the private Astro service and `/api` to the private FastAPI service. It preserves the original host and scheme for safe Clerk redirects. SQLite state is kept in a named volume. Only the gateway publishes a host port locally. A separate core image contains LibreOffice and the `forge` CLI; candidate files are mounted when a workflow runs and are never copied into the public API image.
+`infra` owns runtime assembly. Nginx routes pages to the private Astro service and `/api` to the private FastAPI service. It preserves the original host and scheme for safe Clerk redirects. SQLite state is kept in a named volume. Only the gateway publishes a host port locally. LibreOffice runs in the private converter and CLI images; candidate files are never copied into the public API image.
 
 ## Current request flow
 
@@ -43,8 +47,9 @@ flowchart LR
 1. The signed-in browser sends up to five DOCX/PDF files to the same-origin import endpoint.
 2. FastAPI validates signatures and size limits, defensively extracts text, and writes the original plus a review draft to private object storage.
 3. The user corrects the extracted fields and approves a named role version. The approved normalized payload becomes the rendering source.
-4. The API maps approved content to the fixed Axelyn template bindings and stores the generated DOCX privately.
-5. Download authorization checks both the document ID and Clerk user ID. Storage credentials and R2 object keys never reach browser code.
+4. The API maps approved content to the fixed Axelyn template bindings and renders a DOCX.
+5. The API sends that DOCX to the private converter, which uses headless LibreOffice and returns a validated PDF.
+6. The API stores both files as one generated bundle. Download authorization checks both the document ID and Clerk user ID. Storage credentials and R2 object keys never reach browser code.
 
 ## Tailoring execution boundary
 
@@ -52,4 +57,4 @@ The existing tailoring workflow can take minutes, uses paid provider calls, and 
 
 ## Delivery
 
-Pull requests and pushes to `main` run Python tests, the Astro type check and production build, and all Docker image builds. Pushes to `main` or a `v*` tag publish separate API, frontend, gateway, and core images to GitHub Container Registry. Deployment remains environment-specific, so the Clerk production keys and other credentials stay outside the repository.
+Pull requests and pushes to `main` run Python tests, the Astro type check and production build, and all Docker image builds. Pushes to `main` or a `v*` tag publish separate API, converter, frontend, gateway, and core images to GitHub Container Registry. Deployment remains environment-specific, so the Clerk production keys and other credentials stay outside the repository.

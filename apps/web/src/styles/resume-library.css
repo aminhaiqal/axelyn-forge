@@ -107,6 +107,11 @@
 .variant-card { min-height: 190px; display: flex; flex-direction: column; justify-content: space-between; gap: 30px; padding: 26px; background: #203847; }
 .variant-card p { margin: 0; color: #8fa2ae; font-family: var(--font-mono); font-size: .55rem; text-transform: uppercase; }
 .variant-card h3 { margin: 9px 0 0; font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; }
+.variant-actions { display: grid; gap: 10px; }
+.variant-downloads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.variant-downloads:empty { display: none; }
+.variant-downloads a { min-height: 36px; display: grid; place-items: center; border: 1px solid #526a78; color: #c8d3d9; font-size: .58rem; font-weight: 800; text-decoration: none; }
+.variant-downloads a:hover { border-color: #b9c7ce; color: white; }
 .variant-card button { width: 100%; min-height: 40px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #788b96; padding: 0 13px; color: white; background: transparent; font-size: .62rem; font-weight: 800; cursor: pointer; }
 .variant-card button:hover { border-color: var(--color-copper); }
 .variant-empty { grid-column: 1 / -1; padding: 40px; color: #a8b5bc; background: #203847; font-size: .7rem; }
