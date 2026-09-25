@@ -184,3 +184,39 @@ class GeneratedDocumentSummary(BaseModel):
 
 class GeneratedDocumentBundle(BaseModel):
     documents: List[GeneratedDocumentSummary]
+
+
+JobMatchState = Literal["match", "some_match", "no_match"]
+
+
+class JobMatchAnalysis(BaseModel):
+    match_percentage: int = Field(ge=0, le=100)
+    match_state: JobMatchState
+    match_label: Literal["Match", "Some match", "No match"]
+    matched_keywords: List[str]
+    missing_keywords: List[str]
+    evidence_highlights: List[str]
+    reasons: List[str]
+    recommendations: List[str]
+    can_generate: bool
+
+
+class JobMatchResult(JobMatchAnalysis):
+    id: str
+    source_id: str
+    resume_name: str
+    target_role: str
+    company: Optional[str]
+    created_at: str
+
+
+class JobMatchDocumentSummary(BaseModel):
+    id: str
+    match_id: str
+    filename: str
+    media_type: str
+    created_at: str
+
+
+class JobMatchDocumentBundle(BaseModel):
+    documents: List[JobMatchDocumentSummary]

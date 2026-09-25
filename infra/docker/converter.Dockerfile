@@ -14,6 +14,8 @@ RUN apt-get update \
         fonts-crosextra-carlito \
         fonts-liberation \
         libreoffice-writer \
+        tesseract-ocr \
+        tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 COPY infra/docker/fontconfig/99-axelyn-forge-font-substitutions.conf /etc/fonts/conf.d/

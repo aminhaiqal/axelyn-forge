@@ -88,6 +88,36 @@ class ResumeStore:
                 );
                 CREATE INDEX IF NOT EXISTS generated_documents_owner_created
                     ON generated_documents (user_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS job_matches (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    target_role TEXT NOT NULL,
+                    company TEXT,
+                    job_description_object_key TEXT NOT NULL,
+                    resume_snapshot_object_key TEXT NOT NULL,
+                    analysis_object_key TEXT NOT NULL,
+                    match_state TEXT NOT NULL,
+                    match_percentage INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (source_id) REFERENCES resume_sources(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS job_matches_owner_created
+                    ON job_matches (user_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS job_match_documents (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    match_id TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    object_key TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (match_id) REFERENCES job_matches(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS job_match_documents_owner_created
+                    ON job_match_documents (user_id, created_at DESC);
                 """
             )
 
@@ -404,6 +434,106 @@ class ResumeStore:
             ).fetchone()
         return self._dict(row)
 
+    def create_job_match(
+        self,
+        *,
+        match_id: str,
+        user_id: str,
+        source_id: str,
+        target_role: str,
+        company: str | None,
+        job_description_object_key: str,
+        resume_snapshot_object_key: str,
+        analysis_object_key: str,
+        match_state: str,
+        match_percentage: int,
+    ) -> dict[str, Any] | None:
+        if self.get_source(user_id, source_id) is None:
+            return None
+        created_at = _now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO job_matches (
+                    id, user_id, source_id, target_role, company,
+                    job_description_object_key, resume_snapshot_object_key,
+                    analysis_object_key,
+                    match_state, match_percentage, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    match_id,
+                    user_id,
+                    source_id,
+                    target_role,
+                    company,
+                    job_description_object_key,
+                    resume_snapshot_object_key,
+                    analysis_object_key,
+                    match_state,
+                    match_percentage,
+                    created_at,
+                ),
+            )
+        return self.get_job_match(user_id, match_id)
+
+    def get_job_match(self, user_id: str, match_id: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM job_matches WHERE id = ? AND user_id = ?",
+                (match_id, user_id),
+            ).fetchone()
+        return self._dict(row)
+
+    def create_job_match_documents(
+        self,
+        *,
+        user_id: str,
+        match_id: str,
+        documents: Sequence[dict[str, str]],
+    ) -> list[dict[str, Any]] | None:
+        if self.get_job_match(user_id, match_id) is None:
+            return None
+        created_at = _now()
+        rows = [
+            {
+                "id": _identifier("jdoc"),
+                "filename": document["filename"],
+                "media_type": document["media_type"],
+                "object_key": document["object_key"],
+            }
+            for document in documents
+        ]
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO job_match_documents (
+                    id, user_id, match_id, filename, media_type, object_key, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        row["id"], user_id, match_id, row["filename"],
+                        row["media_type"], row["object_key"], created_at,
+                    )
+                    for row in rows
+                ],
+            )
+        return [
+            {**row, "user_id": user_id, "match_id": match_id, "created_at": created_at}
+            for row in rows
+        ]
+
+    def get_job_match_document(
+        self, user_id: str, document_id: str
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM job_match_documents WHERE id = ? AND user_id = ?",
+                (document_id, user_id),
+            ).fetchone()
+        return self._dict(row)
+
     def source_object_keys(self, user_id: str, source_id: str) -> list[str] | None:
         source = self.get_source(user_id, source_id)
         if source is None:
@@ -426,11 +556,38 @@ class ResumeStore:
                 """,
                 (user_id, source_id),
             ).fetchall()
+            job_match_rows = connection.execute(
+                """
+                SELECT job_description_object_key, resume_snapshot_object_key,
+                       analysis_object_key
+                FROM job_matches WHERE user_id = ? AND source_id = ?
+                """,
+                (user_id, source_id),
+            ).fetchall()
+            job_document_rows = connection.execute(
+                """
+                SELECT object_key FROM job_match_documents
+                WHERE user_id = ? AND match_id IN (
+                    SELECT id FROM job_matches WHERE user_id = ? AND source_id = ?
+                )
+                """,
+                (user_id, user_id, source_id),
+            ).fetchall()
         return [
             str(source["original_object_key"]),
             str(source["draft_object_key"]),
             *(str(row["normalized_object_key"]) for row in variant_rows),
             *(str(row["object_key"]) for row in document_rows),
+            *(
+                key
+                for row in job_match_rows
+                for key in (
+                    str(row["job_description_object_key"]),
+                    str(row["resume_snapshot_object_key"]),
+                    str(row["analysis_object_key"]),
+                )
+            ),
+            *(str(row["object_key"]) for row in job_document_rows),
         ]
 
     def delete_source(self, user_id: str, source_id: str) -> bool:

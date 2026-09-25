@@ -15,6 +15,7 @@ flowchart LR
     API --> Core[Forge DOCX renderer]
     API -->|Private Compose network| Converter[Converter service]
     Converter --> LibreOffice[Headless LibreOffice Writer]
+    Converter --> Tesseract[Tesseract OCR]
 
     CLI[Forge CLI] --> Core
     Core --> Evidence[(Evidence and usage SQLite)]
@@ -28,7 +29,7 @@ flowchart LR
 
 `apps/api` owns HTTP concerns: request validation, CORS, Clerk session verification, public route versioning, service catalog exposure, resume metadata, and intake persistence. Every private resume query includes the authenticated Clerk user ID. Originals, review drafts, normalized versions, and generated documents use opaque object keys behind the server-only storage gateway.
 
-`apps/converter` owns resource-bounded office document conversion. It has no public route or published port. Each request uses an isolated temporary LibreOffice profile, validates the DOCX input and PDF output, and runs under a one-conversion default concurrency limit.
+`apps/converter` owns resource-bounded office document conversion and image OCR. It has no public route or published port. Each request uses isolated temporary files, validates document signatures and image dimensions, and runs under a one-operation default concurrency limit. LibreOffice produces PDFs; Tesseract reads PNG/JPEG job-post screenshots.
 
 `packages/forge-core` owns document-domain behavior. It remains independent of HTTP and can be driven through the `forge` CLI or imported by a later background worker. Template inspection, evidence selection, semantic operations, DOCX rendering, PDF conversion, and usage accounting stay in this package.
 
@@ -51,9 +52,13 @@ flowchart LR
 5. The API sends that DOCX to the private converter, which uses headless LibreOffice and returns a validated PDF.
 6. The API stores both files as one generated bundle. Download authorization checks both the document ID and Clerk user ID. Storage credentials and R2 object keys never reach browser code.
 
-## Tailoring execution boundary
+## Job match and tailoring flow
 
-The existing tailoring workflow can take minutes, uses paid provider calls, and writes several artifacts. It should enter the HTTP product through an authenticated job endpoint and background worker rather than running inside a public request. The current split makes that extension straightforward: the API can enqueue a job, a worker can call `forge.tailoring`, and the API can expose status or signed artifact downloads without moving document logic into route handlers.
+1. The signed-in user selects one owned resume, pastes a job description, or uploads PDF, DOCX, TXT, PNG, or JPEG source files.
+2. FastAPI extracts document text and sends images to the private Tesseract service. It compares the role language with the latest saved resume sections and records Match at 70–100%, Some match at 40–69%, or No match at 0–39%.
+3. The result explains supported terms, missing terms, source evidence, and specific improvement directions. It never treats an unsupported requirement as candidate experience.
+4. Match results generate automatically; Some match results offer generation; No match results stop before generation.
+5. Tailoring prioritizes existing roles, projects, bullets, and skills without rewriting claims. The standard renderer creates DOCX, LibreOffice creates PDF, and both files remain owner-scoped through download.
 
 ## Delivery
 

@@ -18,10 +18,18 @@ VALID_PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\nstartxref\n0\n%%EOF\n"
 class FakeDocumentConverter:
     def __init__(self):
         self.requests: list[tuple[bytes, str]] = []
+        self.ocr_requests: list[tuple[bytes, str]] = []
 
     def docx_to_pdf(self, payload: bytes, filename: str) -> bytes:
         self.requests.append((payload, filename))
         return VALID_PDF
+
+    def image_to_text(self, payload: bytes, filename: str) -> str:
+        self.ocr_requests.append((payload, filename))
+        return (
+            "Python APIs and reliable cloud services. Production Python APIs power reliable "
+            "cloud services. Build production Python APIs for reliable cloud platforms."
+        )
 
 
 class ApiTests(unittest.TestCase):
@@ -431,6 +439,123 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(201, unsupported.status_code)
         self.assertEqual("rejected", unsupported.json()["items"][0]["status"])
         self.assertEqual(401, unauthenticated.status_code)
+
+    def test_job_match_is_private_and_generates_word_and_pdf(self):
+        headers = {"Authorization": "Bearer test-session"}
+        imported = self.client.post(
+            "/api/v1/resumes/imports",
+            headers=headers,
+            files=[
+                (
+                    "files",
+                    (
+                        "backend-resume.docx",
+                        self.resume_docx(),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
+                )
+            ],
+        )
+        source_id = imported.json()["items"][0]["source"]["id"]
+        description = (
+            "Python APIs and reliable cloud services. Production Python APIs power reliable "
+            "cloud services. Build production Python APIs for reliable cloud platforms."
+        )
+        matched = self.client.post(
+            "/api/v1/job-matches",
+            headers=headers,
+            data={
+                "source_id": source_id,
+                "target_role": "Backend Engineer",
+                "company": "Example Systems",
+                "job_description": description,
+            },
+        )
+
+        self.assertEqual(201, matched.status_code, matched.text)
+        result = matched.json()
+        self.assertTrue(result["id"].startswith("jmt_"))
+        self.assertEqual("match", result["match_state"])
+        self.assertGreaterEqual(result["match_percentage"], 70)
+        self.assertTrue(result["can_generate"])
+
+        other_generate = self.client.post(
+            f"/api/v1/job-matches/{result['id']}/tailor",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        self.assertEqual(404, other_generate.status_code)
+
+        generated = self.client.post(
+            f"/api/v1/job-matches/{result['id']}/tailor",
+            headers=headers,
+        )
+        self.assertEqual(201, generated.status_code, generated.text)
+        documents = generated.json()["documents"]
+        self.assertEqual(2, len(documents))
+        self.assertEqual(
+            {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/pdf",
+            },
+            {document["media_type"] for document in documents},
+        )
+        for document in documents:
+            downloaded = self.client.get(
+                f"/api/v1/job-match-documents/{document['id']}/download",
+                headers=headers,
+            )
+            other_download = self.client.get(
+                f"/api/v1/job-match-documents/{document['id']}/download",
+                headers={"Authorization": "Bearer other-session"},
+            )
+            self.assertEqual(200, downloaded.status_code)
+            self.assertEqual(404, other_download.status_code)
+
+    def test_job_match_accepts_image_ocr_and_blocks_no_match_generation(self):
+        headers = {"Authorization": "Bearer test-session"}
+        imported = self.client.post(
+            "/api/v1/resumes/imports",
+            headers=headers,
+            files=[
+                (
+                    "files",
+                    (
+                        "backend-resume.docx",
+                        self.resume_docx(),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
+                )
+            ],
+        )
+        source_id = imported.json()["items"][0]["source"]["id"]
+        image_match = self.client.post(
+            "/api/v1/job-matches",
+            headers=headers,
+            data={"source_id": source_id, "target_role": "Backend Engineer"},
+            files=[("files", ("job.png", b"fake image payload", "image/png"))],
+        )
+        self.assertEqual(201, image_match.status_code, image_match.text)
+        self.assertEqual([(b"fake image payload", "job.png")], self.document_converter.ocr_requests)
+
+        no_match = self.client.post(
+            "/api/v1/job-matches",
+            headers=headers,
+            data={
+                "source_id": source_id,
+                "target_role": "Research Chemist",
+                "job_description": (
+                    "Lead molecular spectroscopy chromatography synthesis laboratory research. "
+                    "Develop polymer formulations, chemical assays, patents, microscopy, and trials."
+                ),
+            },
+        )
+        self.assertEqual(201, no_match.status_code, no_match.text)
+        self.assertEqual("no_match", no_match.json()["match_state"])
+        blocked = self.client.post(
+            f"/api/v1/job-matches/{no_match.json()['id']}/tailor",
+            headers=headers,
+        )
+        self.assertEqual(409, blocked.status_code)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Axelyn Forge
 
-Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library for importing private PDF/DOCX sources, reviewing extracted content, organizing role versions, and rendering the Axelyn standard as DOCX and PDF. The earlier evidence-alignment tool remains available at `/app/forge`. FastAPI verifies the same Clerk session for every private operation.
+Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library for importing private PDF/DOCX sources, reviewing extracted content, organizing role versions, and rendering the Axelyn standard as DOCX and PDF. `/app/match` compares a selected resume with pasted or uploaded job descriptions, explains the gaps, and creates evidence-grounded tailored files when the fit supports it. FastAPI verifies the same Clerk session for every private operation.
 
 The active product no longer depends on Discord.
 
@@ -80,6 +80,9 @@ The first public contract is versioned under `/api/v1`.
 | `GET` | `/api/v1/generated-documents` | List private generated files owned by the signed-in user. |
 | `POST` | `/api/v1/resume-variants/{id}/render` | Render an owned version as a private DOCX/PDF bundle. |
 | `GET` | `/api/v1/documents/{id}/download` | Download an owned generated document. |
+| `POST` | `/api/v1/job-matches` | Analyze pasted or uploaded job-description content against an owned resume. |
+| `POST` | `/api/v1/job-matches/{id}/tailor` | Generate an evidence-grounded DOCX/PDF bundle for a Match or Some match result. |
+| `GET` | `/api/v1/job-match-documents/{id}/download` | Download an owned tailored resume document. |
 
 Example request:
 
@@ -102,7 +105,7 @@ Service submissions receive an opaque `req_…` reference. Forge workspace brief
 
 ## Containers
 
-The Compose stack builds the FastAPI service, private LibreOffice converter, Astro SSR frontend, and Nginx gateway. Nginx rate-limits write endpoints, while SQLite state remains in a named volume. Local resume objects use the private state volume. Production uses the authenticated `axelyn-forge-storage` Worker and a private R2 bucket; its bearer token stays server-only. The converter has no published port, uses a read-only filesystem and bounded concurrency, and validates each PDF before the API stores it. A separate core image in `infra/docker/core.Dockerfile` provides the `forge` CLI without baking private candidate files into any image.
+The Compose stack builds the FastAPI service, private LibreOffice/Tesseract converter, Astro SSR frontend, and Nginx gateway. Nginx rate-limits write endpoints, while SQLite state remains in a named volume. Local resume objects use the private state volume. Production uses the authenticated `axelyn-forge-storage` Worker and a private R2 bucket; its bearer token stays server-only. The converter has no published port, uses a read-only filesystem and bounded concurrency, validates each PDF before the API stores it, and extracts text from PNG/JPEG job-post screenshots. A separate core image in `infra/docker/core.Dockerfile` provides the `forge` CLI without baking private candidate files into any image.
 
 ```bash
 docker compose --env-file apps/web/.env -f infra/compose.yaml up --build

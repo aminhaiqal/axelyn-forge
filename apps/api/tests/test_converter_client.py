@@ -41,6 +41,24 @@ class DocumentConverterClientTests(unittest.TestCase):
         with self.assertRaisesRegex(DocumentConversionError, "invalid PDF"):
             converter.docx_to_pdf(b"PK document", "resume.docx")
 
+    @patch("axelyn_api.converter.httpx.post")
+    def test_sends_image_to_private_ocr_endpoint(self, post):
+        post.return_value = httpx.Response(
+            200,
+            json={"text": "Senior Python engineer"},
+            headers={"Content-Type": "application/json"},
+        )
+        converter = HttpDocumentConverter("http://converter:8100", timeout_seconds=90)
+
+        result = converter.image_to_text(b"image", "job.png")
+
+        self.assertEqual("Senior Python engineer", result)
+        self.assertEqual(
+            "http://converter:8100/v1/extract/image-text",
+            post.call_args.args[0],
+        )
+        self.assertEqual("job.png", post.call_args.kwargs["files"]["file"][0])
+
 
 if __name__ == "__main__":
     unittest.main()

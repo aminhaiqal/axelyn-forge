@@ -3,7 +3,7 @@ import { UserButton } from "@clerk/astro/components";
 import "../styles/app-sidebar.css";
 
 interface Props {
-  active: "resumes" | "forge";
+  active: "resumes" | "match" | "forge";
 }
 
 const { active } = Astro.props;
@@ -45,6 +45,19 @@ const { active } = Astro.props;
 
     <nav class="sidebar-nav" aria-label="Workspace">
       <p class="sidebar-section-label">Workspace</p>
+      <a
+        class="sidebar-link"
+        href="/app/match"
+        aria-current={active === "match" ? "page" : undefined}
+        title="Job match"
+      >
+        <svg aria-hidden="true" viewBox="0 0 20 20">
+          <circle cx="10" cy="10" r="7"></circle>
+          <circle cx="10" cy="10" r="3.25"></circle>
+          <path d="M10 1.5V5M18.5 10H15M10 15v3.5M5 10H1.5"></path>
+        </svg>
+        <span class="sidebar-link-copy"><strong>Job match</strong><small>Analyze and tailor</small></span>
+      </a>
       <a
         class="sidebar-link"
         href="/app"

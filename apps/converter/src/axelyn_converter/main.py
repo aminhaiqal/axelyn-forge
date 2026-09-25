@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import threading
+from io import BytesIO
 from pathlib import Path
 from typing import Callable
 
@@ -15,20 +17,40 @@ from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.responses import Response
 from forge.errors import DocxError, PDFConversionError
 from forge.pdf import convert_docx_to_pdf
+from PIL import Image, UnidentifiedImageError
 
 from . import __version__
 
 DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 PDF_MEDIA_TYPE = "application/pdf"
 DEFAULT_MAX_DOCX_BYTES = 12 * 1024 * 1024
+DEFAULT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_PIXELS = 25_000_000
 Converter = Callable[[Path, Path], Path]
+OcrExtractor = Callable[[Path], str]
+
+
+def extract_image_text(source: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["tesseract", str(source), "stdout", "-l", "eng", "--psm", "6"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (subprocess.SubprocessError, OSError) as error:
+        raise RuntimeError("Tesseract could not extract text from this image.") from error
+    return result.stdout.strip()
 
 
 def create_app(
     *,
     convert: Converter = convert_docx_to_pdf,
+    extract_text: OcrExtractor = extract_image_text,
     executable_check: Callable[[str], str | None] = shutil.which,
     max_docx_bytes: int = DEFAULT_MAX_DOCX_BYTES,
+    max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
     max_concurrent: int = 1,
 ) -> FastAPI:
     """Create the internal converter with bounded LibreOffice concurrency."""
@@ -50,11 +72,17 @@ def create_app(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="LibreOffice is unavailable.",
             )
+        if executable_check("tesseract") is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Tesseract OCR is unavailable.",
+            )
         return {
             "status": "ok",
             "service": "axelyn-forge-converter",
             "version": __version__,
             "engine": "libreoffice",
+            "ocr_engine": "tesseract",
         }
 
     @app.post("/v1/convert/docx-to-pdf", include_in_schema=False)
@@ -116,6 +144,61 @@ def create_app(
             },
         )
 
+    @app.post("/v1/extract/image-text", include_in_schema=False)
+    def image_to_text(file: UploadFile = File()) -> dict[str, str]:
+        filename = Path(file.filename or "job-description.png").name
+        suffix = Path(filename).suffix.casefold()
+        if suffix not in {".png", ".jpg", ".jpeg"}:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="A PNG or JPEG image is required.",
+            )
+        payload = file.file.read(max_image_bytes + 1)
+        if len(payload) > max_image_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="The image exceeds the OCR size limit.",
+            )
+        try:
+            with Image.open(BytesIO(payload)) as image:
+                if image.width * image.height > MAX_IMAGE_PIXELS:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        detail="The image dimensions exceed the OCR limit.",
+                    )
+                if image.format not in {"PNG", "JPEG"}:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail="The upload is not a valid PNG or JPEG image.",
+                    )
+                image.load()
+                normalized = image.convert("RGB")
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="The upload is not a valid PNG or JPEG image.",
+            ) from error
+
+        if not slots.acquire(timeout=30):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The document converter is busy. Try again shortly.",
+            )
+        try:
+            with tempfile.TemporaryDirectory(prefix="forge-ocr-") as directory:
+                source = Path(directory) / "source.png"
+                normalized.save(source, format="PNG", optimize=True)
+                try:
+                    text = extract_text(source).strip()
+                except RuntimeError as error:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="OCR could not read this image.",
+                    ) from error
+        finally:
+            slots.release()
+        return {"text": text[:100_000]}
+
     return app
 
 
@@ -123,6 +206,9 @@ app = create_app(
     max_concurrent=int(os.environ.get("FORGE_CONVERTER_CONCURRENCY", "1")),
     max_docx_bytes=int(
         os.environ.get("FORGE_CONVERTER_MAX_DOCX_BYTES", str(DEFAULT_MAX_DOCX_BYTES))
+    ),
+    max_image_bytes=int(
+        os.environ.get("FORGE_CONVERTER_MAX_IMAGE_BYTES", str(DEFAULT_MAX_IMAGE_BYTES))
     ),
 )
 

@@ -16,6 +16,8 @@ class DocumentConversionError(RuntimeError):
 class DocumentConverter(Protocol):
     def docx_to_pdf(self, payload: bytes, filename: str) -> bytes: ...
 
+    def image_to_text(self, payload: bytes, filename: str) -> str: ...
+
 
 def _validate_pdf(payload: bytes) -> bytes:
     trailer = payload[-2048:]
@@ -52,11 +54,42 @@ class HttpDocumentConverter:
             raise DocumentConversionError("The converter returned an unexpected media type.")
         return _validate_pdf(response.content)
 
+    def image_to_text(self, payload: bytes, filename: str) -> str:
+        try:
+            response = httpx.post(
+                f"{self.endpoint}/v1/extract/image-text",
+                files={"file": (filename, payload, "application/octet-stream")},
+                timeout=self.timeout_seconds,
+            )
+        except httpx.HTTPError as error:
+            raise DocumentConversionError(
+                "The image text extractor could not be reached."
+            ) from error
+        if response.status_code != 200:
+            raise DocumentConversionError(
+                f"The image text extractor returned HTTP {response.status_code}."
+            )
+        try:
+            text = response.json()["text"]
+        except (ValueError, KeyError, TypeError) as error:
+            raise DocumentConversionError(
+                "The image text extractor returned an invalid response."
+            ) from error
+        if not isinstance(text, str) or len(text) > 100_000:
+            raise DocumentConversionError(
+                "The image text extractor returned invalid text."
+            )
+        return text.strip()
+
 
 class UnavailableDocumentConverter:
     def docx_to_pdf(self, payload: bytes, filename: str) -> bytes:
         del payload, filename
         raise DocumentConversionError("The LibreOffice converter is not configured.")
+
+    def image_to_text(self, payload: bytes, filename: str) -> str:
+        del payload, filename
+        raise DocumentConversionError("The image text extractor is not configured.")
 
 
 def create_document_converter(

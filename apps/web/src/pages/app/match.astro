@@ -1,0 +1,141 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import AppSidebar from "../../components/AppSidebar.astro";
+import "../../styles/job-match.css";
+
+const apiBase = import.meta.env.PUBLIC_API_BASE_URL ?? "";
+const { isAuthenticated, redirectToSignIn } = Astro.locals.auth();
+
+if (!isAuthenticated) {
+  return redirectToSignIn();
+}
+---
+
+<BaseLayout
+  title="Job match — Axelyn Forge"
+  description="Compare a private resume with a job description, understand the gaps, and generate an evidence-grounded tailored resume."
+>
+  <div class="match-page" data-workspace-shell data-api-base={apiBase}>
+    <AppSidebar active="match" />
+
+    <main class="match-main">
+      <header class="match-heading">
+        <div>
+          <p class="match-kicker"><span></span> Job match / private analysis</p>
+          <h1>See the fit.<br /><em>Know the gaps.</em></h1>
+        </div>
+        <p class="match-intro">Choose one of your resume sources and bring the full job description. Forge measures evidence already present in your resume, explains what is missing, and creates a truthful tailored version when the fit supports it.</p>
+      </header>
+
+      <div class="match-workspace">
+        <form class="match-form" id="job-match-form">
+          <div class="match-section-title">
+            <span>01</span>
+            <div><h2>Role and resume</h2><p>Start with the direction and the source you want to test.</p></div>
+          </div>
+
+          <div class="match-fields-two">
+            <label>
+              <span>Target role</span>
+              <input name="target_role" minlength="2" maxlength="160" placeholder="Senior frontend engineer" required />
+            </label>
+            <label>
+              <span>Company <small>optional</small></span>
+              <input name="company" maxlength="160" placeholder="Company or team" />
+            </label>
+          </div>
+
+          <label>
+            <span>Resume source</span>
+            <select name="source_id" id="match-resume-select" required>
+              <option value="">Loading your private resume library…</option>
+            </select>
+            <small class="field-help" id="resume-select-help">The latest saved content from this source will be analyzed.</small>
+          </label>
+
+          <div class="match-section-title description-title">
+            <span>02</span>
+            <div><h2>Job description</h2><p>Paste the text, attach files or screenshots, or combine both.</p></div>
+          </div>
+
+          <label>
+            <span class="textarea-heading">Paste description <small><output id="job-description-count">0</output> / 20,000</small></span>
+            <textarea name="job_description" rows="11" maxlength="20000" placeholder="Paste responsibilities, requirements, and the employer’s language here."></textarea>
+          </label>
+
+          <label class="job-drop-zone" id="job-drop-zone" for="job-files">
+            <input id="job-files" name="files" type="file" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg" multiple />
+            <span class="drop-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 16.5v2.25A1.25 1.25 0 0 0 5.25 20h13.5A1.25 1.25 0 0 0 20 18.75V16.5M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"></path></svg>
+            </span>
+            <span><strong>Attach the job post</strong><small>PDF, DOCX, TXT, PNG or JPEG · up to 5 files · 10 MB each</small></span>
+            <b>Choose files</b>
+          </label>
+          <div class="job-file-list" id="job-file-list" hidden></div>
+
+          <div class="match-submit-row">
+            <p id="job-match-status" role="status" aria-live="polite">Only evidence from your selected resume counts as a match.</p>
+            <button type="submit">Analyze match <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+
+        <aside class="match-result-panel" aria-label="Job match result">
+          <div class="result-topline"><span>03 / Result</span><span id="match-result-state">Waiting for a role</span></div>
+
+          <div class="result-empty" id="match-result-empty">
+            <div class="result-orbit" aria-hidden="true"><i></i><i></i><b></b></div>
+            <h2>Your match result appears here.</h2>
+            <p>You will get one clear outcome: Match, Some match, or No match—plus the evidence behind it.</p>
+            <ol>
+              <li><span>70–100</span> Match</li>
+              <li><span>40–69</span> Some match</li>
+              <li><span>0–39</span> No match</li>
+            </ol>
+          </div>
+
+          <section class="match-result" id="match-result" hidden>
+            <div class="score-header">
+              <div class="score-number"><strong id="match-score">0</strong><span>%</span></div>
+              <div><p>Resume evidence</p><h2 id="match-label">Some match</h2></div>
+            </div>
+            <div class="score-track" aria-hidden="true">
+              <i data-band="no">No match</i><i data-band="some">Some match</i><i data-band="yes">Match</i>
+              <b id="match-score-marker"></b>
+            </div>
+            <p class="match-verdict" id="match-verdict"></p>
+
+            <div class="result-detail">
+              <h3>Why this result</h3>
+              <ul id="match-reasons"></ul>
+            </div>
+            <div class="result-detail keyword-detail">
+              <h3>Supported in your resume</h3>
+              <div class="keyword-cloud" id="match-keywords"></div>
+            </div>
+            <div class="result-detail">
+              <h3>Evidence behind the score</h3>
+              <ul id="match-evidence"></ul>
+            </div>
+            <div class="result-detail keyword-detail">
+              <h3>Missing evidence</h3>
+              <div class="keyword-cloud missing" id="missing-keywords"></div>
+            </div>
+            <div class="result-detail">
+              <h3>How to improve</h3>
+              <ul id="match-recommendations"></ul>
+            </div>
+
+            <div class="tailor-block" id="tailor-block">
+              <div><span>Tailored output</span><p id="tailor-message">Forge will prioritize supported evidence without adding claims.</p></div>
+              <button type="button" id="generate-tailored-resume">Generate tailored resume <span>→</span></button>
+              <div class="tailor-downloads" id="tailor-downloads" hidden></div>
+            </div>
+            <p class="match-reference">Analysis <code id="match-reference"></code></p>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script is:inline src="/scripts/job-match.js" defer></script>
+</BaseLayout>

@@ -25,6 +25,15 @@ from .converter import (
     DocumentConverter,
     create_document_converter,
 )
+from .job_match import (
+    IMAGE_SUFFIXES,
+    JOB_FILE_SUFFIXES,
+    analyze_job_match,
+    combine_job_description,
+    draft_to_evidence_text,
+    extract_job_document,
+    tailor_resume_draft,
+)
 from .models import (
     HealthResponse,
     AuthenticatedUser,
@@ -32,6 +41,10 @@ from .models import (
     ForgeBriefCreate,
     GeneratedDocumentBundle,
     GeneratedDocumentSummary,
+    JobMatchAnalysis,
+    JobMatchDocumentBundle,
+    JobMatchDocumentSummary,
+    JobMatchResult,
     ResumeAcceptRequest,
     ResumeDraft,
     ResumeDraftUpdate,
@@ -70,6 +83,10 @@ def _variant_summary(row: dict[str, object]) -> ResumeVariantSummary:
 
 def _document_summary(row: dict[str, object]) -> GeneratedDocumentSummary:
     return GeneratedDocumentSummary(**row)
+
+
+def _job_document_summary(row: dict[str, object]) -> JobMatchDocumentSummary:
+    return JobMatchDocumentSummary(**row)
 
 
 def _safe_filename(value: str, fallback: str) -> str:
@@ -597,6 +614,274 @@ def create_app(
         except KeyError as error:
             raise HTTPException(status_code=404, detail="Document not found.") from error
         filename = _safe_filename(str(document["filename"]), "resume.docx")
+        return Response(
+            payload,
+            media_type=str(document["media_type"]),
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.post(
+        "/api/v1/job-matches",
+        response_model=JobMatchResult,
+        status_code=status.HTTP_201_CREATED,
+        tags=["job matching"],
+    )
+    def create_job_match(
+        user_id: Annotated[str, Depends(require_user)],
+        source_id: Annotated[str, Form(min_length=1)],
+        target_role: Annotated[str, Form(min_length=2, max_length=160)],
+        company: Annotated[str | None, Form(max_length=160)] = None,
+        job_description: Annotated[str | None, Form(max_length=20_000)] = None,
+        files: Annotated[list[UploadFile] | None, File()] = None,
+    ) -> JobMatchResult:
+        clean_role = target_role.strip()
+        if len(clean_role) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Target role must contain at least two characters.",
+            )
+        clean_company = company.strip() if company and company.strip() else None
+        source = resume_store.get_source(user_id, source_id)
+        if source is None:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+        try:
+            draft = decode_json(object_store.get(str(source["draft_object_key"])))
+        except KeyError as error:
+            raise HTTPException(status_code=503, detail="Resume draft is unavailable.") from error
+        resume_text = draft_to_evidence_text(draft)
+        if len(resume_text) < 100:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="The selected resume needs at least 100 characters of reviewed content.",
+            )
+
+        uploads = files or []
+        if len(uploads) > resolved_settings.max_resume_files:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Upload no more than {resolved_settings.max_resume_files} job-description files.",
+            )
+        parts = [job_description or ""]
+        for upload in uploads:
+            filename = _safe_filename(upload.filename or "", "job-description")
+            suffix = Path(filename).suffix.casefold()
+            if suffix not in JOB_FILE_SUFFIXES:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Use PDF, DOCX, TXT, PNG, JPG, or JPEG job-description files.",
+                )
+            payload = upload.file.read(resolved_settings.max_resume_bytes + 1)
+            if len(payload) > resolved_settings.max_resume_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="Job-description files are limited to 10 MB each.",
+                )
+            try:
+                if suffix in IMAGE_SUFFIXES:
+                    parts.append(converter.image_to_text(payload, filename))
+                else:
+                    parts.append(extract_job_document(filename, payload))
+            except ResumeImportError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(error),
+                ) from error
+            except DocumentConversionError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Image text extraction is temporarily unavailable.",
+                ) from error
+
+        try:
+            combined_description = combine_job_description(parts)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error
+        analysis = analyze_job_match(
+            target_role=clean_role,
+            company=clean_company,
+            job_description=combined_description,
+            resume_text=resume_text,
+        )
+        match_id = "jmt_" + uuid.uuid4().hex
+        prefix = f"{_object_prefix(user_id)}/job-matches/{match_id}"
+        description_key = f"{prefix}/job-description.txt"
+        resume_snapshot_key = f"{prefix}/resume.json"
+        analysis_key = f"{prefix}/analysis.json"
+        stored_keys: list[str] = []
+        try:
+            object_store.put(
+                description_key,
+                combined_description.encode("utf-8"),
+                "text/plain; charset=utf-8",
+            )
+            stored_keys.append(description_key)
+            object_store.put(
+                resume_snapshot_key,
+                encode_json(draft),
+                "application/json",
+            )
+            stored_keys.append(resume_snapshot_key)
+            object_store.put(
+                analysis_key,
+                encode_json(analysis.model_dump()),
+                "application/json",
+            )
+            stored_keys.append(analysis_key)
+            row = resume_store.create_job_match(
+                match_id=match_id,
+                user_id=user_id,
+                source_id=source_id,
+                target_role=clean_role,
+                company=clean_company,
+                job_description_object_key=description_key,
+                resume_snapshot_object_key=resume_snapshot_key,
+                analysis_object_key=analysis_key,
+                match_state=analysis.match_state,
+                match_percentage=analysis.match_percentage,
+            )
+        except Exception:
+            for key in stored_keys:
+                object_store.delete(key)
+            raise
+        assert row is not None
+        return JobMatchResult(
+            id=match_id,
+            source_id=source_id,
+            resume_name=str(source["display_name"]),
+            target_role=clean_role,
+            company=clean_company,
+            created_at=str(row["created_at"]),
+            **analysis.model_dump(),
+        )
+
+    @app.post(
+        "/api/v1/job-matches/{match_id}/tailor",
+        response_model=JobMatchDocumentBundle,
+        status_code=status.HTTP_201_CREATED,
+        tags=["job matching"],
+    )
+    def tailor_job_match(
+        match_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> JobMatchDocumentBundle:
+        match = resume_store.get_job_match(user_id, match_id)
+        if match is None:
+            raise HTTPException(status_code=404, detail="Job match not found.")
+        if str(match["match_state"]) == "no_match":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This role is not a match, so a tailored resume was not generated.",
+            )
+        source = resume_store.get_source(user_id, str(match["source_id"]))
+        if source is None:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+        template = resolved_settings.resume_template_path
+        if not template.is_file():
+            raise HTTPException(status_code=503, detail="The standard resume template is unavailable.")
+        try:
+            draft = decode_json(
+                object_store.get(str(match["resume_snapshot_object_key"]))
+            )
+            analysis = JobMatchAnalysis(
+                **decode_json(object_store.get(str(match["analysis_object_key"])))
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=503, detail="Job match data is unavailable.") from error
+        tailored = tailor_resume_draft(
+            draft,
+            target_role=str(match["target_role"]),
+            matched_keywords=analysis.matched_keywords,
+        )
+        document_payload = _render_resume_docx(
+            template=template,
+            draft=tailored,
+            title=f"{source['display_name']} — {match['target_role']}",
+            description="Evidence-grounded tailored resume generated by Axelyn Forge.",
+        )
+        safe_role = re.sub(
+            r"[^A-Za-z0-9._-]+", "-", str(match["target_role"])
+        ).strip("-.")
+        base_filename = f"{safe_role or 'role'}-tailored-resume"
+        try:
+            pdf_payload = converter.docx_to_pdf(
+                document_payload, f"{base_filename}.docx"
+            )
+        except DocumentConversionError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The LibreOffice PDF converter is temporarily unavailable.",
+            ) from error
+        generation_id = uuid.uuid4().hex
+        object_prefix = (
+            f"{_object_prefix(user_id)}/job-matches/{match_id}/documents/{generation_id}"
+        )
+        artifacts = [
+            {
+                "filename": f"{base_filename}.docx",
+                "media_type": DOCX_MEDIA_TYPE,
+                "object_key": f"{object_prefix}.docx",
+                "payload": document_payload,
+            },
+            {
+                "filename": f"{base_filename}.pdf",
+                "media_type": PDF_MEDIA_TYPE,
+                "object_key": f"{object_prefix}.pdf",
+                "payload": pdf_payload,
+            },
+        ]
+        stored_keys = []
+        try:
+            for artifact in artifacts:
+                object_store.put(
+                    str(artifact["object_key"]),
+                    bytes(artifact["payload"]),
+                    str(artifact["media_type"]),
+                )
+                stored_keys.append(str(artifact["object_key"]))
+            rows = resume_store.create_job_match_documents(
+                user_id=user_id,
+                match_id=match_id,
+                documents=[
+                    {
+                        "filename": str(artifact["filename"]),
+                        "media_type": str(artifact["media_type"]),
+                        "object_key": str(artifact["object_key"]),
+                    }
+                    for artifact in artifacts
+                ],
+            )
+        except Exception:
+            for key in stored_keys:
+                object_store.delete(key)
+            raise
+        assert rows is not None
+        return JobMatchDocumentBundle(
+            documents=[_job_document_summary(row) for row in rows]
+        )
+
+    @app.get(
+        "/api/v1/job-match-documents/{document_id}/download",
+        tags=["job matching"],
+    )
+    def download_job_match_document(
+        document_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> Response:
+        document = resume_store.get_job_match_document(user_id, document_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+        try:
+            payload = object_store.get(str(document["object_key"]))
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Document not found.") from error
+        filename = _safe_filename(str(document["filename"]), "tailored-resume.docx")
         return Response(
             payload,
             media_type=str(document["media_type"]),
