@@ -88,6 +88,22 @@ ResumeEducationLevel = Literal[
     "Professional Qualification",
     "Other",
 ]
+ResumeProjectType = Literal[
+    "Personal Project",
+    "Client Project",
+    "Commercial Product",
+    "Academic Project",
+    "Open Source",
+    "Research Project",
+    "Internal Company Project",
+]
+ResumeProjectStatus = Literal[
+    "Live / Production",
+    "In Development",
+    "Prototype",
+    "Completed",
+    "Discontinued",
+]
 RESUME_SECTION_NAMES = {
     "summary",
     "experience",
@@ -163,6 +179,44 @@ class ResumeEducationEntry(BaseModel):
         return self
 
 
+class ResumeProjectEntry(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    project_name: str = Field(default="", max_length=200)
+    project_type: ResumeProjectType = "Personal Project"
+    role: str = Field(default="", max_length=160)
+    project_url: str = Field(default="", max_length=500)
+    repository_url: str = Field(default="", max_length=500)
+    start_date: str = Field(
+        default="",
+        max_length=7,
+        pattern=r"^(?:|[0-9]{4}-(?:0[1-9]|1[0-2]))$",
+    )
+    end_date: str = Field(
+        default="",
+        max_length=7,
+        pattern=r"^(?:|[0-9]{4}-(?:0[1-9]|1[0-2]))$",
+    )
+    currently_working_on_project: bool = False
+    problem: str = Field(default="", max_length=4_000)
+    description: str = Field(default="", max_length=4_000)
+    audience: str = Field(default="", max_length=2_000)
+    personal_contribution: str = Field(default="", max_length=8_000)
+    responsibilities: str = Field(default="", max_length=8_000)
+    technologies: str = Field(default="", max_length=4_000)
+    challenge: str = Field(default="", max_length=4_000)
+    deliverables: str = Field(default="", max_length=8_000)
+    impact: str = Field(default="", max_length=8_000)
+    metrics: str = Field(default="", max_length=4_000)
+    project_status: ResumeProjectStatus = "In Development"
+
+    @model_validator(mode="after")
+    def current_project_has_no_end_date(self) -> Self:
+        if self.currently_working_on_project:
+            self.end_date = ""
+        return self
+
+
 class ResumeCustomSection(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -199,6 +253,10 @@ class ResumeDraft(BaseModel):
     education_entries: List[ResumeEducationEntry] = Field(
         default_factory=list,
         max_length=20,
+    )
+    project_entries: List[ResumeProjectEntry] = Field(
+        default_factory=list,
+        max_length=30,
     )
     custom_sections: List[ResumeCustomSection] = Field(
         default_factory=list,

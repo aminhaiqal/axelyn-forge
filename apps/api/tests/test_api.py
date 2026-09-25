@@ -426,6 +426,29 @@ class ApiTests(unittest.TestCase):
                         "relevant_skills": "Machine learning, research",
                     }
                 ],
+                "project_entries": [
+                    {
+                        "project_name": "Monitorscape",
+                        "project_type": "Commercial Product",
+                        "role": "Backend Developer",
+                        "project_url": "https://monitorscape.example",
+                        "repository_url": "https://github.com/example/monitorscape",
+                        "start_date": "2024-02",
+                        "end_date": "2025-08",
+                        "currently_working_on_project": True,
+                        "problem": "Teams could not see infrastructure failures quickly.",
+                        "description": "A production infrastructure monitoring platform.",
+                        "audience": "Operations teams and managed-service customers.",
+                        "personal_contribution": "Designed the event ingestion API.",
+                        "responsibilities": "Backend architecture, deployment, and testing.",
+                        "technologies": "Python, FastAPI, PostgreSQL, Docker",
+                        "challenge": "Processed noisy events without duplicate alerts.",
+                        "deliverables": "Implemented authentication and alert workflows.",
+                        "impact": "Reduced incident response time.",
+                        "metrics": "Processed 100K events with 99.9% uptime.",
+                        "project_status": "Live / Production",
+                    }
+                ],
                 "custom_sections": [
                     {
                         "title": "Publications",
@@ -449,6 +472,10 @@ class ApiTests(unittest.TestCase):
             source["draft"]["education_entries"][0]["currently_studying_here"]
         )
         self.assertEqual("", source["draft"]["education_entries"][0]["end_date"])
+        self.assertTrue(
+            source["draft"]["project_entries"][0]["currently_working_on_project"]
+        )
+        self.assertEqual("", source["draft"]["project_entries"][0]["end_date"])
         self.assertEqual(
             "Publications", source["draft"]["custom_sections"][0]["title"]
         )
@@ -487,6 +514,11 @@ class ApiTests(unittest.TestCase):
         self.assertIn(b"Intelligent Document Classification", document_xml)
         self.assertIn("Dean’s List".encode(), document_xml)
         self.assertIn(b"Sep 2020", document_xml)
+        self.assertIn(b"Monitorscape", document_xml)
+        self.assertIn(b"Designed the event ingestion API", document_xml)
+        self.assertIn(b"Python, FastAPI, PostgreSQL, Docker", document_xml)
+        self.assertIn(b"Processed 100K events with 99.9% uptime", document_xml)
+        self.assertIn(b"Feb 2024", document_xml)
 
         other_read = self.client.get(
             f"/api/v1/resumes/{source_id}",

@@ -18,6 +18,10 @@ if (builderPage instanceof HTMLElement) {
   const educationEmpty = document.querySelector("#education-empty");
   const educationTemplate = document.querySelector("#education-template");
   const legacyEducation = document.querySelector("#legacy-education");
+  const projectList = document.querySelector("#project-list");
+  const projectEmpty = document.querySelector("#project-empty");
+  const projectTemplate = document.querySelector("#project-template");
+  const legacyProjects = document.querySelector("#legacy-projects");
   const sourceInbox = document.querySelector("#source-inbox");
   const unmappedContent = document.querySelector("#unmapped-content");
   const transcriptPanel = document.querySelector("#source-transcript");
@@ -27,6 +31,7 @@ if (builderPage instanceof HTMLElement) {
   let currentUnmapped = [];
   let workEntrySequence = 0;
   let educationEntrySequence = 0;
+  let projectEntrySequence = 0;
 
   const api = async (path, options = {}) => {
     const response = await fetch(`${apiBase}${path}`, { credentials: "same-origin", ...options });
@@ -162,6 +167,52 @@ if (builderPage instanceof HTMLElement) {
     if (scroll) card.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  const updateProjectEntries = () => {
+    if (!(projectList instanceof HTMLElement)) return;
+    Array.from(projectList.querySelectorAll(".project-card")).forEach((card, index) => {
+      const number = card.querySelector("[data-project-entry-number]");
+      if (number instanceof HTMLElement) number.textContent = `Entry ${String(index + 1).padStart(2, "0")}`;
+    });
+    if (projectEmpty instanceof HTMLElement) projectEmpty.hidden = projectList.children.length > 0;
+  };
+
+  const syncCurrentProject = (card) => {
+    const current = card.querySelector("[data-project-current][value='yes']");
+    const endDate = card.querySelector("[data-project-field='end_date']");
+    const endDateField = card.querySelector("[data-project-end-date-field]");
+    const isCurrent = current instanceof HTMLInputElement && current.checked;
+    if (endDate instanceof HTMLInputElement) endDate.disabled = isCurrent;
+    if (endDateField instanceof HTMLElement) endDateField.dataset.disabled = String(isCurrent);
+  };
+
+  const addProject = (entry = {}, { scroll = true } = {}) => {
+    if (!(projectTemplate instanceof HTMLTemplateElement) || !(projectList instanceof HTMLElement)) return;
+    const fragment = projectTemplate.content.cloneNode(true);
+    const card = fragment.querySelector(".project-card");
+    if (!(card instanceof HTMLElement)) return;
+    card.querySelectorAll("[data-project-field]").forEach((control) => {
+      const key = control.getAttribute("data-project-field");
+      if (!key || !(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) return;
+      if (entry[key] !== undefined && entry[key] !== null) control.value = String(entry[key]);
+    });
+    projectEntrySequence += 1;
+    const radioName = `project-current-${projectEntrySequence}`;
+    card.querySelectorAll("[data-project-current]").forEach((radio) => {
+      if (!(radio instanceof HTMLInputElement)) return;
+      radio.name = radioName;
+      radio.checked = entry.currently_working_on_project
+        ? radio.value === "yes"
+        : radio.value === "no";
+    });
+    const optionalKeys = ["project_url", "repository_url", "challenge"];
+    const optional = card.querySelector(".project-optional");
+    if (optional instanceof HTMLElement) optional.open = optionalKeys.some((key) => String(entry[key] || "").trim());
+    projectList.append(fragment);
+    syncCurrentProject(card);
+    updateProjectEntries();
+    if (scroll) card.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   const addCustomSection = (section = { title: "", lines: [] }) => {
     if (!(customTemplate instanceof HTMLTemplateElement) || !(customList instanceof HTMLElement)) return;
     const fragment = customTemplate.content.cloneNode(true);
@@ -267,6 +318,37 @@ if (builderPage instanceof HTMLElement) {
         relevant_skills: value("relevant_skills"),
       };
     });
+    const projectEntries = Array.from(form.querySelectorAll(".project-card")).map((card) => {
+      const value = (name) => {
+        const control = card.querySelector(`[data-project-field='${name}']`);
+        return control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement
+          ? control.value.trim()
+          : "";
+      };
+      const current = card.querySelector("[data-project-current][value='yes']");
+      const currentlyWorkingOnProject = current instanceof HTMLInputElement && current.checked;
+      return {
+        project_name: value("project_name"),
+        project_type: value("project_type"),
+        role: value("role"),
+        project_url: value("project_url"),
+        repository_url: value("repository_url"),
+        start_date: value("start_date"),
+        end_date: currentlyWorkingOnProject ? "" : value("end_date"),
+        currently_working_on_project: currentlyWorkingOnProject,
+        problem: value("problem"),
+        description: value("description"),
+        audience: value("audience"),
+        personal_contribution: value("personal_contribution"),
+        responsibilities: value("responsibilities"),
+        technologies: value("technologies"),
+        challenge: value("challenge"),
+        deliverables: value("deliverables"),
+        impact: value("impact"),
+        metrics: value("metrics"),
+        project_status: value("project_status"),
+      };
+    });
     return {
       display_name: String(field("display_name")?.value || "").trim(),
       target_role: String(field("target_role")?.value || "").trim() || null,
@@ -284,6 +366,7 @@ if (builderPage instanceof HTMLElement) {
       },
       experience_entries: experienceEntries,
       education_entries: educationEntries,
+      project_entries: projectEntries,
       custom_sections: customSections,
     };
   };
@@ -361,6 +444,7 @@ if (builderPage instanceof HTMLElement) {
     updateCustomEmpty();
     updateWorkEntries();
     updateEducationEntries();
+    updateProjectEntries();
     if (!sourceId) return;
     setStatus("Loading your private resume source…");
     try {
@@ -373,9 +457,15 @@ if (builderPage instanceof HTMLElement) {
       setField("contact_line", source.draft.contact_line || "");
       setField("summary", source.draft.summary || "");
       setField("extracted_text", source.draft.extracted_text || "");
-      ["projects", "skills"].forEach((name) => {
+      ["skills"].forEach((name) => {
         setField(`section_${name}`, (source.draft.sections?.[name] || []).join("\n"));
       });
+      const importedProjects = source.draft.sections?.projects || [];
+      setField("section_projects", importedProjects.join("\n"));
+      if (legacyProjects instanceof HTMLElement) legacyProjects.hidden = importedProjects.length === 0;
+      if (projectList instanceof HTMLElement) projectList.replaceChildren();
+      (source.draft.project_entries || []).forEach((entry) => addProject(entry, { scroll: false }));
+      updateProjectEntries();
       const importedEducation = source.draft.sections?.education || [];
       setField("section_education", importedEducation.join("\n"));
       if (legacyEducation instanceof HTMLElement) legacyEducation.hidden = importedEducation.length === 0;
@@ -431,6 +521,19 @@ if (builderPage instanceof HTMLElement) {
     if (!(radio instanceof HTMLInputElement)) return;
     const card = radio.closest(".work-experience-card");
     if (card instanceof HTMLElement) syncCurrentRole(card);
+  });
+  document.querySelector("#add-project")?.addEventListener("click", () => addProject());
+  projectList?.addEventListener("click", (event) => {
+    const button = event.target instanceof Element ? event.target.closest("[data-remove-project]") : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.closest(".project-card")?.remove();
+    updateProjectEntries();
+  });
+  projectList?.addEventListener("change", (event) => {
+    const radio = event.target instanceof Element ? event.target.closest("[data-project-current]") : null;
+    if (!(radio instanceof HTMLInputElement)) return;
+    const card = radio.closest(".project-card");
+    if (card instanceof HTMLElement) syncCurrentProject(card);
   });
   customList?.addEventListener("click", (event) => {
     const button = event.target instanceof Element ? event.target.closest("[data-remove-custom]") : null;

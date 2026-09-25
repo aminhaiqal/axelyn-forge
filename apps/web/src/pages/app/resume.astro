@@ -110,10 +110,16 @@ if (!isAuthenticated) {
         </section>
 
         <section class="builder-section">
-          <div class="builder-section-heading"><span>04</span><div><h2>Projects</h2><p>Show relevant work outside or across roles. State what you built, the technology used, and the result.</p></div></div>
-          <label><span>Projects</span><textarea name="section_projects" rows="11" maxlength="30000" placeholder={`Project name | Your role
-2024
-• Explain what you built, how, and the result.`}></textarea></label>
+          <div class="builder-section-heading builder-action-heading"><span>04</span><div><h2>Projects</h2><p>Add each project separately so Forge can distinguish the product, your contribution, the technology, and its impact.</p></div><button type="button" id="add-project">+ Add project</button></div>
+          <div class="project-list" id="project-list"></div>
+          <p class="project-empty" id="project-empty">No projects added yet. Add a project when you are ready.</p>
+          <div class="legacy-projects" id="legacy-projects" hidden>
+            <div>
+              <strong>Preserved imported projects</strong>
+              <p>This text came from an older or uploaded resume. Keep it here, or move it into structured entries above and clear it when finished.</p>
+            </div>
+            <label><span>Imported project text</span><textarea name="section_projects" rows="10" maxlength="30000"></textarea></label>
+          </div>
         </section>
 
         <section class="builder-section">
@@ -221,6 +227,55 @@ Cloud and tools: AWS, Docker, GitHub Actions`}></textarea></label>
           <label class="work-field-wide"><span>Job Description / Responsibilities</span><textarea data-work-field="responsibilities" rows="5" maxlength="10000" placeholder="Describe your main responsibilities in this role."></textarea></label>
           <label class="work-field-wide"><span>Key Achievements</span><textarea data-work-field="achievements" rows="5" maxlength="10000" placeholder="What did you accomplish or improve during this role? Keep one achievement on each line."></textarea></label>
         </div>
+      </article>
+    </template>
+
+    <template id="project-template">
+      <article class="project-card">
+        <div class="project-card-head">
+          <div><span>Project</span><strong data-project-entry-number>Entry 01</strong></div>
+          <button type="button" data-remove-project>Remove</button>
+        </div>
+        <div class="project-fields">
+          <label><span>Project Name*</span><input data-project-field="project_name" maxlength="200" placeholder="Monitorscape" required /></label>
+          <label><span>Project Type</span><select data-project-field="project_type"><option>Personal Project</option><option>Client Project</option><option>Commercial Product</option><option>Academic Project</option><option>Open Source</option><option>Research Project</option><option>Internal Company Project</option></select></label>
+          <label><span>Your Role</span><input data-project-field="role" maxlength="160" placeholder="Software Engineer, Backend Developer, Project Lead" /></label>
+          <label><span>Project Status</span><select data-project-field="project_status"><option>Live / Production</option><option selected>In Development</option><option>Prototype</option><option>Completed</option><option>Discontinued</option></select></label>
+          <label><span>Start Date</span><input data-project-field="start_date" type="month" /></label>
+          <label data-project-end-date-field><span>End Date</span><input data-project-field="end_date" type="month" /></label>
+          <fieldset class="project-current-field project-field-wide">
+            <legend>Currently working on this project?</legend>
+            <div class="project-choice-pair">
+              <label><input type="radio" data-project-current value="yes" /><span>Yes</span></label>
+              <label><input type="radio" data-project-current value="no" checked /><span>No</span></label>
+            </div>
+          </fieldset>
+        </div>
+        <div class="project-story">
+          <div class="project-story-heading">
+            <span>Project story</span>
+            <p>Focus on what you personally contributed and the change the project created.</p>
+          </div>
+          <div class="project-story-fields">
+            <label><span>What problem does this project solve?</span><small>Briefly explain the problem or need behind the project.</small><textarea data-project-field="problem" rows="4" maxlength="4000"></textarea></label>
+            <label><span>What does the project do?</span><small>Describe the product, system, application, or solution.</small><textarea data-project-field="description" rows="4" maxlength="4000"></textarea></label>
+            <label><span>Who is it built for?</span><small>Customers, businesses, internal users, students, developers, etc.</small><textarea data-project-field="audience" rows="3" maxlength="2000"></textarea></label>
+            <label><span>What did you personally work on?</span><small>Describe your own contribution, not only what the whole team built.</small><textarea data-project-field="personal_contribution" rows="4" maxlength="8000" placeholder="Designed the backend API, payment integration, and PostgreSQL database."></textarea></label>
+            <label><span>What were your main responsibilities?</span><small>Architecture, frontend, backend, database, deployment, testing, integrations, etc.</small><textarea data-project-field="responsibilities" rows="4" maxlength="8000"></textarea></label>
+            <label><span>What did you build or implement?</span><small>Authentication system, REST API, recommendation engine, payment workflow, etc.</small><textarea data-project-field="deliverables" rows="4" maxlength="8000"></textarea></label>
+            <label><span>What technologies did you use?</span><small>Python, React, FastAPI, PostgreSQL, AWS, Docker, etc.</small><textarea data-project-field="technologies" rows="3" maxlength="4000"></textarea></label>
+            <label><span>What was the result or impact?</span><small>Explain what improved because this project existed.</small><textarea data-project-field="impact" rows="4" maxlength="8000"></textarea></label>
+            <label class="project-field-wide"><span>Do you have measurable results?</span><small>Examples: 5,000 users, 20 customers, 100K documents processed, 60% faster, RM20K revenue, or 99.9% uptime.</small><textarea data-project-field="metrics" rows="3" maxlength="4000"></textarea></label>
+          </div>
+        </div>
+        <details class="project-optional">
+          <summary><span>Links and additional context</span><small>Project URL, repository, and the most challenging part</small></summary>
+          <div class="project-optional-fields">
+            <label><span>Project URL <small>optional</small></span><input data-project-field="project_url" type="url" maxlength="500" placeholder="https://monitorscape.example" /></label>
+            <label><span>GitHub / Repository URL <small>optional</small></span><input data-project-field="repository_url" type="url" maxlength="500" placeholder="https://github.com/username/project" /></label>
+            <label class="project-field-wide"><span>What was the most challenging part of the project? <small>optional</small></span><textarea data-project-field="challenge" rows="4" maxlength="4000" placeholder="Describe the constraint, complexity, or technical challenge you worked through."></textarea></label>
+          </div>
+        </details>
       </article>
     </template>
   </div>

@@ -12,7 +12,11 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-from .resume_import import education_entry_lines, experience_entry_lines
+from .resume_import import (
+    education_entry_lines,
+    experience_entry_lines,
+    project_entry_lines,
+)
 
 
 TEMPLATE_VERSION = "1"
@@ -238,8 +242,16 @@ def render_resume(
     if education_lines:
         _add_section_heading(document, "Education", spec)
         _add_lines(document, education_lines, spec)
+    project_lines: list[str] = []
+    project_entries = draft.get("project_entries")
+    if isinstance(project_entries, list):
+        for entry in project_entries:
+            project_lines.extend(project_entry_lines(entry))
+    project_lines.extend(_clean_lines(sections.get("projects")))
+    if project_lines:
+        _add_section_heading(document, "Projects", spec)
+        _add_lines(document, project_lines, spec)
     for key, title_value in (
-        ("projects", "Projects"),
         ("skills", "Skills"),
         ("languages", "Languages"),
         ("additional", "Additional information"),

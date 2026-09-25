@@ -67,6 +67,20 @@ class JobMatchTests(unittest.TestCase):
                     "relevant_coursework": "Python and distributed APIs",
                 }
             ],
+            "project_entries": [
+                {
+                    "project_name": "Visual Portfolio",
+                    "role": "Designer",
+                    "description": "Created a visual case study gallery.",
+                },
+                {
+                    "project_name": "API Monitor",
+                    "role": "Backend Developer",
+                    "personal_contribution": "Designed Python API monitoring.",
+                    "technologies": "Python, FastAPI",
+                    "metrics": "Monitored 100 production APIs.",
+                },
+            ],
             "sections": {
                 "experience": [
                     "Designer | Studio",
@@ -94,8 +108,11 @@ class JobMatchTests(unittest.TestCase):
         self.assertEqual("Python and APIs", tailored["sections"]["skills"][0])
         self.assertEqual("Designer | Studio", draft["sections"]["experience"][0])
         self.assertEqual("Studio", draft["experience_entries"][0]["company_name"])
+        self.assertEqual("API Monitor", tailored["project_entries"][0]["project_name"])
+        self.assertEqual("Visual Portfolio", draft["project_entries"][0]["project_name"])
         self.assertIn("Built Python APIs", draft_to_evidence_text(draft))
         self.assertIn("distributed APIs", draft_to_evidence_text(draft))
+        self.assertIn("Monitored 100 production APIs", draft_to_evidence_text(draft))
 
 
 if __name__ == "__main__":

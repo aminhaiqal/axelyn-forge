@@ -3,7 +3,11 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from axelyn_api.resume_import import normalize_resume_text, unmapped_resume_content
+from axelyn_api.resume_import import (
+    normalize_resume_text,
+    standard_template_values,
+    unmapped_resume_content,
+)
 from axelyn_api.resume_templates import render_resume
 
 
@@ -42,6 +46,20 @@ class ResumeTemplateTests(unittest.TestCase):
                     "academic_achievements": "Dean’s List",
                 }
             ],
+            "project_entries": [
+                {
+                    "project_name": "Monitorscape",
+                    "project_type": "Commercial Product",
+                    "role": "Backend Developer",
+                    "start_date": "2024-02",
+                    "currently_working_on_project": True,
+                    "personal_contribution": "Designed the event ingestion API.",
+                    "technologies": "Python, FastAPI, PostgreSQL, Docker",
+                    "impact": "Reduced incident response time by 60%.",
+                    "metrics": "Processed 100K events.",
+                    "project_status": "Live / Production",
+                }
+            ],
             "sections": {
                 "experience": ["Engineer | Example", "• Built production APIs."],
                 "projects": ["Open source platform"],
@@ -54,6 +72,17 @@ class ResumeTemplateTests(unittest.TestCase):
                 {"title": "Publications", "lines": ["Reliable Systems Review"]}
             ],
         }
+
+        template_values = standard_template_values(draft)
+        self.assertEqual("Monitorscape", template_values["project.monitorscape.title"])
+        self.assertEqual(
+            "Python, FastAPI, PostgreSQL, Docker",
+            template_values["project.monitorscape.technologies"],
+        )
+        self.assertEqual(
+            "Designed the event ingestion API.",
+            template_values["project.monitorscape.highlight.1"],
+        )
 
         with tempfile.TemporaryDirectory() as directory:
             documents = []
@@ -78,6 +107,9 @@ class ResumeTemplateTests(unittest.TestCase):
                     b"Universiti Teknologi Malaysia",
                     b"Intelligent Document Classification",
                     "Dean’s List".encode(),
+                    b"Monitorscape",
+                    b"Designed the event ingestion API",
+                    b"Reduced incident response time by 60%",
                     b"PUBLICATIONS",
                     b"Reliable Systems Review",
                 ):

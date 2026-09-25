@@ -451,6 +451,90 @@ def education_entry_lines(entry: object) -> list[str]:
     return [line for line in lines if line]
 
 
+def project_entry_lines(entry: object) -> list[str]:
+    """Flatten one structured project into ATS-readable resume lines."""
+    if not isinstance(entry, dict):
+        return []
+    substantive_keys = (
+        "project_name",
+        "role",
+        "project_url",
+        "repository_url",
+        "start_date",
+        "end_date",
+        "problem",
+        "description",
+        "audience",
+        "personal_contribution",
+        "responsibilities",
+        "technologies",
+        "challenge",
+        "deliverables",
+        "impact",
+        "metrics",
+    )
+    if not any(str(entry.get(key) or "").strip() for key in substantive_keys):
+        return []
+
+    title = " | ".join(
+        value
+        for value in (
+            str(entry.get("project_name") or "").strip(),
+            str(entry.get("role") or "").strip(),
+        )
+        if value
+    )
+    details = " | ".join(
+        value
+        for value in (
+            str(entry.get("project_type") or "").strip(),
+            str(entry.get("project_status") or "").strip(),
+        )
+        if value
+    )
+    end_date = (
+        "Present"
+        if entry.get("currently_working_on_project")
+        else _display_month(entry.get("end_date"))
+    )
+    date = " – ".join(
+        value
+        for value in (_display_month(entry.get("start_date")), end_date)
+        if value
+    )
+    links = " | ".join(
+        value
+        for value in (
+            f"Project: {str(entry.get('project_url') or '').strip()}"
+            if str(entry.get("project_url") or "").strip()
+            else "",
+            f"Repository: {str(entry.get('repository_url') or '').strip()}"
+            if str(entry.get("repository_url") or "").strip()
+            else "",
+        )
+        if value
+    )
+    lines = [title, details, date, links]
+    for label, key in (
+        ("Problem", "problem"),
+        ("Project", "description"),
+        ("Built for", "audience"),
+        ("Personal contribution", "personal_contribution"),
+        ("Responsibilities", "responsibilities"),
+        ("Technologies", "technologies"),
+        ("Most challenging part", "challenge"),
+        ("Built / implemented", "deliverables"),
+        ("Result / impact", "impact"),
+        ("Measurable results", "metrics"),
+    ):
+        values = _clean_lines(str(entry.get(key) or "").splitlines())
+        for value in values:
+            cleaned = value.lstrip("•-–* ").strip()
+            if cleaned:
+                lines.append(f"• {label}: {cleaned}")
+    return [line for line in lines if line]
+
+
 def resume_plain_text(draft: dict[str, object]) -> str:
     """Create a durable text transcript from structured manual-entry content."""
     values = [
@@ -490,8 +574,20 @@ def resume_plain_text(draft: dict[str, object]) -> str:
                 values.extend(education_entry_lines(entry))
         if isinstance(legacy_education, list):
             values.extend(str(line) for line in legacy_education)
+    project_entries = draft.get("project_entries")
+    legacy_projects = sections.get("projects")
+    if (
+        isinstance(project_entries, list) and project_entries
+    ) or (
+        isinstance(legacy_projects, list) and legacy_projects
+    ):
+        values.append("Projects")
+        if isinstance(project_entries, list):
+            for entry in project_entries:
+                values.extend(project_entry_lines(entry))
+        if isinstance(legacy_projects, list):
+            values.extend(str(line) for line in legacy_projects)
     for key, title in (
-        ("projects", "Projects"),
         ("skills", "Skills"),
         ("languages", "Languages"),
         ("additional", "Additional Information"),
@@ -553,6 +649,19 @@ def unmapped_resume_content(draft: dict[str, object]) -> list[str]:
                 continue
             represented.update(
                 normalized(line) for line in education_entry_lines(entry)
+            )
+            for value in entry.values():
+                if isinstance(value, str):
+                    represented.update(
+                        normalized(line) for line in value.splitlines()
+                    )
+    project_entries = draft.get("project_entries")
+    if isinstance(project_entries, list):
+        for entry in project_entries:
+            if not isinstance(entry, dict):
+                continue
+            represented.update(
+                normalized(line) for line in project_entry_lines(entry)
             )
             for value in entry.values():
                 if isinstance(value, str):
@@ -715,10 +824,66 @@ def standard_template_values(draft: dict[str, object]) -> dict[str, str]:
         for bullet_index, bullet in enumerate(entry["bullets"][:limit], 1):
             values[f"{prefix}.highlight.{bullet_index}"] = str(bullet)
 
-    project_lines = [str(value) for value in sections.get("projects", [])] if isinstance(sections.get("projects"), list) else []
-    projects = [_split_entry(block, 3) for block in _entry_blocks(project_lines, 3)]
+    projects: list[dict[str, object]] = []
+    structured_projects = draft.get("project_entries")
+    if isinstance(structured_projects, list):
+        for project in structured_projects:
+            if not isinstance(project, dict):
+                continue
+            project_end = (
+                "Present"
+                if project.get("currently_working_on_project")
+                else _display_month(project.get("end_date"))
+            )
+            project_date = " – ".join(
+                value
+                for value in (
+                    _display_month(project.get("start_date")),
+                    project_end,
+                )
+                if value
+            )
+            project_bullets: list[str] = []
+            for key in (
+                "personal_contribution",
+                "deliverables",
+                "impact",
+                "metrics",
+                "description",
+                "responsibilities",
+                "problem",
+            ):
+                for line in _clean_lines(str(project.get(key) or "").splitlines()):
+                    value = line.lstrip("•-–* ").strip()
+                    if value:
+                        project_bullets.append(value)
+            projects.append(
+                {
+                    "title": str(project.get("project_name") or "").strip(),
+                    "meta": " | ".join(
+                        value
+                        for value in (
+                            str(project.get("role") or "").strip(),
+                            str(project.get("project_type") or "").strip(),
+                            str(project.get("project_status") or "").strip(),
+                        )
+                        if value
+                    ),
+                    "date": project_date,
+                    "bullets": project_bullets,
+                    "technologies": str(project.get("technologies") or "").strip(),
+                }
+            )
+    project_lines = (
+        [str(value) for value in sections.get("projects", [])]
+        if isinstance(sections.get("projects"), list)
+        else []
+    )
+    projects.extend(
+        _split_entry(block, 3) for block in _entry_blocks(project_lines, 3)
+    )
     project_keys = ("monitorscape", "aria", "memora")
-    for index, entry in enumerate(projects):
+    for index, entry in enumerate(projects[: len(project_keys)]):
         prefix = f"project.{project_keys[index]}"
         values[f"{prefix}.title"] = str(entry["title"])
         values[f"{prefix}.role"] = str(entry["meta"])
