@@ -143,12 +143,13 @@
 .custom-section-card > div button { border: 0; border-bottom: 1px solid #d8a28c; padding: 4px 0; color: #8f4b35; background: transparent; font-size: .55rem; cursor: pointer; }
 .custom-empty { margin: 0; padding: 25px; border: 1px dashed #cbd3d5; color: #7e8b90; font-size: .64rem; text-align: center; }
 
-.builder-finish { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 35px 60px; padding: 60px clamp(24px,6vw,95px) 70px; color: white; background: var(--builder-ink); }
-.builder-finish > div:first-child > p:first-child { margin: 0 0 13px; color: #8da1ab; font: .53rem var(--font-mono); text-transform: uppercase; }
+.builder-finish { display: grid; gap: 24px; padding: 60px clamp(24px,6vw,95px) 70px; color: white; background: var(--builder-ink); }
+.builder-finish-heading > p { margin: 0 0 13px; color: #8da1ab; font: .53rem var(--font-mono); text-transform: uppercase; }
 .builder-finish h2 { margin: 0 0 25px; font: 540 clamp(1.8rem,3vw,3.2rem) var(--font-display); letter-spacing: -.05em; }
-.builder-finish label { max-width: 620px; color: #c7d1d5; }
-.builder-finish input { color: white; border-color: #536a76; background: #193341; }
-.builder-status { min-height: 1.2em; margin: 17px 0 0; color: #9fb0b8; font-size: .61rem; line-height: 1.55; }
+.builder-finish-row { display: grid; grid-template-columns: minmax(320px,1fr) auto; align-items: end; gap: 60px; }
+.builder-finish label { max-width: none; color: #c7d1d5; }
+.builder-finish input { min-height: 48px; color: white; border-color: #536a76; background: #193341; }
+.builder-status { min-height: 1.2em; margin: -2px 0 0; color: #9fb0b8; font-size: .61rem; line-height: 1.55; }
 .builder-status[data-state="error"] { color: #ffad8d; }
 .builder-status[data-state="success"] { color: #8de0bf; }
 .builder-actions { display: flex; align-items: end; gap: 9px; }
@@ -156,7 +157,7 @@
 .builder-actions button:disabled { cursor: wait; opacity: .55; }
 .builder-secondary { color: white; background: transparent; }
 .builder-primary { display: flex; align-items: center; justify-content: space-between; gap: 28px; color: var(--builder-ink); background: white; }
-.builder-downloads { grid-column: 1 / -1; grid-template-columns: repeat(2,minmax(0,220px)); gap: 9px; }
+.builder-downloads { grid-template-columns: repeat(2,minmax(0,220px)); gap: 9px; }
 .builder-downloads:not([hidden]) { display: grid; }
 .builder-downloads a { min-height: 43px; display: grid; place-items: center; border: 1px solid #667c87; color: white; font-size: .61rem; font-weight: 800; }
 .source-transcript { margin: 0 clamp(24px,6vw,95px) 70px; padding: 22px 0; border-bottom: 1px solid var(--builder-line); color: #52656d; }
@@ -172,7 +173,7 @@
   .builder-header { min-height: 0; padding: 48px 20px; }
   .builder-header h1 { font-size: clamp(3.2rem,15vw,5.4rem); }
   .builder-section { padding: 45px 20px 55px; }
-  .builder-fields.two-up, .identity-fields, .work-experience-fields, .education-fields, .education-optional-fields, .project-fields, .project-story-fields, .project-optional-fields, .skill-category-fields, .custom-section-card, .source-inbox:not([hidden]), .legacy-experience:not([hidden]), .legacy-education:not([hidden]), .legacy-projects:not([hidden]), .legacy-skills:not([hidden]), .builder-finish { grid-template-columns: 1fr; }
+  .builder-fields.two-up, .identity-fields, .work-experience-fields, .education-fields, .education-optional-fields, .project-fields, .project-story-fields, .project-optional-fields, .skill-category-fields, .custom-section-card, .source-inbox:not([hidden]), .legacy-experience:not([hidden]), .legacy-education:not([hidden]), .legacy-projects:not([hidden]), .legacy-skills:not([hidden]) { grid-template-columns: 1fr; }
   .identity-field-wide { grid-column: 1; }
   .profile-photo-field { grid-template-columns: 76px minmax(0,1fr); }
   .profile-photo-preview { width: 76px; }
@@ -192,8 +193,9 @@
   .builder-action-heading { grid-template-columns: auto 1fr; }
   .builder-action-heading > button { grid-column: 2; justify-self: start; }
   .builder-finish { padding: 48px 20px 55px; }
+  .builder-finish-row { grid-template-columns: 1fr; gap: 18px; }
   .builder-actions { align-items: stretch; flex-direction: column-reverse; }
   .builder-actions button { width: 100%; }
-  .builder-downloads { grid-column: 1; grid-template-columns: 1fr; }
+  .builder-downloads { grid-template-columns: 1fr; }
   .source-transcript { margin-inline: 20px; }
 }

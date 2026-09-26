@@ -148,16 +148,18 @@ if (!isAuthenticated) {
         </section>
 
         <section class="builder-finish">
-          <div>
+          <div class="builder-finish-heading">
             <p>Ready / Finish</p>
             <h2>Save the source or create finished files.</h2>
+          </div>
+          <div class="builder-finish-row">
             <label><span>Version name <small>needed when generating files</small></span><input name="variant_name" maxlength="160" placeholder="Frontend Engineer — Master" /></label>
-            <p class="builder-status" id="builder-status" role="status" aria-live="polite">Your work remains private to your signed-in account.</p>
+            <div class="builder-actions">
+              <button class="builder-secondary" id="save-resume-draft" type="button">Save draft</button>
+              <button class="builder-primary" type="submit">Approve and generate <span>→</span></button>
+            </div>
           </div>
-          <div class="builder-actions">
-            <button class="builder-secondary" id="save-resume-draft" type="button">Save draft</button>
-            <button class="builder-primary" type="submit">Approve and generate <span>→</span></button>
-          </div>
+          <p class="builder-status" id="builder-status" role="status" aria-live="polite">Your work remains private to your signed-in account.</p>
           <div class="builder-downloads" id="builder-downloads" hidden></div>
         </section>
 
