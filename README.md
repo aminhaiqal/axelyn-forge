@@ -1,6 +1,6 @@
 # Axelyn Forge
 
-Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library and a shared builder for creating a first resume or editing imported PDF/DOCX content. Candidates can preserve uncommon material in custom sections, select one of three single-column ATS-friendly layouts, and generate private Word and PDF files. `/app/match` compares a selected resume with pasted or uploaded job descriptions, explains the gaps, and creates evidence-grounded tailored files when the fit supports it. FastAPI verifies the same Clerk session for every private operation.
+Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library and a shared builder for creating a first resume or editing imported PDF/DOCX content. Imported PDFs pass through LibreOffice to become DOCX before Forge produces an SDT-tagged standard template, structured JSON, and its JSON Schema. Candidates can preserve uncommon material in custom sections and generate private Word and PDF files. `/app/match` compares a selected resume with pasted or uploaded job descriptions, explains the gaps, and creates evidence-grounded tailored files when the fit supports it. FastAPI verifies the same Clerk session for every private operation.
 
 The active product no longer depends on Discord.
 
@@ -73,6 +73,8 @@ The first public contract is versioned under `/api/v1`.
 | `POST` | `/api/v1/resumes` | Create a private resume source from structured form content. |
 | `GET` | `/api/v1/resume-templates` | List the available ATS-friendly layouts. |
 | `POST` | `/api/v1/resumes/imports` | Import up to five PDF/DOCX resume sources for review. |
+| `GET` | `/api/v1/resume-source-artifacts` | List private normalized DOCX, SDT template, JSON, and JSON Schema artifacts. |
+| `GET` | `/api/v1/resume-source-artifacts/{id}/download` | Download one owned source artifact. |
 | `GET`, `DELETE` | `/api/v1/resumes/{id}` | Read or delete one owned resume source. |
 | `GET` | `/api/v1/resumes/{id}/editable.docx` | Render the current private draft as an editable Word document. |
 | `PUT` | `/api/v1/resumes/{id}/draft` | Save standard fields, custom sections, and the selected layout. |

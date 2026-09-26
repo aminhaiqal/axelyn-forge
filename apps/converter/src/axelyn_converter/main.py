@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import zipfile
 from io import BytesIO
 from pathlib import Path
 from typing import Callable
@@ -27,7 +28,54 @@ DEFAULT_MAX_DOCX_BYTES = 12 * 1024 * 1024
 DEFAULT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_PIXELS = 25_000_000
 Converter = Callable[[Path, Path], Path]
+PdfConverter = Callable[[Path, Path], Path]
 OcrExtractor = Callable[[Path], str]
+
+
+def _validate_docx(path: Path) -> bytes:
+    try:
+        payload = path.read_bytes()
+        with zipfile.ZipFile(BytesIO(payload), "r") as archive:
+            names = set(archive.namelist())
+    except (OSError, zipfile.BadZipFile) as error:
+        raise RuntimeError("LibreOffice produced an invalid DOCX.") from error
+    if "[Content_Types].xml" not in names or "word/document.xml" not in names:
+        raise RuntimeError("LibreOffice produced an invalid DOCX.")
+    return payload
+
+
+def convert_pdf_to_docx(source: Path, output: Path) -> Path:
+    """Import a PDF through LibreOffice Writer and save it as editable DOCX."""
+    workspace = output.parent
+    profile = workspace / "libreoffice-pdf-profile"
+    profile.mkdir(exist_ok=True)
+    try:
+        result = subprocess.run(
+            [
+                "soffice",
+                "--headless",
+                f"-env:UserInstallation={profile.resolve().as_uri()}",
+                "--infilter=writer_pdf_import",
+                "--convert-to",
+                "docx:Office Open XML Text",
+                "--outdir",
+                str(workspace),
+                str(source),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError("LibreOffice could not convert the PDF to DOCX.") from error
+
+    generated = workspace / f"{source.stem}.docx"
+    if result.returncode != 0 or not generated.is_file():
+        raise RuntimeError("LibreOffice could not convert the PDF to DOCX.")
+    _validate_docx(generated)
+    generated.replace(output)
+    return output
 
 
 def extract_image_text(source: Path) -> str:
@@ -47,6 +95,7 @@ def extract_image_text(source: Path) -> str:
 def create_app(
     *,
     convert: Converter = convert_docx_to_pdf,
+    convert_pdf: PdfConverter = convert_pdf_to_docx,
     extract_text: OcrExtractor = extract_image_text,
     executable_check: Callable[[str], str | None] = shutil.which,
     max_docx_bytes: int = DEFAULT_MAX_DOCX_BYTES,
@@ -139,6 +188,60 @@ def create_app(
             headers={
                 "Cache-Control": "no-store",
                 "Content-Disposition": f'attachment; filename="{pdf_name}"',
+                "X-Content-Type-Options": "nosniff",
+                "X-Document-Engine": "LibreOffice",
+            },
+        )
+
+    @app.post("/v1/convert/pdf-to-docx", include_in_schema=False)
+    def pdf_to_docx(file: UploadFile = File()) -> Response:
+        filename = Path(file.filename or "document.pdf").name
+        if Path(filename).suffix.casefold() != ".pdf":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="A PDF file is required.",
+            )
+        payload = file.file.read(max_docx_bytes + 1)
+        if len(payload) > max_docx_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="The PDF exceeds the converter size limit.",
+            )
+        if not payload.startswith(b"%PDF-"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="The upload is not a valid PDF document.",
+            )
+        if not slots.acquire(timeout=30):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The document converter is busy. Try again shortly.",
+            )
+        try:
+            with tempfile.TemporaryDirectory(prefix="forge-converter-") as directory:
+                workspace = Path(directory)
+                source = workspace / "source.pdf"
+                output = workspace / "normalized.docx"
+                source.write_bytes(payload)
+                try:
+                    convert_pdf(source, output)
+                    docx = _validate_docx(output)
+                except RuntimeError as error:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="LibreOffice could not convert this PDF to Word.",
+                    ) from error
+        finally:
+            slots.release()
+
+        safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(filename).stem).strip("-.")
+        docx_name = f"{safe_stem or 'document'}.docx"
+        return Response(
+            docx,
+            media_type=DOCX_MEDIA_TYPE,
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Disposition": f'attachment; filename="{docx_name}"',
                 "X-Content-Type-Options": "nosniff",
                 "X-Document-Engine": "LibreOffice",
             },

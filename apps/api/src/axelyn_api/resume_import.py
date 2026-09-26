@@ -633,6 +633,81 @@ def resume_contact_line(draft: dict[str, object]) -> str:
     return str(draft.get("contact_line") or "").strip()
 
 
+def rendered_resume_sections(draft: dict[str, object]) -> dict[str, list[str]]:
+    """Flatten structured and imported content into stable template line groups."""
+    sections = draft.get("sections")
+    if not isinstance(sections, dict):
+        sections = {}
+    rendered: dict[str, list[str]] = {}
+    for key, entry_key, formatter in (
+        ("experience", "experience_entries", experience_entry_lines),
+        ("education", "education_entries", education_entry_lines),
+        ("projects", "project_entries", project_entry_lines),
+        ("skills", "skill_categories", skill_category_lines),
+    ):
+        lines: list[str] = []
+        entries = draft.get(entry_key)
+        if isinstance(entries, list):
+            for entry in entries:
+                lines.extend(formatter(entry))
+        legacy = sections.get(key)
+        if isinstance(legacy, list):
+            lines.extend(str(line).strip() for line in legacy if str(line).strip())
+        rendered[key] = lines
+    for key in ("languages", "additional"):
+        legacy = sections.get(key)
+        rendered[key] = (
+            [str(line).strip() for line in legacy if str(line).strip()]
+            if isinstance(legacy, list)
+            else []
+        )
+    return rendered
+
+
+def sdt_template_line(value: object) -> str:
+    """Return the exact text stored inside one standard-template content control."""
+    line = str(value).strip()
+    if line.startswith(("•", "-", "–", "*")):
+        cleaned = line.lstrip("•-–* ").strip()
+        return f"• {cleaned}" if cleaned else ""
+    return line
+
+
+def sdt_template_values(draft: dict[str, object]) -> dict[str, str]:
+    """Map every generated SDT tag to the text initially displayed in Word."""
+    values = {"resume.full_name": str(draft.get("full_name") or "Your name")}
+    headline = str(draft.get("headline") or draft.get("target_role") or "").strip()
+    contact = resume_contact_line(draft)
+    summary = str(draft.get("summary") or "").strip()
+    for tag, value in (
+        ("resume.headline", headline),
+        ("resume.contact_line", contact),
+        ("resume.summary", summary),
+    ):
+        if value:
+            values[tag] = value
+    for section, lines in rendered_resume_sections(draft).items():
+        for index, line in enumerate(lines):
+            value = sdt_template_line(line)
+            if value:
+                values[f"rendered_sections.{section}.{index}"] = value
+    custom_sections = draft.get("custom_sections")
+    if isinstance(custom_sections, list):
+        for section_index, custom in enumerate(custom_sections):
+            if not isinstance(custom, dict):
+                continue
+            lines = custom.get("lines")
+            if not isinstance(lines, list):
+                continue
+            for line_index, line in enumerate(lines):
+                value = sdt_template_line(line)
+                if value:
+                    values[
+                        f"resume.custom_sections.{section_index}.lines.{line_index}"
+                    ] = value
+    return values
+
+
 def resume_plain_text(draft: dict[str, object]) -> str:
     """Create a durable text transcript from structured manual-entry content."""
     values = [

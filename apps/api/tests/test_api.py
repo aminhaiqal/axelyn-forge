@@ -1,4 +1,5 @@
 import base64
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator
 
 from axelyn_api.config import Settings
 from axelyn_api.main import create_app
@@ -19,11 +21,17 @@ VALID_PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\nstartxref\n0\n%%EOF\n"
 class FakeDocumentConverter:
     def __init__(self):
         self.requests: list[tuple[bytes, str]] = []
+        self.pdf_requests: list[tuple[bytes, str]] = []
         self.ocr_requests: list[tuple[bytes, str]] = []
+        self.normalized_docx = b""
 
     def docx_to_pdf(self, payload: bytes, filename: str) -> bytes:
         self.requests.append((payload, filename))
         return VALID_PDF
+
+    def pdf_to_docx(self, payload: bytes, filename: str) -> bytes:
+        self.pdf_requests.append((payload, filename))
+        return self.normalized_docx
 
     def image_to_text(self, payload: bytes, filename: str) -> str:
         self.ocr_requests.append((payload, filename))
@@ -119,6 +127,7 @@ class ApiTests(unittest.TestCase):
         self.database = Path(self.temp_dir.name) / "forge.sqlite3"
         self.storage = Path(self.temp_dir.name) / "objects"
         self.document_converter = FakeDocumentConverter()
+        self.document_converter.normalized_docx = self.resume_docx()
         app = create_app(
             Settings(
                 environment="test",
@@ -234,6 +243,53 @@ class ApiTests(unittest.TestCase):
         source_id = item["source"]["id"]
         self.assertEqual("needs_review", item["source"]["status"])
 
+        artifacts_response = self.client.get(
+            "/api/v1/resume-source-artifacts", headers=headers
+        )
+        other_artifacts = self.client.get(
+            "/api/v1/resume-source-artifacts",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        self.assertEqual(200, artifacts_response.status_code)
+        self.assertEqual([], other_artifacts.json())
+        artifacts = {
+            artifact["kind"]: artifact for artifact in artifacts_response.json()
+        }
+        self.assertEqual(
+            {"source_docx", "sdt_template", "resume_json", "resume_schema"},
+            set(artifacts),
+        )
+        downloaded_artifacts = {}
+        for kind, artifact in artifacts.items():
+            download = self.client.get(
+                f"/api/v1/resume-source-artifacts/{artifact['id']}/download",
+                headers=headers,
+            )
+            other_download = self.client.get(
+                f"/api/v1/resume-source-artifacts/{artifact['id']}/download",
+                headers={"Authorization": "Bearer other-session"},
+            )
+            self.assertEqual(200, download.status_code)
+            self.assertEqual(404, other_download.status_code)
+            self.assertEqual("private, no-store", download.headers["cache-control"])
+            downloaded_artifacts[kind] = download.content
+        self.assertEqual(self.resume_docx(), downloaded_artifacts["source_docx"])
+        self.assertTrue(downloaded_artifacts["sdt_template"].startswith(b"PK"))
+        with zipfile.ZipFile(BytesIO(downloaded_artifacts["sdt_template"])) as archive:
+            template_xml = archive.read("word/document.xml")
+        self.assertIn(b"<w:sdt>", template_xml)
+        self.assertIn(b'w:val="resume.full_name"', template_xml)
+        self.assertIn(b'w:val="rendered_sections.experience.0"', template_xml)
+        resume_json = json.loads(downloaded_artifacts["resume_json"])
+        resume_schema = json.loads(downloaded_artifacts["resume_schema"])
+        Draft202012Validator.check_schema(resume_schema)
+        Draft202012Validator(resume_schema).validate(resume_json)
+        self.assertEqual("Taylor Example", resume_json["resume"]["full_name"])
+        self.assertEqual(
+            "Taylor Example",
+            resume_json["template_values"]["resume.full_name"],
+        )
+
         owner_list = self.client.get("/api/v1/resumes", headers=headers)
         other_list = self.client.get(
             "/api/v1/resumes",
@@ -348,6 +404,21 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(404, other_download.status_code)
 
+        deleted = self.client.delete(f"/api/v1/resumes/{source_id}", headers=headers)
+        self.assertEqual(204, deleted.status_code)
+        self.assertEqual(
+            [],
+            self.client.get(
+                "/api/v1/resume-source-artifacts", headers=headers
+            ).json(),
+        )
+        for artifact in artifacts.values():
+            missing = self.client.get(
+                f"/api/v1/resume-source-artifacts/{artifact['id']}/download",
+                headers=headers,
+            )
+            self.assertEqual(404, missing.status_code)
+
     def test_pdf_import_becomes_an_editable_word_draft(self):
         headers = {"Authorization": "Bearer test-session"}
         imported = self.client.post(
@@ -359,6 +430,19 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(201, imported.status_code, imported.text)
         source = imported.json()["items"][0]["source"]
         self.assertEqual("application/pdf", source["media_type"])
+        self.assertEqual(
+            [(self.resume_pdf(), "backend-resume.pdf")],
+            self.document_converter.pdf_requests,
+        )
+        artifacts = self.client.get(
+            "/api/v1/resume-source-artifacts", headers=headers
+        ).json()
+        source_docx = next(item for item in artifacts if item["kind"] == "source_docx")
+        normalized_word = self.client.get(
+            f"/api/v1/resume-source-artifacts/{source_docx['id']}/download",
+            headers=headers,
+        )
+        self.assertEqual(self.resume_docx(), normalized_word.content)
         editable_word = self.client.get(
             f"/api/v1/resumes/{source['id']}/editable.docx",
             headers=headers,

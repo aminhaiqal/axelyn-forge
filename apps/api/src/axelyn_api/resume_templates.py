@@ -13,11 +13,9 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 from .resume_import import (
-    education_entry_lines,
-    experience_entry_lines,
-    project_entry_lines,
-    skill_category_lines,
+    rendered_resume_sections,
     resume_contact_line,
+    sdt_template_line,
 )
 
 
@@ -108,6 +106,33 @@ def _font(run, spec: TemplateSpec, *, size: float | None = None, bold: bool = Fa
     run._element.rPr.rFonts.set(qn("w:eastAsia"), spec.font)
 
 
+def _add_value_run(
+    paragraph,
+    value: str,
+    spec: TemplateSpec,
+    *,
+    tag: str | None = None,
+    size: float | None = None,
+    bold: bool = False,
+):
+    run = paragraph.add_run(value)
+    _font(run, spec, size=size, bold=bold)
+    if not tag:
+        return run
+    control = OxmlElement("w:sdt")
+    properties = OxmlElement("w:sdtPr")
+    alias = OxmlElement("w:alias")
+    alias.set(qn("w:val"), tag)
+    control_tag = OxmlElement("w:tag")
+    control_tag.set(qn("w:val"), tag)
+    properties.extend((alias, control_tag))
+    content = OxmlElement("w:sdtContent")
+    content.append(run._r)
+    control.extend((properties, content))
+    paragraph._p.append(control)
+    return run
+
+
 def _bottom_border(paragraph, color: str, size: str = "8") -> None:
     properties = paragraph._p.get_or_add_pPr()
     borders = properties.find(qn("w:pBdr"))
@@ -138,15 +163,26 @@ def _add_section_heading(document: Document, title: str, spec: TemplateSpec) -> 
     _bottom_border(paragraph, spec.accent, "6")
 
 
-def _add_lines(document: Document, lines: list[str], spec: TemplateSpec) -> None:
-    for line in lines:
+def _add_lines(
+    document: Document,
+    lines: list[str],
+    spec: TemplateSpec,
+    *,
+    tag_prefix: str | None = None,
+) -> None:
+    for index, line in enumerate(lines):
         is_bullet = line.startswith(("•", "-", "–", "*"))
-        value = line.lstrip("•-–* ").strip() if is_bullet else line
+        value = sdt_template_line(line)
         if not value:
             continue
         paragraph = document.add_paragraph(style="Resume Bullet" if is_bullet else "Resume Body")
-        run = paragraph.add_run(f"• {value}" if is_bullet else value)
-        _font(run, spec, bold=not is_bullet and (" | " in value or " — " in value))
+        _add_value_run(
+            paragraph,
+            value,
+            spec,
+            tag=f"{tag_prefix}.{index}" if tag_prefix else None,
+            bold=not is_bullet and (" | " in value or " — " in value),
+        )
 
 
 def render_resume(
@@ -155,6 +191,7 @@ def render_resume(
     output: Path,
     title: str,
     description: str,
+    content_controls: bool = False,
 ) -> tuple[str, str]:
     """Render every modeled section into a one-column DOCX without ATS-hostile objects."""
     template_id = str(draft.get("template_id") or DEFAULT_TEMPLATE_ID)
@@ -196,8 +233,14 @@ def render_resume(
         else WD_ALIGN_PARAGRAPH.LEFT
     )
     identity.paragraph_format.space_after = Pt(1)
-    run = identity.add_run(str(draft.get("full_name") or "Your name"))
-    _font(run, spec, size=spec.name_size, bold=True)
+    run = _add_value_run(
+        identity,
+        str(draft.get("full_name") or "Your name"),
+        spec,
+        tag="resume.full_name" if content_controls else None,
+        size=spec.name_size,
+        bold=True,
+    )
     run.font.color.rgb = _color(spec.accent)
 
     headline_value = str(draft.get("headline") or draft.get("target_role") or "").strip()
@@ -205,82 +248,78 @@ def render_resume(
         headline = document.add_paragraph()
         headline.alignment = identity.alignment
         headline.paragraph_format.space_after = Pt(2)
-        run = headline.add_run(headline_value)
-        _font(run, spec, size=spec.body_size + 1, bold=True)
+        _add_value_run(
+            headline,
+            headline_value,
+            spec,
+            tag="resume.headline" if content_controls else None,
+            size=spec.body_size + 1,
+            bold=True,
+        )
 
     contact_value = resume_contact_line(draft)
     if contact_value:
         contact = document.add_paragraph()
         contact.alignment = identity.alignment
         contact.paragraph_format.space_after = Pt(7)
-        run = contact.add_run(contact_value)
-        _font(run, spec, size=max(spec.body_size - 0.5, 8.5))
+        _add_value_run(
+            contact,
+            contact_value,
+            spec,
+            tag="resume.contact_line" if content_controls else None,
+            size=max(spec.body_size - 0.5, 8.5),
+        )
         _bottom_border(contact, spec.accent, "5")
 
     summary = str(draft.get("summary") or "").strip()
     if summary:
         _add_section_heading(document, "Professional summary", spec)
         paragraph = document.add_paragraph(style="Resume Body")
-        _font(paragraph.add_run(summary), spec)
+        _add_value_run(
+            paragraph,
+            summary,
+            spec,
+            tag="resume.summary" if content_controls else None,
+        )
 
-    sections = draft.get("sections")
-    if not isinstance(sections, dict):
-        sections = {}
-    experience_lines: list[str] = []
-    experience_entries = draft.get("experience_entries")
-    if isinstance(experience_entries, list):
-        for entry in experience_entries:
-            experience_lines.extend(experience_entry_lines(entry))
-    experience_lines.extend(_clean_lines(sections.get("experience")))
-    if experience_lines:
-        _add_section_heading(document, "Experience", spec)
-        _add_lines(document, experience_lines, spec)
-    education_lines: list[str] = []
-    education_entries = draft.get("education_entries")
-    if isinstance(education_entries, list):
-        for entry in education_entries:
-            education_lines.extend(education_entry_lines(entry))
-    education_lines.extend(_clean_lines(sections.get("education")))
-    if education_lines:
-        _add_section_heading(document, "Education", spec)
-        _add_lines(document, education_lines, spec)
-    project_lines: list[str] = []
-    project_entries = draft.get("project_entries")
-    if isinstance(project_entries, list):
-        for entry in project_entries:
-            project_lines.extend(project_entry_lines(entry))
-    project_lines.extend(_clean_lines(sections.get("projects")))
-    if project_lines:
-        _add_section_heading(document, "Projects", spec)
-        _add_lines(document, project_lines, spec)
-    skill_lines: list[str] = []
-    skill_categories = draft.get("skill_categories")
-    if isinstance(skill_categories, list):
-        for category in skill_categories:
-            skill_lines.extend(skill_category_lines(category))
-    skill_lines.extend(_clean_lines(sections.get("skills")))
-    if skill_lines:
-        _add_section_heading(document, "Skills", spec)
-        _add_lines(document, skill_lines, spec)
+    rendered_sections = rendered_resume_sections(draft)
     for key, title_value in (
+        ("experience", "Experience"),
+        ("education", "Education"),
+        ("projects", "Projects"),
+        ("skills", "Skills"),
         ("languages", "Languages"),
         ("additional", "Additional information"),
     ):
-        lines = _clean_lines(sections.get(key))
+        lines = rendered_sections[key]
         if lines:
             _add_section_heading(document, title_value, spec)
-            _add_lines(document, lines, spec)
+            _add_lines(
+                document,
+                lines,
+                spec,
+                tag_prefix=f"rendered_sections.{key}" if content_controls else None,
+            )
 
     custom_sections = draft.get("custom_sections")
     if isinstance(custom_sections, list):
-        for custom in custom_sections:
+        for custom_index, custom in enumerate(custom_sections):
             if not isinstance(custom, dict):
                 continue
             custom_title = str(custom.get("title") or "").strip()
             lines = _clean_lines(custom.get("lines"))
             if custom_title and lines:
                 _add_section_heading(document, custom_title, spec)
-                _add_lines(document, lines, spec)
+                _add_lines(
+                    document,
+                    lines,
+                    spec,
+                    tag_prefix=(
+                        f"resume.custom_sections.{custom_index}.lines"
+                        if content_controls
+                        else None
+                    ),
+                )
 
     properties = document.core_properties
     properties.title = title

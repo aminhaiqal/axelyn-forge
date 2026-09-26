@@ -46,6 +46,7 @@ from .models import (
     ResumeDraftUpdate,
     ResumeImportItem,
     ResumeImportResponse,
+    ResumeSourceArtifactSummary,
     ResumeSourceDetail,
     ResumeSourceSummary,
     ResumeTemplateSummary,
@@ -53,6 +54,12 @@ from .models import (
     Service,
     ServiceRequestAccepted,
     ServiceRequestCreate,
+)
+from .resume_artifacts import (
+    JSON_MEDIA_TYPE,
+    JSON_SCHEMA_MEDIA_TYPE,
+    build_resume_package,
+    build_resume_schema,
 )
 from .resume_import import (
     DOCX_MEDIA_TYPE,
@@ -95,6 +102,10 @@ def _variant_summary(row: dict[str, object]) -> ResumeVariantSummary:
 
 def _document_summary(row: dict[str, object]) -> GeneratedDocumentSummary:
     return GeneratedDocumentSummary(**row)
+
+
+def _source_artifact_summary(row: dict[str, object]) -> ResumeSourceArtifactSummary:
+    return ResumeSourceArtifactSummary(**row)
 
 
 def _job_document_summary(row: dict[str, object]) -> JobMatchDocumentSummary:
@@ -228,6 +239,7 @@ def _render_resume_docx(
     draft: dict[str, object],
     title: str,
     description: str,
+    content_controls: bool = False,
 ) -> tuple[bytes, str, str]:
     with tempfile.TemporaryDirectory() as temporary_directory:
         output = Path(temporary_directory) / "resume.docx"
@@ -236,8 +248,76 @@ def _render_resume_docx(
             output=output,
             title=title,
             description=description,
+            content_controls=content_controls,
         )
         return output.read_bytes(), template_id, template_version
+
+
+def _source_artifact_payloads(
+    *,
+    prefix: str,
+    normalized_docx: bytes,
+    draft: dict[str, object],
+    display_name: str,
+    target_role: str | None,
+    original_filename: str,
+) -> list[dict[str, object]]:
+    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", display_name).strip("-.")
+    safe_stem = safe_stem or "resume"
+    standard_docx, _, _ = _render_resume_docx(
+        draft=draft,
+        title=display_name,
+        description="Axelyn standard resume generated from a normalized Word source.",
+        content_controls=True,
+    )
+    resume_json = build_resume_package(
+        draft=draft,
+        display_name=display_name,
+        target_role=target_role,
+        original_filename=original_filename,
+    )
+    resume_schema = build_resume_schema()
+    artifacts = (
+        (
+            "source_docx",
+            f"{safe_stem}-source.docx",
+            DOCX_MEDIA_TYPE,
+            normalized_docx,
+            "source.docx",
+        ),
+        (
+            "sdt_template",
+            f"{safe_stem}-sdt-template.docx",
+            DOCX_MEDIA_TYPE,
+            standard_docx,
+            "sdt-template.docx",
+        ),
+        (
+            "resume_json",
+            f"{safe_stem}.json",
+            JSON_MEDIA_TYPE,
+            resume_json,
+            "resume.json",
+        ),
+        (
+            "resume_schema",
+            f"{safe_stem}.schema.json",
+            JSON_SCHEMA_MEDIA_TYPE,
+            resume_schema,
+            "resume.schema.json",
+        ),
+    )
+    return [
+        {
+            "kind": kind,
+            "filename": filename,
+            "media_type": media_type,
+            "payload": payload,
+            "byte_size": len(payload),
+            "object_key": f"{prefix}/artifacts/{object_name}",
+        }
+        for kind, filename, media_type, payload, object_name in artifacts
+    ]
 
 
 def create_app(
@@ -346,6 +426,49 @@ def create_app(
         return [_source_summary(row) for row in rows]
 
     @app.get(
+        "/api/v1/resume-source-artifacts",
+        response_model=list[ResumeSourceArtifactSummary],
+        tags=["resumes"],
+    )
+    def list_resume_source_artifacts(
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> list[ResumeSourceArtifactSummary]:
+        return [
+            _source_artifact_summary(row)
+            for row in resume_store.list_source_artifacts(user_id)
+        ]
+
+    @app.get(
+        "/api/v1/resume-source-artifacts/{artifact_id}/download",
+        tags=["resumes"],
+    )
+    def download_resume_source_artifact(
+        artifact_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> Response:
+        artifact = resume_store.get_source_artifact(user_id, artifact_id)
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="Resume artifact not found.")
+        try:
+            payload = object_store.get(str(artifact["object_key"]))
+        except KeyError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="Resume artifact is temporarily unavailable.",
+            ) from error
+        filename = _safe_filename(str(artifact["filename"]), "resume")
+        download_name = re.sub(r"[^A-Za-z0-9._-]+", "-", filename).strip("-.")
+        return Response(
+            payload,
+            media_type=str(artifact["media_type"]),
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_name or "resume"}"',
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.get(
         "/api/v1/resume-templates",
         response_model=list[ResumeTemplateSummary],
         tags=["resumes"],
@@ -448,6 +571,31 @@ def create_app(
                 )
                 continue
 
+            normalized_docx = payload
+            normalized_text = extracted.text
+            normalized_warning = extracted.warning
+            if extracted.media_type == PDF_MEDIA_TYPE:
+                try:
+                    normalized_docx = converter.pdf_to_docx(payload, original_name)
+                    word_extraction = extract_resume(
+                        f"{Path(original_name).stem}.docx",
+                        normalized_docx,
+                    )
+                except (DocumentConversionError, ResumeImportError):
+                    items.append(
+                        ResumeImportItem(
+                            filename=original_name,
+                            status="rejected",
+                            error=(
+                                "LibreOffice could not convert this PDF into an "
+                                "editable Word document."
+                            ),
+                        )
+                    )
+                    continue
+                normalized_text = word_extraction.text
+                normalized_warning = word_extraction.warning or extracted.warning
+
             source_id = "src_" + uuid.uuid4().hex
             suffix = Path(original_name).suffix.casefold()
             stem = Path(original_name).stem.strip()[:160] or "Imported resume"
@@ -455,14 +603,33 @@ def create_app(
             original_key = f"{prefix}/original{suffix}"
             draft_key = f"{prefix}/draft.json"
             draft = draft_payload(
-                extracted_text=extracted.text,
+                extracted_text=normalized_text,
                 display_name=stem,
                 target_role=clean_role,
             )
-            resume_status = "needs_ocr" if not extracted.text else "needs_review"
+            artifact_payloads = _source_artifact_payloads(
+                prefix=prefix,
+                normalized_docx=normalized_docx,
+                draft=draft,
+                display_name=stem,
+                target_role=clean_role,
+                original_filename=original_name,
+            )
+            resume_status = "needs_ocr" if not normalized_text else "needs_review"
+            stored_keys: list[str] = []
+            created_source = False
             try:
                 object_store.put(original_key, payload, extracted.media_type)
+                stored_keys.append(original_key)
                 object_store.put(draft_key, encode_json(draft), "application/json")
+                stored_keys.append(draft_key)
+                for artifact in artifact_payloads:
+                    object_store.put(
+                        str(artifact["object_key"]),
+                        bytes(artifact["payload"]),
+                        str(artifact["media_type"]),
+                    )
+                    stored_keys.append(str(artifact["object_key"]))
                 row = resume_store.create_source(
                     source_id=source_id,
                     user_id=user_id,
@@ -475,11 +642,24 @@ def create_app(
                     original_object_key=original_key,
                     draft_object_key=draft_key,
                     status=resume_status,
-                    warning=extracted.warning,
+                    warning=normalized_warning,
                 )
+                created_source = True
+                artifact_rows = resume_store.upsert_source_artifacts(
+                    user_id=user_id,
+                    source_id=source_id,
+                    artifacts=[
+                        {key: value for key, value in artifact.items() if key != "payload"}
+                        for artifact in artifact_payloads
+                    ],
+                )
+                if artifact_rows is None:
+                    raise RuntimeError("Resume artifact metadata could not be stored.")
             except Exception:
-                object_store.delete(original_key)
-                object_store.delete(draft_key)
+                if created_source:
+                    resume_store.delete_source(user_id, source_id)
+                for key in stored_keys:
+                    object_store.delete(key)
                 raise
             items.append(
                 ResumeImportItem(

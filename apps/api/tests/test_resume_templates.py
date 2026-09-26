@@ -3,8 +3,11 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from forge.docx import inspect_docx
+
 from axelyn_api.resume_import import (
     normalize_resume_text,
+    sdt_template_values,
     standard_template_values,
     unmapped_resume_content,
 )
@@ -148,6 +151,23 @@ class ResumeTemplateTests(unittest.TestCase):
                 self.assertNotIn(b"<w:txbxContent", xml)
                 self.assertNotIn(b"<w:drawing", xml)
             self.assertEqual(3, len(set(documents)))
+
+            tagged_output = Path(directory) / "resume-sdt-template.docx"
+            render_resume(
+                draft={**draft, "template_id": "ats-classic"},
+                output=tagged_output,
+                title="Taylor resume template",
+                description="SDT test template",
+                content_controls=True,
+            )
+            controls = {control.tag: control.current_text for control in inspect_docx(tagged_output)}
+            self.assertEqual(sdt_template_values(draft), controls)
+            self.assertEqual("Taylor Example", controls["resume.full_name"])
+            self.assertEqual("Builds reliable systems.", controls["resume.summary"])
+            self.assertEqual(
+                "Platform Engineer | Structured Systems",
+                controls["rendered_sections.experience.0"],
+            )
 
     def test_import_recognizes_custom_sections_and_surfaces_unmapped_lines(self):
         contact = normalize_resume_text(

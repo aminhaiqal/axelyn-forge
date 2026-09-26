@@ -58,6 +58,23 @@ class ResumeStore:
                 CREATE INDEX IF NOT EXISTS resume_sources_owner_created
                     ON resume_sources (user_id, created_at DESC);
 
+                CREATE TABLE IF NOT EXISTS resume_source_artifacts (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    byte_size INTEGER NOT NULL,
+                    object_key TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE (user_id, source_id, kind),
+                    FOREIGN KEY (source_id) REFERENCES resume_sources(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS resume_source_artifacts_owner_created
+                    ON resume_source_artifacts (user_id, created_at DESC);
+
                 CREATE TABLE IF NOT EXISTS resume_variants (
                     id TEXT PRIMARY KEY,
                     user_id TEXT NOT NULL,
@@ -295,6 +312,78 @@ class ResumeStore:
                 (now, source_id, user_id),
             )
         return self.get_variant(user_id, variant_id)
+
+    def upsert_source_artifacts(
+        self,
+        *,
+        user_id: str,
+        source_id: str,
+        artifacts: Sequence[dict[str, Any]],
+    ) -> list[dict[str, Any]] | None:
+        """Create or refresh a source's private normalized artifact bundle."""
+        if self.get_source(user_id, source_id) is None:
+            return None
+        now = _now()
+        with self._connect() as connection:
+            for artifact in artifacts:
+                connection.execute(
+                    """
+                    INSERT INTO resume_source_artifacts (
+                        id, user_id, source_id, kind, filename, media_type,
+                        byte_size, object_key, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (user_id, source_id, kind) DO UPDATE SET
+                        filename = excluded.filename,
+                        media_type = excluded.media_type,
+                        byte_size = excluded.byte_size,
+                        object_key = excluded.object_key,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        _identifier("rsa"),
+                        user_id,
+                        source_id,
+                        artifact["kind"],
+                        artifact["filename"],
+                        artifact["media_type"],
+                        artifact["byte_size"],
+                        artifact["object_key"],
+                        now,
+                        now,
+                    ),
+                )
+        return self.list_source_artifacts(user_id, source_id)
+
+    def list_source_artifacts(
+        self,
+        user_id: str,
+        source_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT * FROM resume_source_artifacts
+            WHERE user_id = ?
+        """
+        parameters: tuple[str, ...] = (user_id,)
+        if source_id is not None:
+            query += " AND source_id = ?"
+            parameters = (user_id, source_id)
+        query += " ORDER BY created_at DESC, rowid DESC"
+        with self._connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_source_artifact(
+        self, user_id: str, artifact_id: str
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM resume_source_artifacts
+                WHERE id = ? AND user_id = ?
+                """,
+                (artifact_id, user_id),
+            ).fetchone()
+        return self._dict(row)
 
     def list_variants(self, user_id: str) -> list[dict[str, Any]]:
         with self._connect() as connection:
@@ -573,10 +662,18 @@ class ResumeStore:
                 """,
                 (user_id, user_id, source_id),
             ).fetchall()
+            source_artifact_rows = connection.execute(
+                """
+                SELECT object_key FROM resume_source_artifacts
+                WHERE user_id = ? AND source_id = ?
+                """,
+                (user_id, source_id),
+            ).fetchall()
         return [
             str(source["original_object_key"]),
             str(source["draft_object_key"]),
             *(str(row["normalized_object_key"]) for row in variant_rows),
+            *(str(row["object_key"]) for row in source_artifact_rows),
             *(str(row["object_key"]) for row in document_rows),
             *(
                 key

@@ -29,7 +29,7 @@ flowchart LR
 
 `apps/api` owns HTTP concerns: request validation, CORS, Clerk session verification, public route versioning, service catalog exposure, resume metadata, and intake persistence. Every private resume query includes the authenticated Clerk user ID. Originals, review drafts, normalized versions, and generated documents use opaque object keys behind the server-only storage gateway.
 
-`apps/converter` owns resource-bounded office document conversion and image OCR. It has no public route or published port. Each request uses isolated temporary files, validates document signatures and image dimensions, and runs under a one-operation default concurrency limit. LibreOffice produces PDFs; Tesseract reads PNG/JPEG job-post screenshots.
+`apps/converter` owns resource-bounded office document conversion and image OCR. It has no public route or published port. Each request uses isolated temporary files, validates document signatures and image dimensions, and runs under a one-operation default concurrency limit. LibreOffice converts uploaded PDFs to normalized Word sources and generated DOCX files to PDFs; Tesseract reads PNG/JPEG job-post screenshots.
 
 `packages/forge-core` owns document-domain behavior. It remains independent of HTTP and can be driven through the `forge` CLI or imported by a later background worker. Template inspection, evidence selection, semantic operations, DOCX rendering, PDF conversion, and usage accounting stay in this package.
 
@@ -45,12 +45,13 @@ flowchart LR
 ## Resume library flow
 
 1. The signed-in user creates a first resume with the guided form or sends up to five DOCX/PDF files to the same-origin import endpoint.
-2. FastAPI validates imported signatures and size limits, defensively extracts text, and writes the original plus structured editable content to private object storage. A form-created source stores the structured record directly.
-3. One builder edits both source types. Standard fields cover common resume content; custom sections preserve publications, awards, volunteering, clearances, and other uncommon material.
-4. For imports, the original extracted transcript stays read-only. Lines that are not represented by a standard or custom field appear in a source inbox, so an edit cannot silently discard them.
-5. The user selects Classic, Modern, or Compact. Each renderer uses a single reading order, selectable text, standard headings, and no tables, columns, icons, or text boxes.
-6. The user approves a named role version. The API renders every populated section into DOCX, then sends it to the private converter, where headless LibreOffice returns a validated PDF.
-7. The API stores both files as one generated bundle. Download authorization checks both the document ID and Clerk user ID. Storage credentials and R2 object keys never reach browser code.
+2. FastAPI validates imported signatures and size limits. A PDF is first converted into DOCX by the private LibreOffice service; an uploaded DOCX becomes the normalized Word source directly.
+3. Forge extracts editable content from that normalized DOCX and stores an owner-scoped package containing the source DOCX, an SDT-tagged standard template, structured JSON, and a Draft 2020-12 JSON Schema. A form-created source stores the structured record directly.
+4. One builder edits both source types. Standard fields cover common resume content; custom sections preserve publications, awards, volunteering, clearances, and other uncommon material.
+5. For imports, the original extracted transcript stays read-only. Lines that are not represented by a standard or custom field appear in a source inbox, so an edit cannot silently discard them.
+6. The single standard renderer uses one reading order, selectable text, standard headings, and no tables, columns, icons, or text boxes.
+7. The user approves a named role version. The API renders every populated section into DOCX, then sends it to the private converter, where headless LibreOffice returns a validated PDF.
+8. The API stores both files as one generated bundle. Download authorization checks both the document ID and Clerk user ID. Storage credentials and R2 object keys never reach browser code.
 
 ## Job match and tailoring flow
 

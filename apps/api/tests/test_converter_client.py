@@ -1,4 +1,6 @@
 import unittest
+import zipfile
+from io import BytesIO
 from unittest.mock import patch
 
 import httpx
@@ -7,6 +9,14 @@ from axelyn_api.converter import DocumentConversionError, HttpDocumentConverter
 
 
 VALID_PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\nstartxref\n0\n%%EOF\n"
+
+
+def valid_docx() -> bytes:
+    output = BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types />")
+        archive.writestr("word/document.xml", "<document />")
+    return output.getvalue()
 
 
 class DocumentConverterClientTests(unittest.TestCase):
@@ -40,6 +50,47 @@ class DocumentConverterClientTests(unittest.TestCase):
 
         with self.assertRaisesRegex(DocumentConversionError, "invalid PDF"):
             converter.docx_to_pdf(b"PK document", "resume.docx")
+
+    @patch("axelyn_api.converter.httpx.post")
+    def test_sends_pdf_to_private_endpoint_and_accepts_valid_docx(self, post):
+        docx = valid_docx()
+        post.return_value = httpx.Response(
+            200,
+            content=docx,
+            headers={
+                "Content-Type": (
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
+                )
+            },
+        )
+        converter = HttpDocumentConverter("http://converter:8100", timeout_seconds=90)
+
+        result = converter.pdf_to_docx(VALID_PDF, "resume.pdf")
+
+        self.assertEqual(docx, result)
+        self.assertEqual(
+            "http://converter:8100/v1/convert/pdf-to-docx",
+            post.call_args.args[0],
+        )
+        self.assertEqual("resume.pdf", post.call_args.kwargs["files"]["file"][0])
+
+    @patch("axelyn_api.converter.httpx.post")
+    def test_rejects_invalid_docx_response(self, post):
+        post.return_value = httpx.Response(
+            200,
+            content=b"not a docx",
+            headers={
+                "Content-Type": (
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
+                )
+            },
+        )
+        converter = HttpDocumentConverter("http://converter:8100")
+
+        with self.assertRaisesRegex(DocumentConversionError, "invalid DOCX"):
+            converter.pdf_to_docx(VALID_PDF, "resume.pdf")
 
     @patch("axelyn_api.converter.httpx.post")
     def test_sends_image_to_private_ocr_endpoint(self, post):

@@ -73,7 +73,7 @@ class RoleAlignmentAnalysis(BaseModel):
     recommendations: List[str]
 
 ResumeSourceStatus = Literal["needs_review", "needs_ocr", "ready"]
-ResumeTemplateId = Literal["ats-classic", "ats-modern", "ats-compact"]
+ResumeTemplateId = Literal["ats-classic"]
 ResumeEmploymentType = Literal[
     "Full-time",
     "Part-time",
@@ -382,6 +382,51 @@ class ResumeImportItem(BaseModel):
 
 class ResumeImportResponse(BaseModel):
     items: List[ResumeImportItem]
+
+
+ResumeSourceArtifactKind = Literal[
+    "source_docx",
+    "sdt_template",
+    "resume_json",
+    "resume_schema",
+]
+
+
+class ResumePackageSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str
+    target_role: Optional[str] = None
+    original_filename: str
+
+
+class ResumeSourcePackage(BaseModel):
+    """Portable structured representation generated from an imported Word source."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_document: Literal[
+        "https://forge.axelyn.com/schemas/resume-source-v1.schema.json"
+    ] = Field(
+        default="https://forge.axelyn.com/schemas/resume-source-v1.schema.json",
+        alias="$schema",
+    )
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    source: ResumePackageSource
+    resume: ResumeDraft
+    rendered_sections: dict[str, List[str]]
+    template_values: dict[str, str]
+
+
+class ResumeSourceArtifactSummary(BaseModel):
+    id: str
+    source_id: str
+    kind: ResumeSourceArtifactKind
+    filename: str
+    media_type: str
+    byte_size: int
+    created_at: str
+    updated_at: str
 
 
 class ResumeDraftUpdate(ResumeDraft):

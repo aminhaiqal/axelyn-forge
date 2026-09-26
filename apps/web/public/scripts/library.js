@@ -39,8 +39,14 @@ if (page instanceof HTMLElement) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const renderSources = (sources) => {
+  const renderSources = (sources, artifacts) => {
     if (!(sourceList instanceof HTMLElement)) return;
+    const artifactsBySource = new Map();
+    artifacts.forEach((artifact) => {
+      const current = artifactsBySource.get(artifact.source_id) || [];
+      current.push(artifact);
+      artifactsBySource.set(artifact.source_id, current);
+    });
     sourceList.replaceChildren();
     if (sourceCount) sourceCount.textContent = `${sources.length} source${sources.length === 1 ? "" : "s"}`;
     if (!sources.length) {
@@ -78,7 +84,24 @@ if (page instanceof HTMLElement) {
       edit.href = `/app/resume?source=${encodeURIComponent(source.id)}`;
       edit.textContent = source.status === "ready" ? "Edit resume" : "Continue editing";
       actions.append(edit);
-      if (source.status !== "needs_ocr") {
+      const sourceArtifacts = new Map(
+        (artifactsBySource.get(source.id) || []).map((artifact) => [artifact.kind, artifact]),
+      );
+      [
+        ["source_docx", "Source DOCX"],
+        ["sdt_template", "SDT template"],
+        ["resume_json", "JSON"],
+        ["resume_schema", "JSON Schema"],
+      ].forEach(([kind, label]) => {
+        const artifact = sourceArtifacts.get(kind);
+        if (!artifact) return;
+        const download = document.createElement("a");
+        download.href = `${apiBase}/api/v1/resume-source-artifacts/${artifact.id}/download`;
+        download.textContent = label;
+        download.setAttribute("download", artifact.filename);
+        actions.append(download);
+      });
+      if (!sourceArtifacts.size && source.status !== "needs_ocr") {
         const word = document.createElement("a");
         word.href = `${apiBase}/api/v1/resumes/${source.id}/editable.docx`;
         word.textContent = "Word draft";
@@ -147,12 +170,13 @@ if (page instanceof HTMLElement) {
   };
 
   const refresh = async () => {
-    const [sources, variants, documents] = await Promise.all([
+    const [sources, variants, documents, sourceArtifacts] = await Promise.all([
       api("/api/v1/resumes"),
       api("/api/v1/resume-variants"),
       api("/api/v1/generated-documents"),
+      api("/api/v1/resume-source-artifacts"),
     ]);
-    renderSources(sources);
+    renderSources(sources, sourceArtifacts);
     renderVariants(variants, documents);
   };
 
@@ -183,7 +207,7 @@ if (page instanceof HTMLElement) {
     if (!(uploadForm instanceof HTMLFormElement)) return;
     const submit = uploadForm.querySelector("button[type='submit']");
     if (submit instanceof HTMLButtonElement) submit.disabled = true;
-    setStatus("Reading and securing your resume files…");
+    setStatus("Converting to Word and building your private resume package…");
     try {
       const result = await api("/api/v1/resumes/imports", { method: "POST", body: new FormData(uploadForm) });
       const rejected = result.items.filter((item) => item.status === "rejected");
@@ -191,7 +215,7 @@ if (page instanceof HTMLElement) {
       if (rejected.length) {
         setStatus(`${stored} imported. ${rejected.map((item) => `${item.filename}: ${item.error}`).join(" ")}`, "error");
       } else {
-        setStatus(`${stored} resume${stored === 1 ? "" : "s"} converted into editable content.`, "success");
+        setStatus(`${stored} resume${stored === 1 ? "" : "s"} converted into Word, an SDT template, JSON, and JSON Schema.`, "success");
         uploadForm.reset();
         if (fileSelection instanceof HTMLElement) fileSelection.hidden = true;
       }
