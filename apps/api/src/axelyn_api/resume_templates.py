@@ -85,6 +85,7 @@ TEMPLATE_BY_ID = {template.id: template for template in TEMPLATES}
 
 
 def template_catalog() -> list[dict[str, str]]:
+    template = TEMPLATE_BY_ID[DEFAULT_TEMPLATE_ID]
     return [
         {
             "id": template.id,
@@ -92,7 +93,6 @@ def template_catalog() -> list[dict[str, str]]:
             "description": template.description,
             "density": template.density,
         }
-        for template in TEMPLATES
     ]
 
 

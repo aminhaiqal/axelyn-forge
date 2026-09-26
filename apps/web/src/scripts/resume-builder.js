@@ -428,7 +428,6 @@ if (builderPage instanceof HTMLElement) {
 
   const payload = () => {
     if (!(form instanceof HTMLFormElement)) return null;
-    const selectedTemplate = form.querySelector("input[name='template_id']:checked");
     const customSections = Array.from(form.querySelectorAll(".custom-section-card")).map((card) => {
       const titleInput = card.querySelector("[data-custom-title]");
       const linesInput = card.querySelector("[data-custom-lines]");
@@ -530,7 +529,7 @@ if (builderPage instanceof HTMLElement) {
     return {
       display_name: String(field("display_name")?.value || "").trim(),
       target_role: String(field("target_role")?.value || "").trim() || null,
-      template_id: selectedTemplate instanceof HTMLInputElement ? selectedTemplate.value : "ats-classic",
+      template_id: "ats-classic",
       full_name: String(field("full_name")?.value || "").trim(),
       headline: String(field("headline")?.value || "").trim(),
       email_address: String(field("email_address")?.value || "").trim(),
@@ -677,8 +676,6 @@ if (builderPage instanceof HTMLElement) {
       if (workList instanceof HTMLElement) workList.replaceChildren();
       (source.draft.experience_entries || []).forEach((entry) => addWorkExperience(entry, { scroll: false }));
       updateWorkEntries();
-      const templateInput = form?.querySelector(`input[name='template_id'][value='${source.draft.template_id || "ats-classic"}']`);
-      if (templateInput instanceof HTMLInputElement) templateInput.checked = true;
       if (customList instanceof HTMLElement) customList.replaceChildren();
       editableCustomSections(source.draft).forEach(addCustomSection);
       updateCustomEmpty();

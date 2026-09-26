@@ -26,7 +26,7 @@ if (!isAuthenticated) {
           <h1 id="builder-title">Create your<br /><em>first resume.</em></h1>
         </div>
         <div class="builder-intro">
-          <p>Enter the facts once, keep uncommon sections, and switch layouts without rebuilding your content.</p>
+          <p>Enter the facts once, keep uncommon sections, and generate the Axelyn standard without rebuilding your content.</p>
           <div><span>ATS-safe</span><span>Single column</span><span>Word + PDF</span></div>
         </div>
       </header>
@@ -67,7 +67,7 @@ if (!isAuthenticated) {
             <div class="profile-photo-copy">
               <p>Profile Photo <small>optional</small></p>
               <span id="profile-photo-name">No photo selected</span>
-              <small>JPEG, PNG, or WebP up to 5 MB. Stored privately; current ATS templates keep photos out of generated files.</small>
+              <small>JPEG, PNG, or WebP up to 5 MB. Stored privately; the current Axelyn standard keeps photos out of generated files.</small>
             </div>
             <div class="profile-photo-actions">
               <label class="profile-photo-upload" for="profile-photo-input">Upload photo<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" /></label>
@@ -79,30 +79,12 @@ if (!isAuthenticated) {
 
           <div class="builder-subsection">
             <div class="builder-subsection-heading">
-              <h3>Resume settings</h3>
-              <p>Name this source for your private library, set its target role, and choose the ATS-friendly layout.</p>
+              <h3>Resume details</h3>
+              <p>Name this source for your private library and set the role it is intended to support.</p>
             </div>
             <div class="builder-fields two-up">
               <label><span>Library name</span><input name="display_name" maxlength="160" placeholder="My software engineering resume" required /></label>
               <label><span>Target role <small>optional</small></span><input name="target_role" maxlength="160" placeholder="Frontend Engineer" /></label>
-            </div>
-            <p class="builder-field-label">ATS-friendly template</p>
-            <div class="template-options">
-              <label class="template-option">
-                <input type="radio" name="template_id" value="ats-classic" checked />
-                <span class="template-preview classic"><i></i><b></b><b></b><em></em><b></b><b></b></span>
-                <span><strong>Classic ATS</strong><small>Comfortable spacing · centered identity</small></span>
-              </label>
-              <label class="template-option">
-                <input type="radio" name="template_id" value="ats-modern" />
-                <span class="template-preview modern"><i></i><b></b><b></b><em></em><b></b><b></b></span>
-                <span><strong>Modern ATS</strong><small>Balanced spacing · restrained color</small></span>
-              </label>
-              <label class="template-option">
-                <input type="radio" name="template_id" value="ats-compact" />
-                <span class="template-preview compact"><i></i><b></b><b></b><em></em><b></b><b></b></span>
-                <span><strong>Compact ATS</strong><small>Tighter spacing · more content per page</small></span>
-              </label>
             </div>
           </div>
         </section>

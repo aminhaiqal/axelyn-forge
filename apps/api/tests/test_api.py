@@ -370,13 +370,13 @@ class ApiTests(unittest.TestCase):
         self.assertIn(b"Taylor Example", document_xml)
         self.assertIn(b"Built production APIs", document_xml)
 
-    def test_manual_resume_form_keeps_custom_sections_and_selected_template(self):
+    def test_manual_resume_form_keeps_custom_sections_and_uses_standard_template(self):
         headers = {"Authorization": "Bearer test-session"}
         templates = self.client.get("/api/v1/resume-templates")
 
         self.assertEqual(200, templates.status_code)
         self.assertEqual(
-            ["ats-classic", "ats-modern", "ats-compact"],
+            ["ats-classic"],
             [item["id"] for item in templates.json()],
         )
 
@@ -386,7 +386,7 @@ class ApiTests(unittest.TestCase):
             json={
                 "display_name": "First resume",
                 "target_role": "Platform Engineer",
-                "template_id": "ats-modern",
+                "template_id": "ats-classic",
                 "full_name": "Taylor Example",
                 "headline": "Platform Engineer",
                 "email_address": "taylor@example.com",
@@ -482,7 +482,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual("application/vnd.axelyn.resume+json", source["media_type"])
         self.assertEqual([], source["unmapped_content"])
         self.assertEqual("", source["draft"]["extracted_text"])
-        self.assertEqual("ats-modern", source["draft"]["template_id"])
+        self.assertEqual("ats-classic", source["draft"]["template_id"])
         self.assertTrue(
             source["draft"]["experience_entries"][0]["currently_working_here"]
         )
@@ -547,7 +547,7 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(201, rendered.status_code, rendered.text)
         self.assertEqual(
-            {"ats-modern"},
+            {"ats-classic"},
             {document["template_id"] for document in rendered.json()["documents"]},
         )
         with zipfile.ZipFile(BytesIO(self.document_converter.requests[-1][0])) as archive:

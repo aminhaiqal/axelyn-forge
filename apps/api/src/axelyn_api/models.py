@@ -385,6 +385,7 @@ class ResumeImportResponse(BaseModel):
 
 
 class ResumeDraftUpdate(ResumeDraft):
+    template_id: Literal["ats-classic"] = "ats-classic"
     full_name: str = Field(min_length=2, max_length=160)
     email_address: str = Field(min_length=3, max_length=254)
     phone_number: str = Field(min_length=5, max_length=60)
