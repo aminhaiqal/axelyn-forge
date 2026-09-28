@@ -12,7 +12,8 @@ if (matchPage instanceof HTMLElement) {
   const dropZone = document.querySelector("#job-drop-zone");
   const formStatus = document.querySelector("#job-match-status");
   const submitButton = form?.querySelector("button[type='submit']");
-  const emptyResult = document.querySelector("#match-result-empty");
+  const workspace = document.querySelector("#match-workspace");
+  const resultShell = document.querySelector("#match-result-shell");
   const resultPanel = document.querySelector("#match-result");
   const resultState = document.querySelector("#match-result-state");
   const tailorBlock = document.querySelector("#tailor-block");
@@ -136,7 +137,8 @@ if (matchPage instanceof HTMLElement) {
 
   const renderResult = (result) => {
     latestMatch = result;
-    if (emptyResult instanceof HTMLElement) emptyResult.hidden = true;
+    if (workspace instanceof HTMLElement) workspace.dataset.hasResult = "true";
+    if (resultShell instanceof HTMLElement) resultShell.hidden = false;
     if (resultPanel instanceof HTMLElement) resultPanel.hidden = false;
     if (resultState) resultState.textContent = result.match_label;
     const score = document.querySelector("#match-score");

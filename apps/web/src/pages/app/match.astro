@@ -27,7 +27,7 @@ if (!isAuthenticated) {
         <p class="match-intro">Choose one of your resume sources and bring the full job description. Forge measures evidence already present in your resume, explains what is missing, and creates a truthful tailored version when the fit supports it.</p>
       </header>
 
-      <div class="match-workspace">
+      <div class="match-workspace" id="match-workspace">
         <form class="match-form" id="job-match-form">
           <div class="match-section-title">
             <span>01</span>
@@ -79,19 +79,8 @@ if (!isAuthenticated) {
           </div>
         </form>
 
-        <aside class="match-result-panel" aria-label="Job match result">
-          <div class="result-topline"><span>03 / Result</span><span id="match-result-state">Waiting for a role</span></div>
-
-          <div class="result-empty" id="match-result-empty">
-            <div class="result-orbit" aria-hidden="true"><i></i><i></i><b></b></div>
-            <h2>Your match result appears here.</h2>
-            <p>You will get one clear outcome: Match, Some match, or No match—plus the evidence behind it.</p>
-            <ol>
-              <li><span>70–100</span> Match</li>
-              <li><span>40–69</span> Some match</li>
-              <li><span>0–39</span> No match</li>
-            </ol>
-          </div>
+        <aside class="match-result-panel" id="match-result-shell" aria-label="Job match result" hidden>
+          <div class="result-topline"><span>03 / Result</span><span id="match-result-state">Analysis complete</span></div>
 
           <section class="match-result" id="match-result" hidden>
             <div class="score-header">
@@ -137,5 +126,7 @@ if (!isAuthenticated) {
     </main>
   </div>
 
-  <script is:inline src="/scripts/job-match.js" defer></script>
+  <script>
+    import "../../scripts/job-match.js";
+  </script>
 </BaseLayout>
