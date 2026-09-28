@@ -75,8 +75,13 @@ class ApiTests(unittest.TestCase):
         </w:document>"""
         output = BytesIO()
         with zipfile.ZipFile(output, "w") as archive:
-            archive.writestr("[Content_Types].xml", content_types)
-            archive.writestr("word/document.xml", document)
+            for name, payload in (
+                ("[Content_Types].xml", content_types),
+                ("word/document.xml", document),
+            ):
+                member = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+                member.compress_type = zipfile.ZIP_STORED
+                archive.writestr(member, payload)
         return output.getvalue()
 
     @staticmethod
