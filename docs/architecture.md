@@ -39,7 +39,7 @@ flowchart LR
 
 1. Public visitors can submit `POST /api/v1/service-requests`; FastAPI validates the brief and writes it to SQLite with an opaque reference.
 2. A visitor entering `/app` without a valid Clerk session is redirected to the same-origin sign-in route.
-3. FastAPI verifies the session, allowed party, and token type before any private resume or job-match operation.
+3. FastAPI verifies the session, allowed party, and token type before any private resume, job-tracker, or job-match operation.
 4. Every private query includes the authenticated Clerk user ID, and no private data is made queryable through a public endpoint.
 
 ## Resume library flow
@@ -60,6 +60,13 @@ flowchart LR
 3. The result explains supported terms, missing terms, source evidence, and specific improvement directions. It never treats an unsupported requirement as candidate experience.
 4. Match results generate automatically; Some match results offer generation; No match results stop before generation.
 5. Tailoring prioritizes existing roles, projects, bullets, skills, and custom sections without rewriting claims. The selected ATS renderer creates DOCX, LibreOffice creates PDF, and both files remain owner-scoped through download.
+
+## Job tracker flow
+
+1. The signed-in user creates an application record with the company, role, posting URL, status, dates, notes, and one owned resume source or approved version.
+2. FastAPI validates that both the application and selected resume belong to the same Clerk user. It stores the resume IDs, name and target-role labels, and a private content snapshot representing the version used for that application.
+3. The user can move the record through Saved, Applied, Screening, Interview, Offer, Rejected, or Withdrawn and can filter the pipeline in the browser.
+4. If a linked resume is later removed, SQLite clears the obsolete source and version IDs while retaining the owner-scoped attachment snapshot for an accurate application history. Deleting the application also deletes its private snapshot.
 
 ## Delivery
 

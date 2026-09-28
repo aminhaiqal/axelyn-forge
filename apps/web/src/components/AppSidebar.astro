@@ -3,7 +3,7 @@ import { UserButton } from "@clerk/astro/components";
 import "../styles/app-sidebar.css";
 
 interface Props {
-  active: "resumes" | "match";
+  active: "resumes" | "match" | "tracker";
 }
 
 const { active } = Astro.props;
@@ -68,6 +68,17 @@ const { active } = Astro.props;
           <path d="M3 5.25 10 2l7 3.25L10 8.5zM3 9.25l7 3.25 7-3.25M3 13.25l7 3.25 7-3.25"></path>
         </svg>
         <span class="sidebar-link-copy"><strong>Resume library</strong><small>Sources and versions</small></span>
+      </a>
+      <a
+        class="sidebar-link"
+        href="/app/tracker"
+        aria-current={active === "tracker" ? "page" : undefined}
+        title="Job tracker"
+      >
+        <svg aria-hidden="true" viewBox="0 0 20 20">
+          <path d="M6.25 5V3.5A1.5 1.5 0 0 1 7.75 2h4.5a1.5 1.5 0 0 1 1.5 1.5V5M2.5 6h15v10.5h-15zM2.5 9.5c4.8 2.2 10.2 2.2 15 0M8.25 11h3.5"></path>
+        </svg>
+        <span class="sidebar-link-copy"><strong>Job tracker</strong><small>Applications and follow-ups</small></span>
       </a>
       <p class="sidebar-section-label sidebar-system-label">System</p>
       <a class="sidebar-link sidebar-home-link" href="/" title="Axelyn Forge website">

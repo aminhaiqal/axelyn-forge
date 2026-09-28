@@ -467,6 +467,122 @@ class GeneratedDocumentBundle(BaseModel):
     documents: List[GeneratedDocumentSummary]
 
 
+JobApplicationStatus = Literal[
+    "saved",
+    "applied",
+    "screening",
+    "interview",
+    "offer",
+    "rejected",
+    "withdrawn",
+]
+
+
+class JobApplicationCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    company_name: str = Field(min_length=1, max_length=200)
+    job_title: str = Field(min_length=1, max_length=200)
+    job_url: Optional[str] = Field(default=None, max_length=1_000)
+    location: Optional[str] = Field(default=None, max_length=200)
+    work_arrangement: Optional[ResumeWorkArrangement] = None
+    employment_type: Optional[ResumeEmploymentType] = None
+    status: JobApplicationStatus = "saved"
+    applied_on: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$",
+    )
+    next_action_on: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$",
+    )
+    notes: Optional[str] = Field(default=None, max_length=10_000)
+    resume_source_id: str = Field(min_length=1, max_length=80)
+    resume_variant_id: Optional[str] = Field(default=None, max_length=80)
+
+    @field_validator(
+        "job_url",
+        "location",
+        "applied_on",
+        "next_action_on",
+        "notes",
+        "resume_variant_id",
+        mode="before",
+    )
+    @classmethod
+    def blank_values_are_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("job_url")
+    @classmethod
+    def job_url_is_http(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        parsed = _HTTP_URL_ADAPTER.validate_python(value)
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("job URL must use http or https")
+        return str(parsed)
+
+
+class JobApplicationUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    company_name: str = Field(min_length=1, max_length=200)
+    job_title: str = Field(min_length=1, max_length=200)
+    job_url: Optional[str] = Field(default=None, max_length=1_000)
+    location: Optional[str] = Field(default=None, max_length=200)
+    work_arrangement: Optional[ResumeWorkArrangement] = None
+    employment_type: Optional[ResumeEmploymentType] = None
+    status: JobApplicationStatus
+    applied_on: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$",
+    )
+    next_action_on: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$",
+    )
+    notes: Optional[str] = Field(default=None, max_length=10_000)
+    resume_source_id: Optional[str] = Field(default=None, max_length=80)
+    resume_variant_id: Optional[str] = Field(default=None, max_length=80)
+
+    _blank_values_are_none = field_validator(
+        "job_url",
+        "location",
+        "applied_on",
+        "next_action_on",
+        "notes",
+        "resume_source_id",
+        "resume_variant_id",
+        mode="before",
+    )(JobApplicationCreate.blank_values_are_none.__func__)
+    _job_url_is_http = field_validator("job_url")(
+        JobApplicationCreate.job_url_is_http.__func__
+    )
+
+
+class JobApplicationSummary(BaseModel):
+    id: str
+    company_name: str
+    job_title: str
+    job_url: Optional[str]
+    location: Optional[str]
+    work_arrangement: Optional[ResumeWorkArrangement]
+    employment_type: Optional[ResumeEmploymentType]
+    status: JobApplicationStatus
+    applied_on: Optional[str]
+    next_action_on: Optional[str]
+    notes: Optional[str]
+    resume_source_id: Optional[str]
+    resume_variant_id: Optional[str]
+    resume_name: str
+    resume_target_role: Optional[str]
+    created_at: str
+    updated_at: str
+
+
 JobMatchState = Literal["match", "some_match", "no_match"]
 
 

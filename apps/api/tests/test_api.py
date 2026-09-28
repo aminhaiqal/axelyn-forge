@@ -685,6 +685,129 @@ class ApiTests(unittest.TestCase):
         self.assertEqual("rejected", unsupported.json()["items"][0]["status"])
         self.assertEqual(401, unauthenticated.status_code)
 
+    def test_job_tracker_is_private_and_preserves_resume_attachment_snapshot(self):
+        headers = {"Authorization": "Bearer test-session"}
+        other_headers = {"Authorization": "Bearer other-session"}
+        created_resume = self.client.post(
+            "/api/v1/resumes",
+            headers=headers,
+            json={
+                "display_name": "Platform resume",
+                "target_role": "Platform Engineer",
+                "full_name": "Taylor Example",
+                "headline": "Platform Engineer",
+                "email_address": "taylor@example.com",
+                "phone_number": "+60 12-345 6789",
+                "location": "Kuala Lumpur, Malaysia",
+                "summary": "Builds reliable cloud platforms.",
+            },
+        )
+        self.assertEqual(201, created_resume.status_code, created_resume.text)
+        source = created_resume.json()
+        accepted = self.client.post(
+            f"/api/v1/resumes/{source['id']}/accept",
+            headers=headers,
+            json={
+                **source["draft"],
+                "display_name": "Platform resume",
+                "target_role": "Platform Engineer",
+                "variant_name": "Platform Engineer — Master",
+            },
+        )
+        self.assertEqual(200, accepted.status_code, accepted.text)
+        variant = accepted.json()
+
+        created = self.client.post(
+            "/api/v1/job-applications",
+            headers=headers,
+            json={
+                "company_name": "Example Systems",
+                "job_title": "Senior Platform Engineer",
+                "job_url": "https://example.com/jobs/platform",
+                "location": "Kuala Lumpur, Malaysia",
+                "work_arrangement": "Hybrid",
+                "employment_type": "Full-time",
+                "status": "applied",
+                "applied_on": "2026-09-28",
+                "next_action_on": "2026-10-05",
+                "notes": "Referred by the infrastructure team.",
+                "resume_source_id": source["id"],
+                "resume_variant_id": variant["id"],
+            },
+        )
+        self.assertEqual(201, created.status_code, created.text)
+        application = created.json()
+        self.assertTrue(application["id"].startswith("job_"))
+        self.assertEqual("Platform Engineer — Master", application["resume_name"])
+        self.assertEqual("Platform Engineer", application["resume_target_role"])
+        with sqlite3.connect(self.database) as connection:
+            snapshot_key = connection.execute(
+                "SELECT resume_snapshot_object_key FROM job_applications WHERE id = ?",
+                (application["id"],),
+            ).fetchone()[0]
+        snapshot_path = self.storage / snapshot_key
+        self.assertTrue(snapshot_path.is_file())
+        self.assertEqual([], self.client.get(
+            "/api/v1/job-applications", headers=other_headers
+        ).json())
+
+        other_update = self.client.put(
+            f"/api/v1/job-applications/{application['id']}",
+            headers=other_headers,
+            json={
+                "company_name": "Changed",
+                "job_title": "Changed",
+                "status": "rejected",
+            },
+        )
+        other_delete = self.client.delete(
+            f"/api/v1/job-applications/{application['id']}",
+            headers=other_headers,
+        )
+        self.assertEqual(404, other_update.status_code)
+        self.assertEqual(404, other_delete.status_code)
+
+        updated = self.client.put(
+            f"/api/v1/job-applications/{application['id']}",
+            headers=headers,
+            json={
+                "company_name": application["company_name"],
+                "job_title": application["job_title"],
+                "job_url": application["job_url"],
+                "location": application["location"],
+                "work_arrangement": application["work_arrangement"],
+                "employment_type": application["employment_type"],
+                "status": "interview",
+                "applied_on": application["applied_on"],
+                "next_action_on": "2026-10-08",
+                "notes": "Technical interview booked.",
+            },
+        )
+        self.assertEqual(200, updated.status_code, updated.text)
+        self.assertEqual("interview", updated.json()["status"])
+        self.assertEqual(variant["id"], updated.json()["resume_variant_id"])
+
+        removed_source = self.client.delete(
+            f"/api/v1/resumes/{source['id']}", headers=headers
+        )
+        self.assertEqual(204, removed_source.status_code)
+        preserved = self.client.get(
+            "/api/v1/job-applications", headers=headers
+        ).json()[0]
+        self.assertIsNone(preserved["resume_source_id"])
+        self.assertIsNone(preserved["resume_variant_id"])
+        self.assertEqual("Platform Engineer — Master", preserved["resume_name"])
+        self.assertTrue(snapshot_path.is_file())
+
+        deleted = self.client.delete(
+            f"/api/v1/job-applications/{application['id']}", headers=headers
+        )
+        self.assertEqual(204, deleted.status_code)
+        self.assertFalse(snapshot_path.exists())
+        self.assertEqual([], self.client.get(
+            "/api/v1/job-applications", headers=headers
+        ).json())
+
     def test_job_match_is_private_and_generates_word_and_pdf(self):
         headers = {"Authorization": "Bearer test-session"}
         imported = self.client.post(

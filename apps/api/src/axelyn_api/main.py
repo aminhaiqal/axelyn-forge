@@ -37,6 +37,9 @@ from .models import (
     AuthenticatedUser,
     GeneratedDocumentBundle,
     GeneratedDocumentSummary,
+    JobApplicationCreate,
+    JobApplicationSummary,
+    JobApplicationUpdate,
     JobMatchAnalysis,
     JobMatchDocumentBundle,
     JobMatchDocumentSummary,
@@ -110,6 +113,10 @@ def _source_artifact_summary(row: dict[str, object]) -> ResumeSourceArtifactSumm
 
 def _job_document_summary(row: dict[str, object]) -> JobMatchDocumentSummary:
     return JobMatchDocumentSummary(**row)
+
+
+def _job_application_summary(row: dict[str, object]) -> JobApplicationSummary:
+    return JobApplicationSummary(**row)
 
 
 def _source_detail(
@@ -341,6 +348,41 @@ def create_app(
 
     def require_user(request: Request) -> str:
         return user_authenticator(request)
+
+    def resolve_application_resume(
+        user_id: str,
+        source_id: str,
+        variant_id: str | None,
+    ) -> tuple[dict[str, object], dict[str, object] | None]:
+        source = resume_store.get_source(user_id, source_id)
+        if source is None:
+            raise HTTPException(status_code=404, detail="Resume source not found.")
+        variant: dict[str, object] | None = None
+        if variant_id is not None:
+            variant = resume_store.get_variant(user_id, variant_id)
+            if variant is None or str(variant["source_id"]) != source_id:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Resume version not found for this source.",
+                )
+        return source, variant
+
+    def application_resume_snapshot(
+        source: dict[str, object],
+        variant: dict[str, object] | None,
+    ) -> bytes:
+        object_key = (
+            variant["normalized_object_key"]
+            if variant is not None
+            else source["draft_object_key"]
+        )
+        try:
+            return object_store.get(str(object_key))
+        except KeyError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The selected resume data is temporarily unavailable.",
+            ) from error
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -1078,6 +1120,192 @@ def create_app(
                 "X-Content-Type-Options": "nosniff",
             },
         )
+
+    @app.get(
+        "/api/v1/job-applications",
+        response_model=list[JobApplicationSummary],
+        tags=["job tracker"],
+    )
+    def list_job_applications(
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> list[JobApplicationSummary]:
+        return [
+            _job_application_summary(row)
+            for row in resume_store.list_job_applications(user_id)
+        ]
+
+    @app.post(
+        "/api/v1/job-applications",
+        response_model=JobApplicationSummary,
+        status_code=status.HTTP_201_CREATED,
+        tags=["job tracker"],
+    )
+    def create_job_application(
+        payload: JobApplicationCreate,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> JobApplicationSummary:
+        source, variant = resolve_application_resume(
+            user_id,
+            payload.resume_source_id,
+            payload.resume_variant_id,
+        )
+        application_id = "job_" + uuid.uuid4().hex
+        snapshot_key = (
+            f"{_object_prefix(user_id)}/job-applications/{application_id}/"
+            "resume.json"
+        )
+        object_store.put(
+            snapshot_key,
+            application_resume_snapshot(source, variant),
+            "application/json",
+        )
+        try:
+            row = resume_store.create_job_application(
+                application_id=application_id,
+                user_id=user_id,
+                company_name=payload.company_name,
+                job_title=payload.job_title,
+                job_url=payload.job_url,
+                location=payload.location,
+                work_arrangement=payload.work_arrangement,
+                employment_type=payload.employment_type,
+                status=payload.status,
+                applied_on=payload.applied_on,
+                next_action_on=payload.next_action_on,
+                notes=payload.notes,
+                resume_source_id=payload.resume_source_id,
+                resume_variant_id=payload.resume_variant_id,
+                resume_name=str(
+                    variant["name"]
+                    if variant is not None
+                    else source["display_name"]
+                ),
+                resume_target_role=(
+                    str(variant["target_role"])
+                    if variant is not None and variant["target_role"]
+                    else str(source["target_role"])
+                    if source["target_role"]
+                    else None
+                ),
+                resume_snapshot_object_key=snapshot_key,
+            )
+        except Exception:
+            object_store.delete(snapshot_key)
+            raise
+        return _job_application_summary(row)
+
+    @app.put(
+        "/api/v1/job-applications/{application_id}",
+        response_model=JobApplicationSummary,
+        tags=["job tracker"],
+    )
+    def update_job_application(
+        application_id: str,
+        payload: JobApplicationUpdate,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> JobApplicationSummary:
+        existing = resume_store.get_job_application(user_id, application_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Job application not found.")
+
+        resume_selection_changed = (
+            payload.resume_source_id is not None
+            and (
+                payload.resume_source_id != existing["resume_source_id"]
+                or payload.resume_variant_id != existing["resume_variant_id"]
+            )
+        )
+        source_id = (
+            payload.resume_source_id
+            if payload.resume_source_id is not None
+            else existing["resume_source_id"]
+        )
+        variant_id = (
+            payload.resume_variant_id
+            if payload.resume_source_id is not None
+            else existing["resume_variant_id"]
+        )
+        resume_name = str(existing["resume_name"])
+        resume_target_role = (
+            str(existing["resume_target_role"])
+            if existing["resume_target_role"]
+            else None
+        )
+        snapshot_key = str(existing["resume_snapshot_object_key"])
+        previous_snapshot_key = snapshot_key
+        stored_replacement = False
+        if resume_selection_changed:
+            source, variant = resolve_application_resume(
+                user_id,
+                payload.resume_source_id,
+                payload.resume_variant_id,
+            )
+            resume_name = str(
+                variant["name"] if variant is not None else source["display_name"]
+            )
+            resume_target_role = (
+                str(variant["target_role"])
+                if variant is not None and variant["target_role"]
+                else str(source["target_role"])
+                if source["target_role"]
+                else None
+            )
+            snapshot_key = (
+                f"{_object_prefix(user_id)}/job-applications/{application_id}/"
+                f"resume-{uuid.uuid4().hex}.json"
+            )
+            object_store.put(
+                snapshot_key,
+                application_resume_snapshot(source, variant),
+                "application/json",
+            )
+            stored_replacement = True
+
+        try:
+            row = resume_store.update_job_application(
+                user_id=user_id,
+                application_id=application_id,
+                company_name=payload.company_name,
+                job_title=payload.job_title,
+                job_url=payload.job_url,
+                location=payload.location,
+                work_arrangement=payload.work_arrangement,
+                employment_type=payload.employment_type,
+                status=payload.status,
+                applied_on=payload.applied_on,
+                next_action_on=payload.next_action_on,
+                notes=payload.notes,
+                resume_source_id=str(source_id) if source_id else None,
+                resume_variant_id=str(variant_id) if variant_id else None,
+                resume_name=resume_name,
+                resume_target_role=resume_target_role,
+                resume_snapshot_object_key=snapshot_key,
+            )
+        except Exception:
+            if stored_replacement:
+                object_store.delete(snapshot_key)
+            raise
+        assert row is not None
+        if stored_replacement:
+            object_store.delete(previous_snapshot_key)
+        return _job_application_summary(row)
+
+    @app.delete(
+        "/api/v1/job-applications/{application_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["job tracker"],
+    )
+    def delete_job_application(
+        application_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> Response:
+        existing = resume_store.get_job_application(user_id, application_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Job application not found.")
+        object_store.delete(str(existing["resume_snapshot_object_key"]))
+        if not resume_store.delete_job_application(user_id, application_id):
+            raise HTTPException(status_code=404, detail="Job application not found.")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.post(
         "/api/v1/job-matches",

@@ -135,6 +135,34 @@ class ResumeStore:
                 );
                 CREATE INDEX IF NOT EXISTS job_match_documents_owner_created
                     ON job_match_documents (user_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS job_applications (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    company_name TEXT NOT NULL,
+                    job_title TEXT NOT NULL,
+                    job_url TEXT,
+                    location TEXT,
+                    work_arrangement TEXT,
+                    employment_type TEXT,
+                    status TEXT NOT NULL,
+                    applied_on TEXT,
+                    next_action_on TEXT,
+                    notes TEXT,
+                    resume_source_id TEXT,
+                    resume_variant_id TEXT,
+                    resume_name TEXT NOT NULL,
+                    resume_target_role TEXT,
+                    resume_snapshot_object_key TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (resume_source_id) REFERENCES resume_sources(id) ON DELETE SET NULL,
+                    FOREIGN KEY (resume_variant_id) REFERENCES resume_variants(id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS job_applications_owner_updated
+                    ON job_applications (user_id, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS job_applications_owner_status
+                    ON job_applications (user_id, status);
                 """
             )
 
@@ -404,6 +432,152 @@ class ResumeStore:
                 (variant_id, user_id),
             ).fetchone()
         return self._dict(row)
+
+    def create_job_application(
+        self,
+        *,
+        application_id: str,
+        user_id: str,
+        company_name: str,
+        job_title: str,
+        job_url: str | None,
+        location: str | None,
+        work_arrangement: str | None,
+        employment_type: str | None,
+        status: str,
+        applied_on: str | None,
+        next_action_on: str | None,
+        notes: str | None,
+        resume_source_id: str,
+        resume_variant_id: str | None,
+        resume_name: str,
+        resume_target_role: str | None,
+        resume_snapshot_object_key: str,
+    ) -> dict[str, Any]:
+        now = _now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO job_applications (
+                    id, user_id, company_name, job_title, job_url, location,
+                    work_arrangement, employment_type, status, applied_on,
+                    next_action_on, notes, resume_source_id, resume_variant_id,
+                    resume_name, resume_target_role, resume_snapshot_object_key,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    application_id,
+                    user_id,
+                    company_name,
+                    job_title,
+                    job_url,
+                    location,
+                    work_arrangement,
+                    employment_type,
+                    status,
+                    applied_on,
+                    next_action_on,
+                    notes,
+                    resume_source_id,
+                    resume_variant_id,
+                    resume_name,
+                    resume_target_role,
+                    resume_snapshot_object_key,
+                    now,
+                    now,
+                ),
+            )
+        application = self.get_job_application(user_id, application_id)
+        assert application is not None
+        return application
+
+    def list_job_applications(self, user_id: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM job_applications
+                WHERE user_id = ?
+                ORDER BY updated_at DESC, created_at DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_job_application(
+        self, user_id: str, application_id: str
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM job_applications WHERE id = ? AND user_id = ?",
+                (application_id, user_id),
+            ).fetchone()
+        return self._dict(row)
+
+    def update_job_application(
+        self,
+        *,
+        user_id: str,
+        application_id: str,
+        company_name: str,
+        job_title: str,
+        job_url: str | None,
+        location: str | None,
+        work_arrangement: str | None,
+        employment_type: str | None,
+        status: str,
+        applied_on: str | None,
+        next_action_on: str | None,
+        notes: str | None,
+        resume_source_id: str | None,
+        resume_variant_id: str | None,
+        resume_name: str,
+        resume_target_role: str | None,
+        resume_snapshot_object_key: str,
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE job_applications
+                SET company_name = ?, job_title = ?, job_url = ?, location = ?,
+                    work_arrangement = ?, employment_type = ?, status = ?,
+                    applied_on = ?, next_action_on = ?, notes = ?,
+                    resume_source_id = ?, resume_variant_id = ?, resume_name = ?,
+                    resume_target_role = ?, resume_snapshot_object_key = ?, updated_at = ?
+                WHERE id = ? AND user_id = ?
+                """,
+                (
+                    company_name,
+                    job_title,
+                    job_url,
+                    location,
+                    work_arrangement,
+                    employment_type,
+                    status,
+                    applied_on,
+                    next_action_on,
+                    notes,
+                    resume_source_id,
+                    resume_variant_id,
+                    resume_name,
+                    resume_target_role,
+                    resume_snapshot_object_key,
+                    _now(),
+                    application_id,
+                    user_id,
+                ),
+            )
+        if cursor.rowcount == 0:
+            return None
+        return self.get_job_application(user_id, application_id)
+
+    def delete_job_application(self, user_id: str, application_id: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM job_applications WHERE id = ? AND user_id = ?",
+                (application_id, user_id),
+            )
+        return cursor.rowcount > 0
 
     def create_document(
         self,

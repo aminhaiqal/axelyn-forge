@@ -1,0 +1,137 @@
+---
+import AppSidebar from "../../components/AppSidebar.astro";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import "../../styles/job-tracker.css";
+
+const apiBase = import.meta.env.PUBLIC_API_BASE_URL ?? "";
+const { isAuthenticated, redirectToSignIn } = Astro.locals.auth();
+
+if (!isAuthenticated) {
+  return redirectToSignIn();
+}
+---
+
+<BaseLayout
+  title="Job tracker — Axelyn Forge"
+  description="Track private job applications, follow-ups, and the exact resume attached to each role."
+>
+  <div class="tracker-page" data-api-base={apiBase} data-workspace-shell>
+    <AppSidebar active="tracker" />
+
+    <main class="tracker-shell">
+      <header class="tracker-intro">
+        <div>
+          <p class="tracker-kicker"><span></span> Private application workspace</p>
+          <h1>Keep every<br /><em>application in view.</em></h1>
+        </div>
+        <p class="tracker-intro-copy">
+          Follow each opportunity from saved role to final decision, with the exact resume version and next action attached to the record.
+        </p>
+      </header>
+
+      <section class="tracker-metrics" aria-label="Application overview">
+        <article><span>Total</span><strong id="metric-total">0</strong><small>all applications</small></article>
+        <article><span>Active</span><strong id="metric-active">0</strong><small>currently moving</small></article>
+        <article><span>Interviews</span><strong id="metric-interviews">0</strong><small>in interview</small></article>
+        <article><span>Offers</span><strong id="metric-offers">0</strong><small>received</small></article>
+      </section>
+
+      <section class="tracker-workspace">
+        <aside class="application-editor" id="application-editor">
+          <div class="editor-heading">
+            <div>
+              <span id="editor-sequence">01 / NEW RECORD</span>
+              <h2 id="editor-title">Add an application</h2>
+            </div>
+            <button id="cancel-edit" class="text-button" type="button" hidden>Cancel edit</button>
+          </div>
+
+          <form id="application-form">
+            <input id="application-id" type="hidden" />
+            <div class="field-pair">
+              <label><span>Company *</span><input id="company-name" name="company_name" type="text" maxlength="200" autocomplete="organization" placeholder="Example Systems" required /></label>
+              <label><span>Job title *</span><input id="job-title" name="job_title" type="text" maxlength="200" placeholder="Senior Platform Engineer" required /></label>
+            </div>
+
+            <label><span>Job posting URL</span><input id="job-url" name="job_url" type="url" maxlength="1000" placeholder="https://company.com/jobs/role" /></label>
+
+            <div class="field-pair">
+              <label><span>Status *</span>
+                <select id="application-status" name="status" required>
+                  <option value="saved">Saved</option>
+                  <option value="applied">Applied</option>
+                  <option value="screening">Screening</option>
+                  <option value="interview">Interview</option>
+                  <option value="offer">Offer</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="withdrawn">Withdrawn</option>
+                </select>
+              </label>
+              <label><span>Location</span><input id="job-location" name="location" type="text" maxlength="200" placeholder="Kuala Lumpur, Malaysia" /></label>
+            </div>
+
+            <div class="field-pair">
+              <label><span>Work arrangement</span>
+                <select id="work-arrangement" name="work_arrangement">
+                  <option value="">Choose one</option>
+                  <option>On-site</option><option>Hybrid</option><option>Remote</option>
+                </select>
+              </label>
+              <label><span>Employment type</span>
+                <select id="employment-type" name="employment_type">
+                  <option value="">Choose one</option>
+                  <option>Full-time</option><option>Part-time</option><option>Contract</option>
+                  <option>Freelance</option><option>Internship</option><option>Self-employed</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field-pair">
+              <label><span>Applied date</span><input id="applied-on" name="applied_on" type="date" /></label>
+              <label><span>Next action</span><input id="next-action-on" name="next_action_on" type="date" /></label>
+            </div>
+
+            <label class="resume-field">
+              <span>Resume attached *</span>
+              <select id="resume-attachment" required><option value="">Loading your resumes…</option></select>
+              <small id="resume-help">The selected version is saved with this application.</small>
+            </label>
+
+            <label><span>Notes</span><textarea id="application-notes" name="notes" maxlength="10000" rows="4" placeholder="Referral, recruiter details, interview preparation, or follow-up context."></textarea></label>
+
+            <p class="form-status" id="application-form-status" aria-live="polite"></p>
+            <button class="save-application" id="save-application" type="submit">Save application <span aria-hidden="true">→</span></button>
+          </form>
+        </aside>
+
+        <div class="application-index">
+          <div class="index-heading">
+            <div><span>02 / APPLICATIONS</span><h2>Your pipeline</h2></div>
+            <strong id="application-count">0 records</strong>
+          </div>
+
+          <div class="tracker-filters">
+            <label class="search-field">
+              <span class="sr-only">Search applications</span>
+              <svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"></circle><path d="m12.5 12.5 4 4"></path></svg>
+              <input id="application-search" type="search" placeholder="Search company, role, or resume" />
+            </label>
+            <label><span class="sr-only">Filter by status</span>
+              <select id="status-filter">
+                <option value="all">All statuses</option><option value="saved">Saved</option>
+                <option value="applied">Applied</option><option value="screening">Screening</option>
+                <option value="interview">Interview</option><option value="offer">Offer</option>
+                <option value="rejected">Rejected</option><option value="withdrawn">Withdrawn</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="application-list" id="application-list" aria-live="polite">
+            <div class="tracker-loading">Loading your private application records…</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script is:inline src="/scripts/job-tracker.js" defer></script>
+</BaseLayout>
