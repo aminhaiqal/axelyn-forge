@@ -10,10 +10,10 @@ from .errors import ForgeError
 from .context_selection import DEFAULT_CONTEXT_SELECTION_MODEL
 from .context_store import SQLiteContextStore, sync_context_database
 from .job_source import DEFAULT_WEB_SEARCH_MODEL
-from .openai_provider import DEFAULT_OPENAI_MODEL
+from .openrouter_client import DEFAULT_OPENROUTER_MODEL
 from .pdf import DEFAULT_PDF_TIMEOUT_SECONDS, convert_docx_to_pdf
-from .tailoring import tailor_resume_with_openai
-from .usage_store import OpenAIUsageStore
+from .tailoring import tailor_resume_with_openrouter
+from .usage_store import OpenRouterUsageStore
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -54,7 +54,7 @@ def _parser() -> argparse.ArgumentParser:
 
     usage_list = subcommands.add_parser(
         "usage-list",
-        help="list OpenAI request, token, and estimated-cost ledger rows",
+        help="list OpenRouter request, token, and estimated-cost ledger rows",
     )
     usage_list.add_argument("--database", required=True, type=Path)
     usage_list.add_argument("--workflow-id")
@@ -62,7 +62,7 @@ def _parser() -> argparse.ArgumentParser:
 
     usage_summary = subcommands.add_parser(
         "usage-summary",
-        help="summarize OpenAI token usage and estimated cost from SQLite",
+        help="summarize OpenRouter token usage and estimated cost from SQLite",
     )
     usage_summary.add_argument("--database", required=True, type=Path)
     usage_summary.add_argument("--workflow-id")
@@ -94,13 +94,13 @@ def _parser() -> argparse.ArgumentParser:
 
     tailor = subcommands.add_parser(
         "tailor",
-        help="use OpenAI to create validated resume and cover-letter artifacts",
+        help="use OpenRouter to create validated resume and cover-letter artifacts",
     )
     job_source = tailor.add_mutually_exclusive_group(required=True)
     job_source.add_argument("--jd", type=Path, help="UTF-8 job-description file")
     job_source.add_argument(
         "--jd-url",
-        help="public job-posting URL retrieved with OpenAI web search",
+        help="public job-posting URL retrieved with OpenRouter web search",
     )
     tailor.add_argument(
         "--context",
@@ -116,7 +116,7 @@ def _parser() -> argparse.ArgumentParser:
         "--usage-db",
         type=Path,
         help=(
-            "SQLite OpenAI usage ledger (defaults to --context-db, otherwise "
+            "SQLite OpenRouter usage ledger (defaults to --context-db, otherwise "
             "data/context.sqlite3)"
         ),
     )
@@ -127,15 +127,24 @@ def _parser() -> argparse.ArgumentParser:
     tailor.add_argument("--schema", type=Path, default=Path("schemas/profile.schema.json"))
     tailor.add_argument(
         "--model",
-        help="OpenAI model (defaults to OPENAI_MODEL or gpt-5.6-terra)",
+        help=(
+            "OpenRouter model ID (defaults to OPENROUTER_MODEL or "
+            "openai/gpt-5.4-mini)"
+        ),
     )
     tailor.add_argument(
         "--context-model",
-        help="context selector model (defaults to OPENAI_CONTEXT_MODEL or gpt-5.6-luna)",
+        help=(
+            "context selector model (defaults to OPENROUTER_CONTEXT_MODEL or "
+            "openai/gpt-5.4-nano)"
+        ),
     )
     tailor.add_argument(
         "--web-model",
-        help="URL retrieval model (defaults to OPENAI_WEB_MODEL or gpt-5.6-luna)",
+        help=(
+            "URL retrieval model (defaults to OPENROUTER_WEB_MODEL or "
+            "openai/gpt-5.4-nano)"
+        ),
     )
     tailor.add_argument(
         "--filename-prefix",
@@ -176,7 +185,7 @@ def _parser() -> argparse.ArgumentParser:
     tailor.add_argument(
         "--cover-letter-model",
         help=(
-            "cover-letter model (defaults to OPENAI_COVER_LETTER_MODEL, then --model)"
+            "cover-letter model (defaults to OPENROUTER_COVER_LETTER_MODEL, then --model)"
         ),
     )
     return parser
@@ -224,7 +233,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 0
 
         if args.command == "usage-list":
-            requests = OpenAIUsageStore(args.database).list_requests(
+            requests = OpenRouterUsageStore(args.database).list_requests(
                 limit=args.limit,
                 workflow_id=args.workflow_id,
             )
@@ -232,7 +241,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 0
 
         if args.command == "usage-summary":
-            summary = OpenAIUsageStore(args.database).summary(
+            summary = OpenRouterUsageStore(args.database).summary(
                 workflow_id=args.workflow_id,
             )
             print(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -248,23 +257,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 0
 
         if args.command == "tailor":
-            model = args.model or os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+            model = args.model or os.environ.get(
+                "OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL
+            )
             context_model = args.context_model or os.environ.get(
-                "OPENAI_CONTEXT_MODEL", DEFAULT_CONTEXT_SELECTION_MODEL
+                "OPENROUTER_CONTEXT_MODEL", DEFAULT_CONTEXT_SELECTION_MODEL
             )
             web_model = args.web_model or os.environ.get(
-                "OPENAI_WEB_MODEL", DEFAULT_WEB_SEARCH_MODEL
+                "OPENROUTER_WEB_MODEL", DEFAULT_WEB_SEARCH_MODEL
             )
             cover_letter_model = (
                 args.cover_letter_model
-                or os.environ.get("OPENAI_COVER_LETTER_MODEL")
+                or os.environ.get("OPENROUTER_COVER_LETTER_MODEL")
                 or model
             )
             context_database = args.context_db
             if args.context is not None and context_database is None:
                 context_database = Path("data/context.sqlite3")
             usage_database = args.usage_db or context_database or Path("data/context.sqlite3")
-            result = tailor_resume_with_openai(
+            result = tailor_resume_with_openrouter(
                 template=args.template,
                 data=args.data,
                 schema=args.schema,
@@ -288,9 +299,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 cover_letter_prefix=args.cover_letter_prefix,
                 cover_letter_model=cover_letter_model,
             )
-            print(f"OpenAI model: {result.model}")
-            print(f"OpenAI workflow ID: {result.workflow_id}")
-            print(f"OpenAI usage database: {result.usage_database}")
+            print(f"OpenRouter model: {result.model}")
+            print(f"OpenRouter workflow ID: {result.workflow_id}")
+            print(f"OpenRouter usage database: {result.usage_database}")
             if result.job_source_output is not None:
                 print(f"Web search model: {result.web_search_model}")
                 print(f"Job source: {result.job_source_output}")
@@ -325,7 +336,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print(f"Cover-letter DOCX: {result.cover_letter_docx_output}")
                 print(f"Cover-letter PDF: {result.cover_letter_pdf_output}")
             print(
-                "OpenAI requests: "
+                "OpenRouter requests: "
                 f"{result.usage_summary['requests']}; estimated cost: USD "
                 f"{result.usage_summary['estimated_cost_usd']:.8f}"
             )

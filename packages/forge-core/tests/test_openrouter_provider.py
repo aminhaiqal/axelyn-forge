@@ -5,7 +5,7 @@ from forge.context_selection import CONTEXT_SELECTION_SCHEMA
 from forge.errors import ProviderError
 from forge.job_source import WEB_JOB_DESCRIPTION_SCHEMA
 from forge.jsonio import load_json
-from forge.openai_provider import (
+from forge.openrouter_provider import (
     TAILORING_PLAN_SCHEMA,
     build_editable_targets,
     generate_tailoring_plan,
@@ -43,7 +43,7 @@ def valid_plan():
     }
 
 
-class OpenAIProviderTests(unittest.TestCase):
+class OpenRouterProviderTests(unittest.TestCase):
     def setUp(self):
         self.resume = load_json(DATA)
 
@@ -79,8 +79,18 @@ class OpenAIProviderTests(unittest.TestCase):
         self.assertEqual("resp_test", plan.response_id)
         call = client.responses.calls[0]
         self.assertEqual("gpt-5-mini-test", call["model"])
-        self.assertEqual("default", call["service_tier"])
+        self.assertNotIn("service_tier", call)
         self.assertFalse(call["store"])
+        self.assertEqual(
+            {
+                "provider": {
+                    "zdr": True,
+                    "data_collection": "deny",
+                    "require_parameters": True,
+                }
+            },
+            call["extra_body"],
+        )
         self.assertTrue(call["text"]["format"]["strict"])
         self.assertEqual(TAILORING_PLAN_SCHEMA, call["text"]["format"]["schema"])
         payload = json.loads(call["input"])

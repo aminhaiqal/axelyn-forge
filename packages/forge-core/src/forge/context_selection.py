@@ -1,4 +1,4 @@
-"""First-pass OpenAI selection of relevant, verbatim candidate-context chunks."""
+"""First-pass OpenRouter selection of relevant candidate-context chunks."""
 
 import copy
 import json
@@ -12,9 +12,14 @@ from jsonschema import Draft202012Validator
 
 from .errors import ProviderError
 from .keyword_alignment import JobKeyword, normalize_keyword
-from .usage_store import OpenAIUsageStore
+from .openrouter_client import (
+    DEFAULT_OPENROUTER_FAST_MODEL,
+    create_openrouter_client,
+    openrouter_request_options,
+)
+from .usage_store import OpenRouterUsageStore
 
-DEFAULT_CONTEXT_SELECTION_MODEL = "gpt-5.6-luna"
+DEFAULT_CONTEXT_SELECTION_MODEL = DEFAULT_OPENROUTER_FAST_MODEL
 MAX_SELECTED_CONTEXT_CHUNKS = 12
 MAX_EXTRACTED_JOB_KEYWORDS = 24
 MAX_JOB_KEYWORD_LENGTH = 100
@@ -144,7 +149,7 @@ class ContextSelection:
         return {
             "schemaVersion": "1.0.0",
             "provider": {
-                "name": "openai",
+                "name": "openrouter",
                 "model": self.model,
                 "responseId": self.response_id,
             },
@@ -254,17 +259,17 @@ def _validate_selection_shape(value: Any) -> Dict[str, Any]:
             f"$.{'.'.join(str(part) for part in error.absolute_path)}: {error.message}"
             for error in errors
         )
-        raise ProviderError(f"OpenAI returned an invalid context selection: {details}")
+        raise ProviderError(f"OpenRouter returned an invalid context selection: {details}")
     return value
 
 
-def select_context_with_openai(
+def select_context_with_openrouter(
     *,
     job_description: str,
     chunks: Sequence[ContextChunk],
     model: str = DEFAULT_CONTEXT_SELECTION_MODEL,
     client=None,
-    usage_store: Optional[OpenAIUsageStore] = None,
+    usage_store: Optional[OpenRouterUsageStore] = None,
     workflow_id: Optional[str] = None,
 ) -> ContextSelection:
     if not job_description.strip():
@@ -272,7 +277,7 @@ def select_context_with_openai(
     if not chunks:
         raise ProviderError("Candidate context contains no selectable evidence chunks")
     if not isinstance(model, str) or not model.strip():
-        raise ProviderError("OpenAI context-selection model must be a non-empty string")
+        raise ProviderError("OpenRouter context-selection model must be a non-empty string")
 
     request_payload = json.dumps(
         {
@@ -283,14 +288,7 @@ def select_context_with_openai(
     )
     response_schema = _selection_schema_for_chunks(chunks)
     if client is None:
-        try:
-            from openai import OpenAI
-
-            client = OpenAI()
-        except Exception as exc:
-            raise ProviderError(
-                "Could not initialize OpenAI. Set OPENAI_API_KEY and install the project dependencies."
-            ) from exc
+        client = create_openrouter_client()
 
     usage_request_id = None
     if usage_store is not None:
@@ -317,13 +315,13 @@ def select_context_with_openai(
                 "verbosity": "low",
             },
             max_output_tokens=4000,
-            service_tier="default",
             store=False,
+            extra_body=openrouter_request_options(),
         )
     except Exception as exc:
         if usage_store is not None and usage_request_id is not None:
             usage_store.fail_request(usage_request_id, exc)
-        raise ProviderError(f"OpenAI context-selection request failed: {exc}") from exc
+        raise ProviderError(f"OpenRouter context-selection request failed: {exc}") from exc
 
     if usage_store is not None and usage_request_id is not None:
         usage_store.complete_request(usage_request_id, response)
@@ -331,19 +329,23 @@ def select_context_with_openai(
     output_text = getattr(response, "output_text", "")
     if not output_text:
         status = getattr(response, "status", "unknown")
-        raise ProviderError(f"OpenAI returned no context selection (response status: {status})")
+        raise ProviderError(
+            f"OpenRouter returned no context selection (response status: {status})"
+        )
     try:
         raw_selection = json.loads(output_text)
     except json.JSONDecodeError as exc:
-        raise ProviderError(f"OpenAI returned invalid context-selection JSON: {exc.msg}") from exc
+        raise ProviderError(
+            f"OpenRouter returned invalid context-selection JSON: {exc.msg}"
+        ) from exc
     selection = _validate_selection_shape(raw_selection)
 
     raw_keywords = selection["jobKeywords"]
     if not raw_keywords:
-        raise ProviderError("OpenAI context selection did not extract any job keywords")
+        raise ProviderError("OpenRouter context selection did not extract any job keywords")
     if len(raw_keywords) > MAX_EXTRACTED_JOB_KEYWORDS:
         raise ProviderError(
-            f"OpenAI extracted {len(raw_keywords)} job keywords; maximum is "
+            f"OpenRouter extracted {len(raw_keywords)} job keywords; maximum is "
             f"{MAX_EXTRACTED_JOB_KEYWORDS}"
         )
     job_keywords = []
@@ -351,13 +353,15 @@ def select_context_with_openai(
     for item in raw_keywords:
         phrase = item["phrase"].strip()
         if not phrase:
-            raise ProviderError("OpenAI context selection returned an empty job keyword")
+            raise ProviderError("OpenRouter context selection returned an empty job keyword")
         if len(phrase) > MAX_JOB_KEYWORD_LENGTH:
-            raise ProviderError("OpenAI context selection returned an overly long job keyword")
+            raise ProviderError(
+                "OpenRouter context selection returned an overly long job keyword"
+            )
         normalized = normalize_keyword(phrase)
         if normalized in used_keywords:
             raise ProviderError(
-                f"OpenAI context selection contains duplicate job keyword '{phrase}'"
+                f"OpenRouter context selection contains duplicate job keyword '{phrase}'"
             )
         used_keywords.add(normalized)
         job_keywords.append(
@@ -370,25 +374,27 @@ def select_context_with_openai(
 
     selected_ids = selection["selectedChunkIds"]
     if not selected_ids:
-        raise ProviderError("OpenAI context selection did not select any evidence chunks")
+        raise ProviderError("OpenRouter context selection did not select any evidence chunks")
     if len(selected_ids) > MAX_SELECTED_CONTEXT_CHUNKS:
         raise ProviderError(
-            f"OpenAI selected {len(selected_ids)} context chunks; maximum is "
+            f"OpenRouter selected {len(selected_ids)} context chunks; maximum is "
             f"{MAX_SELECTED_CONTEXT_CHUNKS}"
         )
     if len(selected_ids) != len(set(selected_ids)):
-        raise ProviderError("OpenAI context selection contains duplicate chunk IDs")
+        raise ProviderError("OpenRouter context selection contains duplicate chunk IDs")
     by_id = {chunk.chunk_id: chunk for chunk in chunks}
     unknown = [chunk_id for chunk_id in selected_ids if chunk_id not in by_id]
     if unknown:
-        raise ProviderError("OpenAI selected unknown context chunk ID(s): " + ", ".join(unknown))
+        raise ProviderError(
+            "OpenRouter selected unknown context chunk ID(s): " + ", ".join(unknown)
+        )
 
     company = selection["company"]
     if isinstance(company, str):
         company = company.strip() or None
     job_title = selection["jobTitle"].strip()
     if not job_title:
-        raise ProviderError("OpenAI context selection returned an empty job title")
+        raise ProviderError("OpenRouter context selection returned an empty job title")
     return ContextSelection(
         company=company,
         job_title=job_title,

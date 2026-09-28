@@ -9,7 +9,7 @@ from forge.docx import inspect_docx, validate_docx_archive
 from forge.context_store import sync_context_database
 from forge.errors import TailoringError
 from forge.jsonio import load_json
-from forge.tailoring import safe_filename_component, tailor_resume_with_openai
+from forge.tailoring import safe_filename_component, tailor_resume_with_openrouter
 from forge.validation import validate_resume
 
 from .fakes import FakeOpenAIClient, FakeOpenAIResponse
@@ -25,7 +25,7 @@ from .helpers import (
 )
 from .test_cover_letter import valid_cover_letter_draft
 from .test_job_source import found_job, web_output, web_usage
-from .test_openai_provider import valid_plan
+from .test_openrouter_provider import valid_plan
 
 
 VALID_PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\nstartxref\n0\n%%EOF\n"
@@ -38,7 +38,7 @@ def fake_pdf_converter(source, output):
     return destination
 
 
-class OpenAITailoringWorkflowTests(unittest.TestCase):
+class OpenRouterTailoringWorkflowTests(unittest.TestCase):
     def test_safe_filename_component(self):
         self.assertEqual(
             "Full_Stack_Software_Engineer",
@@ -46,13 +46,13 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
         )
         self.assertEqual("AI_Platform", safe_filename_component("AI / Platform"))
 
-    def test_mocked_openai_workflow_emits_docx_and_pdf_artifacts(self):
+    def test_mocked_openrouter_workflow_emits_docx_and_pdf_artifacts(self):
         client = FakeOpenAIClient(FakeOpenAIResponse(valid_plan()))
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             jd = root / "jd.txt"
             jd.write_text("Texas Instruments full-stack role", encoding="utf-8")
-            result = tailor_resume_with_openai(
+            result = tailor_resume_with_openrouter(
                 template=TEMPLATE,
                 data=DATA,
                 schema=SCHEMA,
@@ -81,7 +81,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             tailored = load_json(result.data_output)
             validate_resume(tailored, load_json(SCHEMA))
             operations = load_json(result.operations_output)
-            self.assertEqual("openai", operations["provider"]["name"])
+            self.assertEqual("openrouter", operations["provider"]["name"])
             self.assertEqual("resp_test", operations["provider"]["responseId"])
             self.assertEqual(result.workflow_id, operations["provider"]["workflowId"])
             self.assertEqual(
@@ -110,7 +110,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             jd = root / "jd.txt"
             jd.write_text("Texas Instruments full-stack role", encoding="utf-8")
             cover_template_before = COVER_TEMPLATE.read_bytes()
-            result = tailor_resume_with_openai(
+            result = tailor_resume_with_openrouter(
                 template=TEMPLATE,
                 data=DATA,
                 schema=SCHEMA,
@@ -183,13 +183,13 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             )
             self.assertNotIn("Smart Manufacturing", core_properties)
 
-    def test_disabling_cover_letter_skips_its_openai_request(self):
+    def test_disabling_cover_letter_skips_its_openrouter_request(self):
         client = FakeOpenAIClient(FakeOpenAIResponse(valid_plan()))
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             jd = root / "jd.txt"
             jd.write_text("Full-stack role", encoding="utf-8")
-            result = tailor_resume_with_openai(
+            result = tailor_resume_with_openrouter(
                 template=TEMPLATE,
                 data=DATA,
                 schema=SCHEMA,
@@ -206,7 +206,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             self.assertIsNone(result.cover_letter_docx_output)
             self.assertIsNone(result.cover_letter_pdf_output)
 
-    def test_missing_cover_letter_asset_fails_before_openai(self):
+    def test_missing_cover_letter_asset_fails_before_openrouter(self):
         client = FakeOpenAIClient(FakeOpenAIResponse(valid_plan()))
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -214,7 +214,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             jd.write_text("Full-stack role", encoding="utf-8")
 
             with self.assertRaisesRegex(TailoringError, "template does not exist"):
-                tailor_resume_with_openai(
+                tailor_resume_with_openrouter(
                     template=TEMPLATE,
                     data=DATA,
                     schema=SCHEMA,
@@ -262,7 +262,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
                 FakeOpenAIResponse(
                     selection_response,
                     response_id="resp_selection",
-                    model="gpt-5.6-luna",
+                    model="openai/gpt-5.4-nano",
                     usage={
                         "input_tokens": 1000,
                         "input_tokens_details": {
@@ -277,7 +277,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
                 FakeOpenAIResponse(
                     valid_plan(),
                     response_id="resp_tailoring",
-                    model="gpt-5.6-terra",
+                    model="openai/gpt-5.4-mini",
                     usage={
                         "input_tokens": 2000,
                         "input_tokens_details": {
@@ -306,7 +306,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            result = tailor_resume_with_openai(
+            result = tailor_resume_with_openrouter(
                 template=TEMPLATE,
                 data=DATA,
                 schema=SCHEMA,
@@ -374,7 +374,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             self.assertEqual(2, result.usage_summary["requests"])
             self.assertEqual(2, result.usage_summary["priced_requests"])
             self.assertEqual(0, result.usage_summary["failed"])
-            self.assertAlmostEqual(0.016779, result.usage_summary["estimated_cost_usd"])
+            self.assertAlmostEqual(0.006789, result.usage_summary["estimated_cost_usd"])
 
     def test_existing_context_database_can_drive_selection_without_markdown_input(self):
         selection_response = {
@@ -410,7 +410,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             jd = root / "jd.txt"
             jd.write_text("Production software role", encoding="utf-8")
 
-            result = tailor_resume_with_openai(
+            result = tailor_resume_with_openrouter(
                 template=TEMPLATE,
                 data=DATA,
                 schema=SCHEMA,
@@ -454,20 +454,20 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
                 FakeOpenAIResponse(
                     found_job(),
                     response_id="resp_web",
-                    model="gpt-5.6-luna",
+                    model="openai/gpt-5.4-nano",
                     usage=web_usage(),
                     output=web_output(),
                 ),
                 FakeOpenAIResponse(
                     selection_response,
                     response_id="resp_selection",
-                    model="gpt-5.6-luna",
+                    model="openai/gpt-5.4-nano",
                     usage=web_usage(),
                 ),
                 FakeOpenAIResponse(
                     valid_plan(),
                     response_id="resp_tailoring",
-                    model="gpt-5.6-terra",
+                    model="openai/gpt-5.4-mini",
                     usage=web_usage(),
                 ),
             ]
@@ -482,7 +482,7 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
             )
             database = root / "forge.sqlite3"
 
-            result = tailor_resume_with_openai(
+            result = tailor_resume_with_openrouter(
                 template=TEMPLATE,
                 data=DATA,
                 schema=SCHEMA,
@@ -491,14 +491,17 @@ class OpenAITailoringWorkflowTests(unittest.TestCase):
                 candidate_context=context,
                 context_database=database,
                 output_dir=root / "output",
-                model="gpt-5.6-terra",
-                context_selection_model="gpt-5.6-luna",
-                web_search_model="gpt-5.6-luna",
+                model="openai/gpt-5.4-mini",
+                context_selection_model="openai/gpt-5.4-nano",
+                web_search_model="openai/gpt-5.4-nano",
                 client=client,
             )
 
             self.assertEqual(3, len(client.responses.calls))
-            self.assertEqual("web_search", client.responses.calls[0]["tools"][0]["type"])
+            self.assertEqual(
+                "openrouter:web_search",
+                client.responses.calls[0]["tools"][0]["type"],
+            )
             selector_payload = json.loads(client.responses.calls[1]["input"])
             self.assertIn("Source URL: https://careers.ti.com/job/123", selector_payload["jobDescription"])
             main_payload = json.loads(client.responses.calls[2]["input"])

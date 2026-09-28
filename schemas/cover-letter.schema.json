@@ -207,7 +207,7 @@
       "properties": {
         "provider": {
           "type": "string",
-          "const": "openai"
+          "const": "openrouter"
         },
         "model": {
           "type": "string",

@@ -6,7 +6,7 @@ from jsonschema import Draft202012Validator
 from forge.context_selection import (
     CONTEXT_SELECTION_SCHEMA,
     parse_markdown_context,
-    select_context_with_openai,
+    select_context_with_openrouter,
 )
 from forge.errors import ProviderError
 
@@ -56,7 +56,7 @@ class ContextSelectionTests(unittest.TestCase):
         selected_ids = [self.chunks[1].chunk_id, self.chunks[0].chunk_id]
         client = FakeOpenAIClient(FakeOpenAIResponse(selection_plan(selected_ids)))
 
-        selection = select_context_with_openai(
+        selection = select_context_with_openrouter(
             job_description="Backend-heavy factory platform role",
             chunks=self.chunks,
             model="gpt-context-test",
@@ -71,8 +71,10 @@ class ContextSelectionTests(unittest.TestCase):
         )
         call = client.responses.calls[0]
         self.assertEqual("gpt-context-test", call["model"])
-        self.assertEqual("default", call["service_tier"])
+        self.assertNotIn("service_tier", call)
         self.assertFalse(call["store"])
+        self.assertTrue(call["extra_body"]["provider"]["zdr"])
+        self.assertEqual("deny", call["extra_body"]["provider"]["data_collection"])
         response_schema = call["text"]["format"]["schema"]
         self.assertEqual(
             [chunk.chunk_id for chunk in self.chunks],
@@ -91,7 +93,7 @@ class ContextSelectionTests(unittest.TestCase):
         client = FakeOpenAIClient(
             FakeOpenAIResponse(selection_plan([self.chunks[0].chunk_id]))
         )
-        select_context_with_openai(
+        select_context_with_openrouter(
             job_description="JD",
             chunks=self.chunks,
             client=client,
@@ -130,7 +132,7 @@ class ContextSelectionTests(unittest.TestCase):
         client = FakeOpenAIClient(FakeOpenAIResponse(plan))
 
         with self.assertRaisesRegex(ProviderError, "duplicate job keyword"):
-            select_context_with_openai(
+            select_context_with_openrouter(
                 job_description="JD",
                 chunks=self.chunks,
                 client=client,
@@ -139,7 +141,7 @@ class ContextSelectionTests(unittest.TestCase):
     def test_selector_rejects_unknown_or_duplicate_ids(self):
         unknown = FakeOpenAIClient(FakeOpenAIResponse(selection_plan(["invented-id"])))
         with self.assertRaisesRegex(ProviderError, "unknown context chunk"):
-            select_context_with_openai(
+            select_context_with_openrouter(
                 job_description="JD",
                 chunks=self.chunks,
                 client=unknown,
@@ -150,7 +152,7 @@ class ContextSelectionTests(unittest.TestCase):
             FakeOpenAIResponse(selection_plan([duplicate_id, duplicate_id]))
         )
         with self.assertRaisesRegex(ProviderError, "duplicate chunk IDs"):
-            select_context_with_openai(
+            select_context_with_openrouter(
                 job_description="JD",
                 chunks=self.chunks,
                 client=duplicate,

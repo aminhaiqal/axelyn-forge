@@ -162,7 +162,7 @@ Render with a private Word template:
   --output output/resume.docx
 ```
 
-Run the full OpenAI-assisted workflow:
+Run the full OpenRouter-assisted workflow:
 
 ```bash
 .venv/bin/forge tailor \
@@ -174,7 +174,9 @@ Run the full OpenAI-assisted workflow:
   --output-dir output
 ```
 
-Set `OPENAI_API_KEY` before running AI-assisted commands. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. OpenAI requests use `store=False`, and usage metadata is written to SQLite without prompt content or API keys.
+Set `OPENROUTER_API_KEY` before running AI-assisted commands. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. OpenRouter requests use `store=False`, require zero-data-retention endpoints, deny provider data collection, and write only usage metadata to SQLite without prompt content or API keys. Model overrides use OpenRouter model IDs such as `openai/gpt-5.4-mini`.
+
+Forge uses the OpenAI-compatible Python client as its HTTP transport, configured with OpenRouter's base URL and API key. It does not send these workflows to the OpenAI API endpoint.
 
 ## Verification
 

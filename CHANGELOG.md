@@ -25,6 +25,7 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ### Changed
 
+- Replaced direct OpenAI API configuration with OpenRouter for tailoring, context selection, cover letters, and job-page retrieval, including private routing controls and OpenRouter model IDs.
 - Reorganized the resume builder into Identity, Educational background, Work experience, Projects, Skills, and a final Custom sections stage, while carrying legacy language and additional fields into editable custom sections.
 - Removed the dark standard-template promotion panel from the resume library and made the source workspace full width.
 - Replaced authenticated workspace headers with a responsive white sidebar that expands on desktop, collapses to a tablet rail, and becomes a compact mobile navigation bar.

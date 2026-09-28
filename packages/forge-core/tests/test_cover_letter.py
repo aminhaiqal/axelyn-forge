@@ -15,7 +15,7 @@ from forge.cover_letter import (
 from forge.docx import inspect_docx, render_docx, validate_docx_archive
 from forge.errors import ProviderError
 from forge.jsonio import load_json
-from forge.usage_store import OpenAIUsageStore
+from forge.usage_store import OpenRouterUsageStore
 from forge.validation import validate_document
 
 from .fakes import FakeOpenAIClient, FakeOpenAIResponse
@@ -141,7 +141,7 @@ class CoverLetterProviderTests(unittest.TestCase):
             FakeOpenAIResponse(
                 valid_cover_letter_draft(),
                 response_id="resp_cover",
-                model="gpt-5.6-terra",
+                model="openai/gpt-5.4-mini",
                 usage={
                     "input_tokens": 1000,
                     "input_tokens_details": {"cached_tokens": 0},
@@ -152,7 +152,7 @@ class CoverLetterProviderTests(unittest.TestCase):
             )
         )
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = OpenAIUsageStore(Path(temp_dir) / "usage.sqlite3")
+            store = OpenRouterUsageStore(Path(temp_dir) / "usage.sqlite3")
             store.initialize()
             draft = generate_cover_letter_draft(
                 tailored_resume=load_json(DATA),
@@ -169,7 +169,7 @@ class CoverLetterProviderTests(unittest.TestCase):
                     "project-aria",
                     "context-1",
                 ),
-                model="gpt-5.6-terra",
+                model="openai/gpt-5.4-mini",
                 client=client,
                 usage_store=store,
                 workflow_id="workflow-cover",

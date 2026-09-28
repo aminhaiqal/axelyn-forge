@@ -1,4 +1,4 @@
-"""SQLite ledger for OpenAI request usage and public-price cost estimates."""
+"""SQLite ledger for OpenRouter request usage and public-price cost estimates."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from .errors import UsageStoreError
 
 PathLike = Union[str, Path]
 LLM_USAGE_SCHEMA_VERSION = "2"
-OPENAI_PRICING_EFFECTIVE_FROM = "2026-07-30"
-OPENAI_PRICING_SOURCE = "https://developers.openai.com/api/docs/models/compare"
-OPENAI_TOOL_PRICING_EFFECTIVE_FROM = "2026-08-19"
-OPENAI_TOOL_PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing#built-in-tools"
-OPENAI_WEB_SEARCH_USD_PER_1000 = 10.0
+OPENROUTER_PRICING_EFFECTIVE_FROM = "2026-09-28"
+OPENROUTER_PRICING_SOURCE = "https://openrouter.ai/api/v1/models"
+OPENROUTER_TOOL_PRICING_EFFECTIVE_FROM = "2026-09-28"
+OPENROUTER_TOOL_PRICING_SOURCE = "https://openrouter.ai/tool/web-search"
+OPENROUTER_WEB_SEARCH_USD_PER_1000 = 10.0
 LONG_CONTEXT_THRESHOLD = 272_000
 
 SCHEMA_SQL = """
@@ -113,15 +113,13 @@ ON llm_requests(request_kind, started_at);
 """
 
 
-# Standard-service public list prices per 1M tokens. Long-context rates apply
-# to the full request when input_tokens exceeds 272K.
-_OPENAI_PRICING: Tuple[Tuple[Any, ...], ...] = (
-    ("gpt-5.6-sol", "short", 5.0, 0.5, 6.25, 30.0),
-    ("gpt-5.6-sol", "long", 10.0, 1.0, 12.5, 45.0),
-    ("gpt-5.6-terra", "short", 2.0, 0.2, 2.5, 12.0),
-    ("gpt-5.6-terra", "long", 4.0, 0.4, 5.0, 18.0),
-    ("gpt-5.6-luna", "short", 0.2, 0.02, 0.25, 1.2),
-    ("gpt-5.6-luna", "long", 0.4, 0.04, 0.5, 1.8),
+# OpenRouter public list prices per 1M tokens. OpenRouter currently lists one
+# rate for each model, so both context bands intentionally use the same price.
+_OPENROUTER_PRICING: Tuple[Tuple[Any, ...], ...] = (
+    ("openai/gpt-5.4-mini", "short", 0.75, 0.075, 0.75, 4.5),
+    ("openai/gpt-5.4-mini", "long", 0.75, 0.075, 0.75, 4.5),
+    ("openai/gpt-5.4-nano", "short", 0.2, 0.02, 0.2, 1.25),
+    ("openai/gpt-5.4-nano", "long", 0.2, 0.02, 0.2, 1.25),
 )
 
 
@@ -148,9 +146,7 @@ def _optional_token_count(value: Any) -> Optional[int]:
 def _canonical_pricing_model(model: Optional[str]) -> Optional[str]:
     if not model:
         return None
-    if model == "gpt-5.6":
-        return "gpt-5.6-sol"
-    for candidate in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):
+    for candidate in ("openai/gpt-5.4-mini", "openai/gpt-5.4-nano"):
         if model == candidate or model.startswith(f"{candidate}-"):
             return candidate
     return None
@@ -162,6 +158,13 @@ def _cost(tokens: int, rate: float) -> float:
 
 
 def _count_web_search_calls(response: Any) -> int:
+    usage = _field(response, "usage", {})
+    server_tool_use = _field(usage, "server_tool_use", {})
+    reported = _optional_token_count(
+        _field(server_tool_use, "web_search_requests")
+    )
+    if reported is not None:
+        return reported
     count = 0
     for item in _field(response, "output", []) or []:
         if _field(item, "type") != "web_search_call":
@@ -172,8 +175,8 @@ def _count_web_search_calls(response: Any) -> int:
     return count
 
 
-class OpenAIUsageStore:
-    """Persist one ledger row for each logical OpenAI Responses API call."""
+class OpenRouterUsageStore:
+    """Persist one ledger row for each logical OpenRouter Responses API call."""
 
     def __init__(self, database: PathLike):
         self.database = Path(database)
@@ -205,7 +208,7 @@ class OpenAIUsageStore:
             "SELECT value FROM llm_usage_meta WHERE key = ?", ("schema_version",)
         ).fetchone()
         if row is not None and row["value"] == "1":
-            OpenAIUsageStore._migrate_v1_to_v2(connection)
+            OpenRouterUsageStore._migrate_v1_to_v2(connection)
             row = connection.execute(
                 "SELECT value FROM llm_usage_meta WHERE key = ?", ("schema_version",)
             ).fetchone()
@@ -228,18 +231,18 @@ class OpenAIUsageStore:
                 cache_write_usd_per_million,
                 output_usd_per_million,
                 source_url
-            ) VALUES ('openai', ?, 'default', ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES ('openrouter', ?, 'default', ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
                     model,
                     context_band,
-                    OPENAI_PRICING_EFFECTIVE_FROM,
+                    OPENROUTER_PRICING_EFFECTIVE_FROM,
                     input_rate,
                     cached_rate,
                     cache_write_rate,
                     output_rate,
-                    OPENAI_PRICING_SOURCE,
+                    OPENROUTER_PRICING_SOURCE,
                 )
                 for (
                     model,
@@ -248,7 +251,7 @@ class OpenAIUsageStore:
                     cached_rate,
                     cache_write_rate,
                     output_rate,
-                ) in _OPENAI_PRICING
+                ) in _OPENROUTER_PRICING
             ],
         )
         connection.execute(
@@ -259,12 +262,12 @@ class OpenAIUsageStore:
                 effective_from,
                 usd_per_1000_calls,
                 source_url
-            ) VALUES ('openai', 'web_search', ?, ?, ?)
+            ) VALUES ('openrouter', 'web_search', ?, ?, ?)
             """,
             (
-                OPENAI_TOOL_PRICING_EFFECTIVE_FROM,
-                OPENAI_WEB_SEARCH_USD_PER_1000,
-                OPENAI_TOOL_PRICING_SOURCE,
+                OPENROUTER_TOOL_PRICING_EFFECTIVE_FROM,
+                OPENROUTER_WEB_SEARCH_USD_PER_1000,
+                OPENROUTER_TOOL_PRICING_SOURCE,
             ),
         )
 
@@ -340,7 +343,7 @@ class OpenAIUsageStore:
                         status,
                         started_at,
                         cost_status
-                    ) VALUES (?, ?, 'openai', ?, 'responses', ?, ?, 'started', ?, 'pending')
+                    ) VALUES (?, ?, 'openrouter', ?, 'responses', ?, ?, 'started', ?, 'pending')
                     """,
                     (
                         request_id,
@@ -383,7 +386,7 @@ class OpenAIUsageStore:
             """
             SELECT *
             FROM llm_pricing
-            WHERE provider = 'openai'
+            WHERE provider = 'openrouter'
               AND model = ?
               AND service_tier = ?
               AND context_band = ?
@@ -402,7 +405,7 @@ class OpenAIUsageStore:
             """
             SELECT *
             FROM llm_tool_pricing
-            WHERE provider = 'openai'
+            WHERE provider = 'openrouter'
               AND tool = ?
               AND effective_from <= ?
             ORDER BY effective_from DESC

@@ -4,8 +4,8 @@ from pathlib import Path
 
 from forge.errors import ProviderError
 from forge.jsonio import load_json
-from forge.openai_provider import generate_tailoring_plan
-from forge.usage_store import OpenAIUsageStore
+from forge.openrouter_provider import generate_tailoring_plan
+from forge.usage_store import OpenRouterUsageStore
 
 from .fakes import FakeOpenAIClient, FakeOpenAIResponse
 from .helpers import DATA
@@ -24,10 +24,10 @@ def response_usage(*, input_tokens=1000, cached_tokens=200, cache_write_tokens=3
     }
 
 
-class OpenAIUsageStoreTests(unittest.TestCase):
+class OpenRouterUsageStoreTests(unittest.TestCase):
     def test_empty_initialized_ledger_has_zero_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = OpenAIUsageStore(Path(temp_dir) / "forge.sqlite3")
+            store = OpenRouterUsageStore(Path(temp_dir) / "forge.sqlite3")
             store.initialize()
 
             summary = store.summary()
@@ -40,15 +40,15 @@ class OpenAIUsageStoreTests(unittest.TestCase):
     def test_records_token_breakdown_rate_snapshot_and_component_costs(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             database = Path(temp_dir) / "forge.sqlite3"
-            store = OpenAIUsageStore(database)
+            store = OpenRouterUsageStore(database)
             request_id = store.start_request(
                 workflow_id="workflow-1",
                 request_kind="main_tailoring",
-                requested_model="gpt-5.6-terra",
+                requested_model="openai/gpt-5.4-mini",
             )
             response = FakeOpenAIResponse(
                 {},
-                model="gpt-5.6-terra",
+                model="openai/gpt-5.4-mini",
                 usage=response_usage(),
             )
 
@@ -62,23 +62,24 @@ class OpenAIUsageStoreTests(unittest.TestCase):
             self.assertEqual(300, row["cache_write_tokens"])
             self.assertEqual(100, row["reasoning_tokens"])
             self.assertEqual("short", row["pricing_context_band"])
-            self.assertEqual(2.0, row["input_usd_per_million"])
-            self.assertEqual(0.2, row["cached_input_usd_per_million"])
-            self.assertEqual(2.5, row["cache_write_usd_per_million"])
-            self.assertEqual(12.0, row["output_usd_per_million"])
-            self.assertAlmostEqual(0.00779, row["estimated_cost_usd"])
+            self.assertEqual("openrouter", row["provider"])
+            self.assertEqual(0.75, row["input_usd_per_million"])
+            self.assertEqual(0.075, row["cached_input_usd_per_million"])
+            self.assertEqual(0.75, row["cache_write_usd_per_million"])
+            self.assertEqual(4.5, row["output_usd_per_million"])
+            self.assertAlmostEqual(0.002865, row["estimated_cost_usd"])
 
     def test_applies_long_context_rates_to_the_full_request(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = OpenAIUsageStore(Path(temp_dir) / "forge.sqlite3")
+            store = OpenRouterUsageStore(Path(temp_dir) / "forge.sqlite3")
             request_id = store.start_request(
                 workflow_id="workflow-long",
                 request_kind="context_selection",
-                requested_model="gpt-5.6-luna",
+                requested_model="openai/gpt-5.4-nano",
             )
             response = FakeOpenAIResponse(
                 {},
-                model="gpt-5.6-luna",
+                model="openai/gpt-5.4-nano",
                 usage=response_usage(
                     input_tokens=272_001,
                     cached_tokens=0,
@@ -89,20 +90,20 @@ class OpenAIUsageStoreTests(unittest.TestCase):
 
             row = store.list_requests(workflow_id="workflow-long")[0]
             self.assertEqual("long", row["pricing_context_band"])
-            self.assertEqual(0.4, row["input_usd_per_million"])
-            self.assertEqual(1.8, row["output_usd_per_million"])
+            self.assertEqual(0.2, row["input_usd_per_million"])
+            self.assertEqual(1.25, row["output_usd_per_million"])
 
     def test_failed_provider_call_is_retained_with_unknown_cost(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             database = Path(temp_dir) / "forge.sqlite3"
-            store = OpenAIUsageStore(database)
+            store = OpenRouterUsageStore(database)
             client = FakeOpenAIClient(RuntimeError("temporary provider failure"))
 
             with self.assertRaisesRegex(ProviderError, "temporary provider failure"):
                 generate_tailoring_plan(
                     resume=load_json(DATA),
                     job_description="JD",
-                    model="gpt-5.6-terra",
+                    model="openai/gpt-5.4-mini",
                     client=client,
                     usage_store=store,
                     workflow_id="workflow-failed",
@@ -116,7 +117,7 @@ class OpenAIUsageStoreTests(unittest.TestCase):
 
     def test_unknown_model_keeps_usage_without_guessing_cost(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = OpenAIUsageStore(Path(temp_dir) / "forge.sqlite3")
+            store = OpenRouterUsageStore(Path(temp_dir) / "forge.sqlite3")
             request_id = store.start_request(
                 workflow_id="workflow-custom",
                 request_kind="main_tailoring",

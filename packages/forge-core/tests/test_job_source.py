@@ -6,9 +6,9 @@ from forge.errors import ProviderError
 from forge.job_source import (
     WEB_JOB_DESCRIPTION_SCHEMA,
     normalize_job_url,
-    retrieve_job_description_with_openai,
+    retrieve_job_description_with_openrouter,
 )
-from forge.usage_store import OpenAIUsageStore
+from forge.usage_store import OpenRouterUsageStore
 
 from .fakes import FakeOpenAIClient, FakeOpenAIResponse
 
@@ -107,16 +107,16 @@ class WebJobDescriptionTests(unittest.TestCase):
         response = FakeOpenAIResponse(
             found_job(),
             response_id="resp_web",
-            model="gpt-5.6-luna",
+            model="openai/gpt-5.4-nano",
             usage=web_usage(),
             output=web_output(),
         )
         client = FakeOpenAIClient(response)
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = OpenAIUsageStore(Path(temp_dir) / "forge.sqlite3")
-            job = retrieve_job_description_with_openai(
+            store = OpenRouterUsageStore(Path(temp_dir) / "forge.sqlite3")
+            job = retrieve_job_description_with_openrouter(
                 url="https://careers.ti.com/job/123#description",
-                model="gpt-5.6-luna",
+                model="openai/gpt-5.4-nano",
                 client=client,
                 usage_store=store,
                 workflow_id="workflow-web",
@@ -131,24 +131,28 @@ class WebJobDescriptionTests(unittest.TestCase):
 
             call = client.responses.calls[0]
             self.assertEqual("required", call["tool_choice"])
-            self.assertEqual("web_search", call["tools"][0]["type"])
+            self.assertEqual("openrouter:web_search", call["tools"][0]["type"])
             self.assertEqual(
                 ["careers.ti.com"],
-                call["tools"][0]["filters"]["allowed_domains"],
+                call["tools"][0]["parameters"]["allowed_domains"],
             )
-            self.assertEqual("high", call["tools"][0]["search_context_size"])
+            self.assertEqual(
+                "high", call["tools"][0]["parameters"]["search_context_size"]
+            )
+            self.assertEqual(10, call["tools"][0]["parameters"]["max_total_results"])
             self.assertEqual(WEB_JOB_DESCRIPTION_SCHEMA, call["text"]["format"]["schema"])
-            self.assertEqual(["web_search_call.action.sources"], call["include"])
-            self.assertEqual("default", call["service_tier"])
+            self.assertNotIn("include", call)
+            self.assertNotIn("service_tier", call)
             self.assertFalse(call["store"])
+            self.assertTrue(call["extra_body"]["provider"]["zdr"])
 
             row = store.list_requests(workflow_id="workflow-web")[0]
             self.assertEqual("job_description_web_search", row["request_kind"])
             self.assertEqual(1, row["web_search_calls"])
             self.assertEqual(10.0, row["web_search_usd_per_1000"])
             self.assertAlmostEqual(0.01, row["web_search_cost_usd"])
-            self.assertAlmostEqual(0.000779, row["token_cost_usd"])
-            self.assertAlmostEqual(0.010779, row["estimated_cost_usd"])
+            self.assertAlmostEqual(0.000789, row["token_cost_usd"])
+            self.assertAlmostEqual(0.010789, row["estimated_cost_usd"])
 
     def test_rejects_unavailable_page_or_response_without_web_search(self):
         unavailable = dict(found_job())
@@ -161,7 +165,7 @@ class WebJobDescriptionTests(unittest.TestCase):
             }
         )
         with self.assertRaisesRegex(ProviderError, "posting has expired"):
-            retrieve_job_description_with_openai(
+            retrieve_job_description_with_openrouter(
                 url="https://careers.ti.com/job/expired",
                 client=FakeOpenAIClient(
                     FakeOpenAIResponse(unavailable, output=web_output())
@@ -169,7 +173,7 @@ class WebJobDescriptionTests(unittest.TestCase):
             )
 
         with self.assertRaisesRegex(ProviderError, "without using web search"):
-            retrieve_job_description_with_openai(
+            retrieve_job_description_with_openrouter(
                 url="https://careers.ti.com/job/123",
                 client=FakeOpenAIClient(FakeOpenAIResponse(found_job())),
             )

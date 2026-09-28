@@ -1,4 +1,4 @@
-"""OpenAI-backed JD analysis that emits semantic resume operations only."""
+"""OpenRouter-backed JD analysis that emits semantic resume operations only."""
 
 import json
 import uuid
@@ -8,10 +8,13 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 from jsonschema import Draft202012Validator
 
 from .errors import ProviderError
-from .usage_store import OpenAIUsageStore
+from .openrouter_client import (
+    DEFAULT_OPENROUTER_MODEL,
+    create_openrouter_client,
+    openrouter_request_options,
+)
+from .usage_store import OpenRouterUsageStore
 from .validation import build_stable_id_index
-
-DEFAULT_OPENAI_MODEL = "gpt-5.6-terra"
 
 TAILORING_PLAN_SCHEMA: Dict[str, Any] = {
     "type": "object",
@@ -63,7 +66,7 @@ Return a concise list of material gaps. Do not include generic weaknesses or adv
 
 
 @dataclass(frozen=True)
-class OpenAITailoringPlan:
+class OpenRouterTailoringPlan:
     company: Optional[str]
     job_title: str
     gaps: Tuple[str, ...]
@@ -75,7 +78,7 @@ class OpenAITailoringPlan:
         return {
             "schemaVersion": "1.0.0",
             "provider": {
-                "name": "openai",
+                "name": "openrouter",
                 "model": self.model,
                 "responseId": self.response_id,
             },
@@ -134,9 +137,9 @@ def _validate_plan_shape(plan: Any) -> Dict[str, Any]:
             f"$.{'.'.join(str(part) for part in error.absolute_path)}: {error.message}"
             for error in errors
         )
-        raise ProviderError(f"OpenAI returned an invalid tailoring plan: {details}")
+        raise ProviderError(f"OpenRouter returned an invalid tailoring plan: {details}")
     if not plan["operations"]:
-        raise ProviderError("OpenAI returned a tailoring plan with no operations")
+        raise ProviderError("OpenRouter returned a tailoring plan with no operations")
     return plan
 
 
@@ -150,23 +153,27 @@ def _validate_operation_scope(plan: Mapping[str, Any], editable_targets: List[Di
         if key not in allowed:
             field = "" if operation["field"] is None else f".{operation['field']}"
             raise ProviderError(
-                f"OpenAI plan operation {index + 1} targets protected or unknown field "
+                f"OpenRouter plan operation {index + 1} targets protected or unknown field "
                 f"'{operation['target']}{field}'"
             )
         if key in used:
             raise ProviderError(
-                f"OpenAI plan contains duplicate operations for '{operation['target']}'"
+                f"OpenRouter plan contains duplicate operations for '{operation['target']}'"
             )
         used.add(key)
 
         current = allowed[key]
         value = operation["value"]
         if isinstance(current, str) and not isinstance(value, str):
-            raise ProviderError(f"OpenAI plan operation {index + 1} must contain a text value")
+            raise ProviderError(
+                f"OpenRouter plan operation {index + 1} must contain a text value"
+            )
         if isinstance(current, list) and not (
             isinstance(value, list) and all(isinstance(item, str) for item in value)
         ):
-            raise ProviderError(f"OpenAI plan operation {index + 1} must contain a string array")
+            raise ProviderError(
+                f"OpenRouter plan operation {index + 1} must contain a string array"
+            )
 
 
 def generate_tailoring_plan(
@@ -176,16 +183,16 @@ def generate_tailoring_plan(
     candidate_context: str = "",
     context_selection: Optional[Mapping[str, Any]] = None,
     keyword_alignment: Optional[Mapping[str, Any]] = None,
-    model: str = DEFAULT_OPENAI_MODEL,
+    model: str = DEFAULT_OPENROUTER_MODEL,
     client=None,
-    usage_store: Optional[OpenAIUsageStore] = None,
+    usage_store: Optional[OpenRouterUsageStore] = None,
     workflow_id: Optional[str] = None,
-) -> OpenAITailoringPlan:
-    """Ask OpenAI for a strict, auditable semantic tailoring plan."""
+) -> OpenRouterTailoringPlan:
+    """Ask OpenRouter for a strict, auditable semantic tailoring plan."""
     if not job_description.strip():
         raise ProviderError("Job description is empty")
     if not isinstance(model, str) or not model.strip():
-        raise ProviderError("OpenAI model must be a non-empty string")
+        raise ProviderError("OpenRouter model must be a non-empty string")
 
     editable_targets = build_editable_targets(resume)
     request_payload = json.dumps(
@@ -201,14 +208,7 @@ def generate_tailoring_plan(
     )
 
     if client is None:
-        try:
-            from openai import OpenAI
-
-            client = OpenAI()
-        except Exception as exc:
-            raise ProviderError(
-                "Could not initialize OpenAI. Set OPENAI_API_KEY and install the project dependencies."
-            ) from exc
+        client = create_openrouter_client()
 
     usage_request_id = None
     if usage_store is not None:
@@ -235,13 +235,13 @@ def generate_tailoring_plan(
                 "verbosity": "low",
             },
             max_output_tokens=10000,
-            service_tier="default",
             store=False,
+            extra_body=openrouter_request_options(),
         )
     except Exception as exc:
         if usage_store is not None and usage_request_id is not None:
             usage_store.fail_request(usage_request_id, exc)
-        raise ProviderError(f"OpenAI tailoring request failed: {exc}") from exc
+        raise ProviderError(f"OpenRouter tailoring request failed: {exc}") from exc
 
     if usage_store is not None and usage_request_id is not None:
         usage_store.complete_request(usage_request_id, response)
@@ -249,22 +249,24 @@ def generate_tailoring_plan(
     output_text = getattr(response, "output_text", "")
     if not output_text:
         status = getattr(response, "status", "unknown")
-        raise ProviderError(f"OpenAI returned no tailoring plan (response status: {status})")
+        raise ProviderError(
+            f"OpenRouter returned no tailoring plan (response status: {status})"
+        )
     try:
         raw_plan = json.loads(output_text)
     except json.JSONDecodeError as exc:
-        raise ProviderError(f"OpenAI returned invalid JSON: {exc.msg}") from exc
+        raise ProviderError(f"OpenRouter returned invalid JSON: {exc.msg}") from exc
 
     plan = _validate_plan_shape(raw_plan)
     _validate_operation_scope(plan, editable_targets)
     job_title = plan["jobTitle"].strip()
     if not job_title:
-        raise ProviderError("OpenAI returned an empty job title")
+        raise ProviderError("OpenRouter returned an empty job title")
     company = plan["company"]
     if isinstance(company, str):
         company = company.strip() or None
 
-    return OpenAITailoringPlan(
+    return OpenRouterTailoringPlan(
         company=company,
         job_title=job_title,
         gaps=tuple(plan["gaps"]),

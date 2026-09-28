@@ -7,7 +7,7 @@ from forge.keyword_alignment import (
     align_job_keywords,
     remove_noop_operations,
 )
-from forge.openai_provider import build_editable_targets
+from forge.openrouter_provider import build_editable_targets
 
 from .helpers import DATA
 

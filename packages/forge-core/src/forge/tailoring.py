@@ -18,7 +18,7 @@ from .cover_letter import (
 from .context_selection import (
     DEFAULT_CONTEXT_SELECTION_MODEL,
     ContextSelection,
-    select_context_with_openai,
+    select_context_with_openrouter,
 )
 from .context_store import SQLiteContextStore, read_context_source, sync_context_database
 from .docx import RenderReport, render_docx, update_docx_core_properties
@@ -27,21 +27,21 @@ from .jsonio import load_json, write_json
 from .job_source import (
     DEFAULT_WEB_SEARCH_MODEL,
     WebJobDescription,
-    retrieve_job_description_with_openai,
+    retrieve_job_description_with_openrouter,
 )
 from .keyword_alignment import (
     KeywordAlignment,
     align_job_keywords,
     remove_noop_operations,
 )
-from .openai_provider import (
-    DEFAULT_OPENAI_MODEL,
+from .openrouter_client import DEFAULT_OPENROUTER_MODEL
+from .openrouter_provider import (
     build_editable_targets,
     generate_tailoring_plan,
 )
 from .operations import apply_operations
 from .pdf import convert_docx_to_pdf
-from .usage_store import OpenAIUsageStore
+from .usage_store import OpenRouterUsageStore
 from .validation import build_stable_id_index, validate_document, validate_resume
 
 PathLike = Union[str, Path]
@@ -96,7 +96,7 @@ def safe_filename_component(value: str) -> str:
     return "_".join(words)
 
 
-def tailor_resume_with_openai(
+def tailor_resume_with_openrouter(
     *,
     template: PathLike,
     data: PathLike,
@@ -109,7 +109,7 @@ def tailor_resume_with_openai(
     candidate_context: Optional[PathLike] = None,
     context_database: Optional[PathLike] = None,
     usage_database: Optional[PathLike] = None,
-    model: str = DEFAULT_OPENAI_MODEL,
+    model: str = DEFAULT_OPENROUTER_MODEL,
     context_selection_model: str = DEFAULT_CONTEXT_SELECTION_MODEL,
     web_search_model: str = DEFAULT_WEB_SEARCH_MODEL,
     include_pdf: bool = False,
@@ -124,7 +124,7 @@ def tailor_resume_with_openai(
     pdf_converter: Callable[[PathLike, PathLike], Path] = convert_docx_to_pdf,
     client=None,
 ) -> TailoringResult:
-    """Generate a scoped OpenAI plan, validate it, and render final artifacts."""
+    """Generate a scoped OpenRouter plan, validate it, and render final artifacts."""
     resume = load_json(data)
     resume_schema = load_json(schema)
     binding_config = load_json(bindings)
@@ -173,11 +173,11 @@ def tailor_resume_with_openai(
         if usage_database is not None
         else context_database_path or Path("data/context.sqlite3")
     )
-    usage_store = OpenAIUsageStore(usage_database_path)
+    usage_store = OpenRouterUsageStore(usage_database_path)
     usage_store.initialize()
     workflow_id = str(uuid.uuid4())
     if has_url_jd:
-        web_job = retrieve_job_description_with_openai(
+        web_job = retrieve_job_description_with_openrouter(
             url=job_description_url or "",
             model=web_search_model,
             client=client,
@@ -200,7 +200,7 @@ def tailor_resume_with_openai(
         chunks = []
 
     if chunks:
-        context_selection = select_context_with_openai(
+        context_selection = select_context_with_openrouter(
             job_description=jd_text,
             chunks=chunks,
             model=context_selection_model,
@@ -236,7 +236,7 @@ def tailor_resume_with_openai(
         build_editable_targets(resume),
     )
     if not filtered_operations:
-        raise TailoringError("OpenAI tailoring plan contained only no-op rewrites")
+        raise TailoringError("OpenRouter tailoring plan contained only no-op rewrites")
     operation_config["operations"] = [dict(item) for item in filtered_operations]
     operation_config["provider"]["workflowId"] = workflow_id
     operation_config["provider"]["usageDatabase"] = str(usage_database_path)

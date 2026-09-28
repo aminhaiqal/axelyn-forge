@@ -19,7 +19,7 @@ flowchart LR
 
     CLI[Forge CLI] --> Core
     Core --> Evidence[(Evidence and usage SQLite)]
-    Core --> Provider[OpenAI Responses API]
+    Core --> Provider[OpenRouter Responses API]
     Core --> Artifacts[JSON / DOCX / PDF]
 ```
 

@@ -1,4 +1,4 @@
-"""OpenAI web-search ingestion for URL-based job descriptions."""
+"""OpenRouter web-search ingestion for URL-based job descriptions."""
 
 import ipaddress
 import json
@@ -11,7 +11,8 @@ from jsonschema import Draft202012Validator
 
 from .context_selection import DEFAULT_CONTEXT_SELECTION_MODEL
 from .errors import ProviderError
-from .usage_store import OpenAIUsageStore
+from .openrouter_client import create_openrouter_client, openrouter_request_options
+from .usage_store import OpenRouterUsageStore
 
 DEFAULT_WEB_SEARCH_MODEL = DEFAULT_CONTEXT_SELECTION_MODEL
 
@@ -108,16 +109,22 @@ def _validate_web_result(value: Any) -> Dict[str, Any]:
             f"$.{'.'.join(str(part) for part in error.absolute_path)}: {error.message}"
             for error in errors
         )
-        raise ProviderError(f"OpenAI returned an invalid web job description: {details}")
+        raise ProviderError(f"OpenRouter returned an invalid web job description: {details}")
     return value
 
 
-def _web_search_items(response: Any) -> Tuple[Any, ...]:
-    return tuple(
-        item
+def _used_web_search(response: Any) -> bool:
+    if any(
+        _field(item, "type") == "web_search_call"
         for item in (_field(response, "output", []) or [])
-        if _field(item, "type") == "web_search_call"
-    )
+    ):
+        return True
+    usage = _field(response, "usage", {})
+    server_tool_use = _field(usage, "server_tool_use", {})
+    try:
+        return int(_field(server_tool_use, "web_search_requests", 0)) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _response_source_urls(response: Any) -> Tuple[str, ...]:
@@ -168,7 +175,7 @@ class WebJobDescription:
                 "retrievedSourceUrls": list(self.source_urls),
             },
             "provider": {
-                "name": "openai",
+                "name": "openrouter",
                 "model": self.model,
                 "responseId": self.response_id,
                 "workflowId": workflow_id,
@@ -180,27 +187,20 @@ class WebJobDescription:
         }
 
 
-def retrieve_job_description_with_openai(
+def retrieve_job_description_with_openrouter(
     *,
     url: str,
     model: str = DEFAULT_WEB_SEARCH_MODEL,
     client=None,
-    usage_store: Optional[OpenAIUsageStore] = None,
+    usage_store: Optional[OpenRouterUsageStore] = None,
     workflow_id: Optional[str] = None,
 ) -> WebJobDescription:
     normalized_url, hostname = normalize_job_url(url)
     if not isinstance(model, str) or not model.strip():
-        raise ProviderError("OpenAI web-search model must be a non-empty string")
+        raise ProviderError("OpenRouter web-search model must be a non-empty string")
 
     if client is None:
-        try:
-            from openai import OpenAI
-
-            client = OpenAI()
-        except Exception as exc:
-            raise ProviderError(
-                "Could not initialize OpenAI. Set OPENAI_API_KEY and install the project dependencies."
-            ) from exc
+        client = create_openrouter_client()
 
     usage_request_id = None
     if usage_store is not None:
@@ -221,13 +221,16 @@ def retrieve_job_description_with_openai(
             ),
             tools=[
                 {
-                    "type": "web_search",
-                    "filters": {"allowed_domains": [hostname]},
-                    "search_context_size": "high",
+                    "type": "openrouter:web_search",
+                    "parameters": {
+                        "allowed_domains": [hostname],
+                        "search_context_size": "high",
+                        "max_results": 10,
+                        "max_total_results": 10,
+                    },
                 }
             ],
             tool_choice="required",
-            include=["web_search_call.action.sources"],
             text={
                 "format": {
                     "type": "json_schema",
@@ -240,48 +243,52 @@ def retrieve_job_description_with_openai(
             },
             reasoning={"effort": "low"},
             max_output_tokens=16000,
-            service_tier="default",
             store=False,
+            extra_body=openrouter_request_options(),
         )
     except Exception as exc:
         if usage_store is not None and usage_request_id is not None:
             usage_store.fail_request(usage_request_id, exc)
-        raise ProviderError(f"OpenAI job-description web search failed: {exc}") from exc
+        raise ProviderError(f"OpenRouter job-description web search failed: {exc}") from exc
 
     if usage_store is not None and usage_request_id is not None:
         usage_store.complete_request(usage_request_id, response)
 
-    if not _web_search_items(response):
-        raise ProviderError("OpenAI returned a web job description without using web search")
+    if not _used_web_search(response):
+        raise ProviderError(
+            "OpenRouter returned a web job description without using web search"
+        )
     output_text = _field(response, "output_text", "")
     if not output_text:
         status = _field(response, "status", "unknown")
         raise ProviderError(
-            f"OpenAI returned no web job description (response status: {status})"
+            f"OpenRouter returned no web job description (response status: {status})"
         )
     try:
         raw_result = json.loads(output_text)
     except json.JSONDecodeError as exc:
-        raise ProviderError(f"OpenAI returned invalid web job-description JSON: {exc.msg}") from exc
+        raise ProviderError(
+            f"OpenRouter returned invalid web job-description JSON: {exc.msg}"
+        ) from exc
     result = _validate_web_result(raw_result)
 
     if result["status"] == "unavailable":
         detail = result["error"] or "the exact job posting could not be retrieved"
         raise ProviderError(f"Job-description URL is unavailable: {detail}")
     if result["error"] is not None:
-        raise ProviderError("OpenAI web search returned a contradictory success result")
+        raise ProviderError("OpenRouter web search returned a contradictory success result")
     job_title = result["jobTitle"].strip()
     job_description = result["jobDescription"].strip()
     if not job_title:
-        raise ProviderError("OpenAI web search returned an empty job title")
+        raise ProviderError("OpenRouter web search returned an empty job title")
     if len(job_description) < 80:
-        raise ProviderError("OpenAI web search returned an incomplete job description")
+        raise ProviderError("OpenRouter web search returned an incomplete job description")
     company = result["company"]
     if isinstance(company, str):
         company = company.strip() or None
     source_urls = _response_source_urls(response)
     if not source_urls:
-        raise ProviderError("OpenAI web search did not return source provenance")
+        raise ProviderError("OpenRouter web search did not return source provenance")
 
     return WebJobDescription(
         requested_url=normalized_url,

@@ -1,4 +1,4 @@
-"""Evidence-grounded OpenAI cover-letter generation and canonical assembly."""
+"""Evidence-grounded OpenRouter cover-letter generation and canonical assembly."""
 
 import copy
 import json
@@ -10,7 +10,8 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 from jsonschema import Draft202012Validator
 
 from .errors import ProviderError, TailoringError
-from .usage_store import OpenAIUsageStore
+from .openrouter_client import create_openrouter_client, openrouter_request_options
+from .usage_store import OpenRouterUsageStore
 
 PARAGRAPH_LAYOUT: Tuple[Tuple[str, str], ...] = (
     ("cover-opening", "opening"),
@@ -112,7 +113,7 @@ def _validate_draft(
 ) -> Tuple[Dict[str, Any], ...]:
     details = _format_errors(value)
     if details:
-        raise ProviderError(f"OpenAI returned an invalid cover-letter draft: {details}")
+        raise ProviderError(f"OpenRouter returned an invalid cover-letter draft: {details}")
 
     allowed = set(allowed_evidence_ids)
     paragraphs = []
@@ -122,12 +123,12 @@ def _validate_draft(
         text = " ".join(raw["text"].split())
         if not text:
             raise ProviderError(
-                f"OpenAI returned an empty cover-letter paragraph: {paragraph_id}"
+                f"OpenRouter returned an empty cover-letter paragraph: {paragraph_id}"
             )
         word_count = len(text.split())
         if word_count > MAX_PARAGRAPH_WORDS:
             raise ProviderError(
-                f"OpenAI cover-letter paragraph '{paragraph_id}' exceeds "
+                f"OpenRouter cover-letter paragraph '{paragraph_id}' exceeds "
                 f"{MAX_PARAGRAPH_WORDS} words"
             )
         total_words += word_count
@@ -135,23 +136,23 @@ def _validate_draft(
         evidence = tuple(item.strip() for item in raw["supportingEvidence"] if item.strip())
         if not evidence:
             raise ProviderError(
-                f"OpenAI cover-letter paragraph '{paragraph_id}' has no supporting evidence"
+                f"OpenRouter cover-letter paragraph '{paragraph_id}' has no supporting evidence"
             )
         if len(evidence) != len(set(evidence)):
             raise ProviderError(
-                f"OpenAI cover-letter paragraph '{paragraph_id}' repeats an evidence ID"
+                f"OpenRouter cover-letter paragraph '{paragraph_id}' repeats an evidence ID"
             )
         unknown = sorted(set(evidence) - allowed)
         if unknown:
             raise ProviderError(
-                f"OpenAI cover-letter paragraph '{paragraph_id}' references unknown "
+                f"OpenRouter cover-letter paragraph '{paragraph_id}' references unknown "
                 f"evidence: {', '.join(unknown)}"
             )
         if paragraph_id in CANDIDATE_EVIDENCE_PARAGRAPHS and not any(
             item != "job-description" for item in evidence
         ):
             raise ProviderError(
-                f"OpenAI cover-letter paragraph '{paragraph_id}' lacks candidate evidence"
+                f"OpenRouter cover-letter paragraph '{paragraph_id}' lacks candidate evidence"
             )
         paragraphs.append(
             {
@@ -164,7 +165,7 @@ def _validate_draft(
 
     if total_words > MAX_COVER_LETTER_WORDS:
         raise ProviderError(
-            f"OpenAI cover letter exceeds {MAX_COVER_LETTER_WORDS} words"
+            f"OpenRouter cover letter exceeds {MAX_COVER_LETTER_WORDS} words"
         )
     return tuple(paragraphs)
 
@@ -182,14 +183,14 @@ def generate_cover_letter_draft(
     allowed_evidence_ids: Sequence[str],
     model: str,
     client=None,
-    usage_store: Optional[OpenAIUsageStore] = None,
+    usage_store: Optional[OpenRouterUsageStore] = None,
     workflow_id: Optional[str] = None,
 ) -> CoverLetterDraft:
     """Generate complete prose while retaining strict evidence and shape checks."""
     if not job_description.strip():
         raise ProviderError("Job description is empty")
     if not isinstance(model, str) or not model.strip():
-        raise ProviderError("OpenAI cover-letter model must be a non-empty string")
+        raise ProviderError("OpenRouter cover-letter model must be a non-empty string")
 
     evidence_ids = tuple(dict.fromkeys(allowed_evidence_ids))
     if "job-description" not in evidence_ids:
@@ -209,14 +210,7 @@ def generate_cover_letter_draft(
     )
 
     if client is None:
-        try:
-            from openai import OpenAI
-
-            client = OpenAI()
-        except Exception as exc:
-            raise ProviderError(
-                "Could not initialize OpenAI. Set OPENAI_API_KEY and install the project dependencies."
-            ) from exc
+        client = create_openrouter_client()
 
     usage_request_id = None
     if usage_store is not None:
@@ -243,13 +237,13 @@ def generate_cover_letter_draft(
                 "verbosity": "low",
             },
             max_output_tokens=6000,
-            service_tier="default",
             store=False,
+            extra_body=openrouter_request_options(),
         )
     except Exception as exc:
         if usage_store is not None and usage_request_id is not None:
             usage_store.fail_request(usage_request_id, exc)
-        raise ProviderError(f"OpenAI cover-letter request failed: {exc}") from exc
+        raise ProviderError(f"OpenRouter cover-letter request failed: {exc}") from exc
 
     if usage_store is not None and usage_request_id is not None:
         usage_store.complete_request(usage_request_id, response)
@@ -257,11 +251,15 @@ def generate_cover_letter_draft(
     output_text = getattr(response, "output_text", "")
     if not output_text:
         status = getattr(response, "status", "unknown")
-        raise ProviderError(f"OpenAI returned no cover letter (response status: {status})")
+        raise ProviderError(
+            f"OpenRouter returned no cover letter (response status: {status})"
+        )
     try:
         raw = json.loads(output_text)
     except json.JSONDecodeError as exc:
-        raise ProviderError(f"OpenAI returned invalid cover-letter JSON: {exc.msg}") from exc
+        raise ProviderError(
+            f"OpenRouter returned invalid cover-letter JSON: {exc.msg}"
+        ) from exc
 
     return CoverLetterDraft(
         paragraphs=_validate_draft(raw, allowed_evidence_ids=evidence_ids),
@@ -335,7 +333,7 @@ def build_cover_letter_document(
     document["paragraphs"] = [copy.deepcopy(item) for item in draft.paragraphs]
     document["signature"] = {"name": signature_name}
     document["metadata"] = {
-        "provider": "openai",
+        "provider": "openrouter",
         "model": draft.model,
         "responseId": draft.response_id,
         "workflowId": workflow_id,
