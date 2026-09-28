@@ -65,6 +65,7 @@
 .source-body { min-width: 0; }
 .source-body strong { display: block; overflow: hidden; color: var(--ink); font-family: var(--font-display); font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
 .source-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 7px; color: #718087; font-size: .59rem; }
+.source-warning { max-width: 680px; margin: 8px 0 0; color: #955638; font-size: .58rem; line-height: 1.5; }
 .status-pill { color: #8d573d; }
 .status-pill[data-ready="true"] { color: #286751; }
 .source-actions { display: flex; flex-wrap: wrap; gap: 8px; }

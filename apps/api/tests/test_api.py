@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator
 
 from axelyn_api.config import Settings
 from axelyn_api.main import create_app
+from axelyn_api.resume_import import draft_payload
 
 
 VALID_PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\nstartxref\n0\n%%EOF\n"
@@ -76,6 +77,18 @@ class FakeInterviewBriefGenerator:
             "facts_to_confirm": [],
             "model": "openai/gpt-test",
         }
+
+
+class FakeResumeDraftGenerator:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        draft = draft_payload(**kwargs)
+        if kwargs["display_name"] == "ai-resume":
+            draft["summary"] = "AI-structured source summary."
+        return draft
 
 
 class ApiTests(unittest.TestCase):
@@ -171,6 +184,7 @@ class ApiTests(unittest.TestCase):
         self.document_converter = FakeDocumentConverter()
         self.document_converter.normalized_docx = self.resume_docx()
         self.interview_brief_generator = FakeInterviewBriefGenerator()
+        self.resume_draft_generator = FakeResumeDraftGenerator()
         app = create_app(
             Settings(
                 environment="test",
@@ -181,6 +195,7 @@ class ApiTests(unittest.TestCase):
             authenticate_user=self.authenticate_user,
             document_converter=self.document_converter,
             interview_brief_generator=self.interview_brief_generator,
+            resume_draft_generator=self.resume_draft_generator,
         )
         self.client_context = TestClient(app)
         self.client = self.client_context.__enter__()
@@ -286,6 +301,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual("stored", item["status"])
         source_id = item["source"]["id"]
         self.assertEqual("needs_review", item["source"]["status"])
+        self.assertEqual("Backend Engineer", self.resume_draft_generator.calls[0]["target_role"])
 
         artifacts_response = self.client.get(
             "/api/v1/resume-source-artifacts", headers=headers
@@ -462,6 +478,42 @@ class ApiTests(unittest.TestCase):
                 headers=headers,
             )
             self.assertEqual(404, missing.status_code)
+
+    def test_import_builds_artifacts_from_the_ai_structured_draft(self):
+        headers = {"Authorization": "Bearer test-session"}
+        imported = self.client.post(
+            "/api/v1/resumes/imports",
+            headers=headers,
+            files=[
+                (
+                    "files",
+                    (
+                        "ai-resume.docx",
+                        self.resume_docx(),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
+                )
+            ],
+        )
+
+        self.assertEqual(201, imported.status_code, imported.text)
+        source_id = imported.json()["items"][0]["source"]["id"]
+        detail = self.client.get(f"/api/v1/resumes/{source_id}", headers=headers)
+        self.assertEqual(
+            "AI-structured source summary.", detail.json()["draft"]["summary"]
+        )
+        artifacts = self.client.get(
+            "/api/v1/resume-source-artifacts", headers=headers
+        ).json()
+        resume_json = next(item for item in artifacts if item["kind"] == "resume_json")
+        downloaded = self.client.get(
+            f"/api/v1/resume-source-artifacts/{resume_json['id']}/download",
+            headers=headers,
+        )
+        self.assertEqual(
+            "AI-structured source summary.",
+            downloaded.json()["resume"]["summary"],
+        )
 
     def test_pdf_import_becomes_an_editable_word_draft(self):
         headers = {"Authorization": "Bearer test-session"}

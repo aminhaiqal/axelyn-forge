@@ -189,7 +189,7 @@ if (!isAuthenticated) {
           <label><span>Institution / University Name*</span><input data-education-field="institution_name" maxlength="200" placeholder="Universiti Teknologi Malaysia" required /></label>
           <label><span>Degree / Qualification*</span><input data-education-field="qualification" maxlength="200" placeholder="Bachelor of Computer Science" required /></label>
           <label><span>Field of Study / Major*</span><input data-education-field="field_of_study" maxlength="200" placeholder="Software Engineering" required /></label>
-          <label><span>Education Level</span><select data-education-field="education_level"><option>Secondary School</option><option>Diploma</option><option>Foundation</option><option selected>Bachelor’s Degree</option><option>Master’s Degree</option><option>Doctorate / PhD</option><option>Professional Qualification</option><option>Other</option></select></label>
+          <label><span>Education Level</span><select data-education-field="education_level"><option value="">Choose one</option><option>Secondary School</option><option>Diploma</option><option>Foundation</option><option>Bachelor’s Degree</option><option>Master’s Degree</option><option>Doctorate / PhD</option><option>Professional Qualification</option><option>Other</option></select></label>
           <label><span>Location</span><input data-education-field="location" maxlength="160" placeholder="City, State, Country" /></label>
           <label><span>Start Date*</span><input data-education-field="start_date" type="month" required /></label>
           <label data-education-end-date-field><span>Graduation / End Date*</span><input data-education-field="end_date" type="month" required /></label>
@@ -226,9 +226,9 @@ if (!isAuthenticated) {
         <div class="work-experience-fields">
           <label><span>Company / Organization Name</span><input data-work-field="company_name" maxlength="160" placeholder="Example Company" required /></label>
           <label><span>Job Title / Position</span><input data-work-field="job_title" maxlength="160" placeholder="Software Engineer" required /></label>
-          <label><span>Employment Type</span><select data-work-field="employment_type" required><option>Full-time</option><option>Part-time</option><option>Contract</option><option>Freelance</option><option>Internship</option><option>Self-employed</option></select></label>
+          <label><span>Employment Type</span><select data-work-field="employment_type" required><option value="">Choose one</option><option>Full-time</option><option>Part-time</option><option>Contract</option><option>Freelance</option><option>Internship</option><option>Self-employed</option></select></label>
           <label><span>Location</span><input data-work-field="location" maxlength="160" placeholder="Kuala Lumpur, Malaysia" required /></label>
-          <label><span>Work Arrangement</span><select data-work-field="work_arrangement" required><option>On-site</option><option>Hybrid</option><option>Remote</option></select></label>
+          <label><span>Work Arrangement</span><select data-work-field="work_arrangement" required><option value="">Choose one</option><option>On-site</option><option>Hybrid</option><option>Remote</option></select></label>
           <label><span>Start Date</span><input data-work-field="start_date" type="month" required /></label>
           <label data-end-date-field><span>End Date</span><input data-work-field="end_date" type="month" required /></label>
           <fieldset class="work-current-field">
@@ -252,9 +252,9 @@ if (!isAuthenticated) {
         </div>
         <div class="project-fields">
           <label><span>Project Name*</span><input data-project-field="project_name" maxlength="200" placeholder="Monitorscape" required /></label>
-          <label><span>Project Type</span><select data-project-field="project_type"><option>Personal Project</option><option>Client Project</option><option>Commercial Product</option><option>Academic Project</option><option>Open Source</option><option>Research Project</option><option>Internal Company Project</option></select></label>
+          <label><span>Project Type</span><select data-project-field="project_type"><option value="">Choose one</option><option>Personal Project</option><option>Client Project</option><option>Commercial Product</option><option>Academic Project</option><option>Open Source</option><option>Research Project</option><option>Internal Company Project</option></select></label>
           <label><span>Your Role</span><input data-project-field="role" maxlength="160" placeholder="Software Engineer, Backend Developer, Project Lead" /></label>
-          <label><span>Project Status</span><select data-project-field="project_status"><option>Live / Production</option><option selected>In Development</option><option>Prototype</option><option>Completed</option><option>Discontinued</option></select></label>
+          <label><span>Project Status</span><select data-project-field="project_status"><option value="">Choose one</option><option>Live / Production</option><option>In Development</option><option>Prototype</option><option>Completed</option><option>Discontinued</option></select></label>
           <label><span>Start Date</span><input data-project-field="start_date" type="month" /></label>
           <label data-project-end-date-field><span>End Date</span><input data-project-field="end_date" type="month" /></label>
           <fieldset class="project-current-field project-field-wide">

@@ -25,7 +25,7 @@ if (!isAuthenticated) {
           <h1>Your resume<br /><em>source library.</em></h1>
         </div>
         <div class="intro-copy">
-          <p>Start from a guided form or bring an existing PDF or Word file. Every source stays editable, private, and ready for the Axelyn standard layout.</p>
+          <p>Start from a guided form or bring an existing PDF or Word file. Forge uses AI to structure the source into editable fields while keeping every file private and ready for the Axelyn standard layout.</p>
           <div class="privacy-note">
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3m-11 0h12v10H6z" /></svg>
             <span><strong>Private by default.</strong> Only your signed-in account can read these files.</span>
@@ -49,7 +49,7 @@ if (!isAuthenticated) {
               <span class="upload-mark" aria-hidden="true">+</span>
               <span class="upload-copy">
                 <strong>Bring in your resume files</strong>
-                <small>Drop up to 5 DOCX or PDF files here · PDFs become Word first, then an SDT template, JSON, and JSON Schema · 10 MB each</small>
+                <small>Drop up to 5 DOCX or PDF files here · AI structures the content, then Forge creates normalized Word, a standard template, JSON, and JSON Schema · 10 MB each</small>
               </span>
               <span class="choose-files">Choose files</span>
             </label>
@@ -90,5 +90,7 @@ if (!isAuthenticated) {
       <a href="/">Return to axelyn.com</a>
     </footer>
   </div>
-  <script is:inline src="/scripts/library.js" defer></script>
+  <script>
+    import "../scripts/library.js";
+  </script>
 </BaseLayout>

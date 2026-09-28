@@ -75,6 +75,7 @@ class RoleAlignmentAnalysis(BaseModel):
 ResumeSourceStatus = Literal["needs_review", "needs_ocr", "ready"]
 ResumeTemplateId = Literal["ats-classic"]
 ResumeEmploymentType = Literal[
+    "",
     "Full-time",
     "Part-time",
     "Contract",
@@ -82,8 +83,9 @@ ResumeEmploymentType = Literal[
     "Internship",
     "Self-employed",
 ]
-ResumeWorkArrangement = Literal["On-site", "Hybrid", "Remote"]
+ResumeWorkArrangement = Literal["", "On-site", "Hybrid", "Remote"]
 ResumeEducationLevel = Literal[
+    "",
     "Secondary School",
     "Diploma",
     "Foundation",
@@ -94,6 +96,7 @@ ResumeEducationLevel = Literal[
     "Other",
 ]
 ResumeProjectType = Literal[
+    "",
     "Personal Project",
     "Client Project",
     "Commercial Product",
@@ -103,6 +106,7 @@ ResumeProjectType = Literal[
     "Internal Company Project",
 ]
 ResumeProjectStatus = Literal[
+    "",
     "Live / Production",
     "In Development",
     "Prototype",
@@ -125,9 +129,9 @@ class ResumeExperienceEntry(BaseModel):
 
     company_name: str = Field(default="", max_length=160)
     job_title: str = Field(default="", max_length=160)
-    employment_type: ResumeEmploymentType = "Full-time"
+    employment_type: ResumeEmploymentType = ""
     location: str = Field(default="", max_length=160)
-    work_arrangement: ResumeWorkArrangement = "On-site"
+    work_arrangement: ResumeWorkArrangement = ""
     start_date: str = Field(
         default="",
         max_length=7,
@@ -155,7 +159,7 @@ class ResumeEducationEntry(BaseModel):
     institution_name: str = Field(default="", max_length=200)
     qualification: str = Field(default="", max_length=200)
     field_of_study: str = Field(default="", max_length=200)
-    education_level: ResumeEducationLevel = "Bachelor’s Degree"
+    education_level: ResumeEducationLevel = ""
     location: str = Field(default="", max_length=160)
     start_date: str = Field(
         default="",
@@ -188,7 +192,7 @@ class ResumeProjectEntry(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     project_name: str = Field(default="", max_length=200)
-    project_type: ResumeProjectType = "Personal Project"
+    project_type: ResumeProjectType = ""
     role: str = Field(default="", max_length=160)
     project_url: str = Field(default="", max_length=500)
     repository_url: str = Field(default="", max_length=500)
@@ -213,7 +217,7 @@ class ResumeProjectEntry(BaseModel):
     deliverables: str = Field(default="", max_length=8_000)
     impact: str = Field(default="", max_length=8_000)
     metrics: str = Field(default="", max_length=4_000)
-    project_status: ResumeProjectStatus = "In Development"
+    project_status: ResumeProjectStatus = ""
 
     @model_validator(mode="after")
     def current_project_has_no_end_date(self) -> Self:

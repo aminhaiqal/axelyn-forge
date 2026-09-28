@@ -69,6 +69,7 @@ from .resume_artifacts import (
     build_resume_package,
     build_resume_schema,
 )
+from .resume_assistant import structure_resume_with_openrouter
 from .resume_import import (
     DOCX_MEDIA_TYPE,
     PDF_MEDIA_TYPE,
@@ -337,6 +338,7 @@ def create_app(
     authenticate_user: Optional[UserAuthenticator] = None,
     document_converter: Optional[DocumentConverter] = None,
     interview_brief_generator: Optional[Callable[..., dict[str, Any]]] = None,
+    resume_draft_generator: Optional[Callable[..., dict[str, object]]] = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings.from_environ()
     store = ServiceRequestStore(resolved_settings.database_path)
@@ -352,6 +354,9 @@ def create_app(
         resolved_settings.converter_timeout_seconds,
     )
     brief_generator = interview_brief_generator or generate_interview_brief
+    draft_generator = resume_draft_generator
+    if draft_generator is None and resolved_settings.environment.casefold() != "test":
+        draft_generator = structure_resume_with_openrouter
 
     def require_user(request: Request) -> str:
         return user_authenticator(request)
@@ -416,6 +421,7 @@ def create_app(
     app.state.object_store = object_store
     app.state.document_converter = converter
     app.state.interview_brief_generator = brief_generator
+    app.state.resume_draft_generator = draft_generator
 
     if resolved_settings.cors_origins:
         app.add_middleware(
@@ -657,6 +663,31 @@ def create_app(
                 display_name=stem,
                 target_role=clean_role,
             )
+            if draft_generator is not None and normalized_text:
+                try:
+                    generated_draft = draft_generator(
+                        extracted_text=normalized_text,
+                        display_name=stem,
+                        target_role=clean_role,
+                    )
+                    generated_draft["template_id"] = "ats-classic"
+                    generated_draft["extracted_text"] = normalized_text
+                    validated_draft = ResumeDraft.model_validate(
+                        generated_draft
+                    ).model_dump(mode="json")
+                    draft = {
+                        "display_name": stem,
+                        "target_role": clean_role,
+                        **validated_draft,
+                    }
+                except (ProviderError, ValueError):
+                    ai_warning = (
+                        "AI structuring was temporarily unavailable. Forge used its "
+                        "deterministic parser; review the draft before approval."
+                    )
+                    normalized_warning = " ".join(
+                        value for value in (normalized_warning, ai_warning) if value
+                    )
             artifact_payloads = _source_artifact_payloads(
                 prefix=prefix,
                 normalized_docx=normalized_docx,

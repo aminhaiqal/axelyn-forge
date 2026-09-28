@@ -78,6 +78,12 @@ if (page instanceof HTMLElement) {
       state.textContent = source.status === "ready" ? "Approved" : source.status === "needs_ocr" ? "Needs content" : "Draft";
       meta.append(role, size, state);
       body.append(title, meta);
+      if (source.warning) {
+        const warning = document.createElement("p");
+        warning.className = "source-warning";
+        warning.textContent = source.warning;
+        body.append(warning);
+      }
       const actions = document.createElement("div");
       actions.className = "source-actions";
       const edit = document.createElement("a");
@@ -89,7 +95,7 @@ if (page instanceof HTMLElement) {
       );
       [
         ["source_docx", "Source DOCX"],
-        ["sdt_template", "SDT template"],
+        ["sdt_template", "Standard Word template"],
         ["resume_json", "JSON"],
         ["resume_schema", "JSON Schema"],
       ].forEach(([kind, label]) => {
@@ -207,7 +213,7 @@ if (page instanceof HTMLElement) {
     if (!(uploadForm instanceof HTMLFormElement)) return;
     const submit = uploadForm.querySelector("button[type='submit']");
     if (submit instanceof HTMLButtonElement) submit.disabled = true;
-    setStatus("Converting to Word and building your private resume package…");
+    setStatus("Converting to Word, then using AI to structure your private resume package…");
     try {
       const result = await api("/api/v1/resumes/imports", { method: "POST", body: new FormData(uploadForm) });
       const rejected = result.items.filter((item) => item.status === "rejected");
@@ -215,7 +221,7 @@ if (page instanceof HTMLElement) {
       if (rejected.length) {
         setStatus(`${stored} imported. ${rejected.map((item) => `${item.filename}: ${item.error}`).join(" ")}`, "error");
       } else {
-        setStatus(`${stored} resume${stored === 1 ? "" : "s"} converted into Word, an SDT template, JSON, and JSON Schema.`, "success");
+        setStatus(`${stored} resume${stored === 1 ? "" : "s"} structured into normalized Word, a standard Word template, JSON, and JSON Schema.`, "success");
         uploadForm.reset();
         if (fileSelection instanceof HTMLElement) fileSelection.hidden = true;
       }
