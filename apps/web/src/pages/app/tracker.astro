@@ -37,13 +37,14 @@ if (!isAuthenticated) {
       </section>
 
       <section class="tracker-workspace">
-        <aside class="application-editor" id="application-editor">
+        <dialog class="application-dialog" id="application-dialog" aria-labelledby="editor-title">
+          <aside class="application-editor" id="application-editor">
           <div class="editor-heading">
             <div>
-              <span id="editor-sequence">01 / NEW RECORD</span>
+              <span id="editor-sequence">NEW APPLICATION</span>
               <h2 id="editor-title">Add an application</h2>
             </div>
-            <button id="cancel-edit" class="text-button" type="button" hidden>Cancel edit</button>
+            <button id="cancel-edit" class="modal-close" type="button" aria-label="Close application form">×</button>
           </div>
 
           <form id="application-form">
@@ -102,12 +103,18 @@ if (!isAuthenticated) {
             <p class="form-status" id="application-form-status" aria-live="polite"></p>
             <button class="save-application" id="save-application" type="submit">Save application <span aria-hidden="true">→</span></button>
           </form>
-        </aside>
+          </aside>
+        </dialog>
 
         <div class="application-index">
           <div class="index-heading">
-            <div><span>02 / APPLICATIONS</span><h2>Your pipeline</h2></div>
-            <strong id="application-count">0 records</strong>
+            <div><span>APPLICATIONS</span><h2>Your pipeline</h2></div>
+            <div class="index-heading-actions">
+              <strong id="application-count">0 records</strong>
+              <button class="open-application" id="open-application" type="button">
+                <span aria-hidden="true">+</span> Add application
+              </button>
+            </div>
           </div>
 
           <div class="tracker-filters">

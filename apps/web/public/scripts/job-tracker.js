@@ -6,6 +6,8 @@ if (trackerPage instanceof HTMLElement) {
   const formStatus = document.querySelector("#application-form-status");
   const submitButton = document.querySelector("#save-application");
   const cancelButton = document.querySelector("#cancel-edit");
+  const openApplicationButton = document.querySelector("#open-application");
+  const applicationDialog = document.querySelector("#application-dialog");
   const editorTitle = document.querySelector("#editor-title");
   const editorSequence = document.querySelector("#editor-sequence");
   const resumeSelect = document.querySelector("#resume-attachment");
@@ -192,11 +194,12 @@ if (trackerPage instanceof HTMLElement) {
     setInputValue("application-notes", item.notes);
     fillResumeOptions(item);
     if (editorTitle) editorTitle.textContent = "Edit application";
-    if (editorSequence) editorSequence.textContent = "01 / EDIT RECORD";
+    if (editorSequence) editorSequence.textContent = "EDIT APPLICATION";
     if (submitButton) submitButton.firstChild.textContent = "Update application ";
-    if (cancelButton instanceof HTMLButtonElement) cancelButton.hidden = false;
     setFormStatus(`Editing ${item.job_title} at ${item.company_name}.`);
-    document.querySelector("#application-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (applicationDialog instanceof HTMLDialogElement && !applicationDialog.open) {
+      applicationDialog.showModal();
+    }
   };
 
   const resetForm = () => {
@@ -204,9 +207,8 @@ if (trackerPage instanceof HTMLElement) {
     setInputValue("application-id", "");
     fillResumeOptions();
     if (editorTitle) editorTitle.textContent = "Add an application";
-    if (editorSequence) editorSequence.textContent = "01 / NEW RECORD";
+    if (editorSequence) editorSequence.textContent = "NEW APPLICATION";
     if (submitButton) submitButton.firstChild.textContent = "Save application ";
-    if (cancelButton instanceof HTMLButtonElement) cancelButton.hidden = true;
     setFormStatus("");
   };
 
@@ -543,7 +545,22 @@ if (trackerPage instanceof HTMLElement) {
     });
   }
 
-  if (cancelButton instanceof HTMLButtonElement) cancelButton.addEventListener("click", resetForm);
+  if (applicationDialog instanceof HTMLDialogElement) {
+    applicationDialog.addEventListener("click", (event) => {
+      if (event.target === applicationDialog) applicationDialog.close();
+    });
+    applicationDialog.addEventListener("close", resetForm);
+  }
+  if (openApplicationButton instanceof HTMLButtonElement && applicationDialog instanceof HTMLDialogElement) {
+    openApplicationButton.addEventListener("click", () => {
+      resetForm();
+      applicationDialog.showModal();
+      window.setTimeout(() => input("company-name")?.focus(), 0);
+    });
+  }
+  if (cancelButton instanceof HTMLButtonElement && applicationDialog instanceof HTMLDialogElement) {
+    cancelButton.addEventListener("click", () => applicationDialog.close());
+  }
   if (search instanceof HTMLInputElement) search.addEventListener("input", renderApplications);
   if (statusFilter instanceof HTMLSelectElement) statusFilter.addEventListener("change", renderApplications);
   if (statusInput instanceof HTMLSelectElement && appliedInput instanceof HTMLInputElement) {
@@ -587,9 +604,8 @@ if (trackerPage instanceof HTMLElement) {
       applications = editingId
         ? applications.map((item) => item.id === saved.id ? saved : item)
         : [saved, ...applications];
-      resetForm();
       renderApplications();
-      setFormStatus(editingId ? "Application updated." : "Application saved.", "success");
+      if (applicationDialog instanceof HTMLDialogElement) applicationDialog.close();
     } catch (error) {
       setFormStatus(error instanceof Error ? error.message : "The application could not be saved.", "error");
     } finally {
