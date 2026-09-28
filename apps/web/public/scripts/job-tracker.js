@@ -16,9 +16,18 @@ if (trackerPage instanceof HTMLElement) {
   const statusFilter = document.querySelector("#status-filter");
   const statusInput = document.querySelector("#application-status");
   const appliedInput = document.querySelector("#applied-on");
+  const interviewDialog = document.querySelector("#interview-dialog");
+  const interviewDialogContext = document.querySelector("#interview-dialog-context");
+  const interviewOutput = document.querySelector("#interview-brief-output");
+  const interviewStatus = document.querySelector("#interview-status");
+  const interviewJobDescription = document.querySelector("#interview-job-description");
+  const interviewFocus = document.querySelector("#interview-focus");
+  const generateInterviewButton = document.querySelector("#generate-interview-brief");
+  const closeInterviewButton = document.querySelector("#close-interview-dialog");
   let applications = [];
   let sources = [];
   let variants = [];
+  let activeInterviewApplication = null;
 
   const api = async (path, options = {}) => {
     const request = { credentials: "same-origin", ...options };
@@ -34,7 +43,9 @@ if (trackerPage instanceof HTMLElement) {
     const result = await response.json().catch(() => null);
     if (!response.ok) {
       const detail = Array.isArray(result?.detail) ? result.detail[0]?.msg : result?.detail;
-      throw new Error(typeof detail === "string" ? detail.replace(/^Value error, /, "") : "Forge could not complete that request.");
+      const error = new Error(typeof detail === "string" ? detail.replace(/^Value error, /, "") : "Forge could not complete that request.");
+      error.status = response.status;
+      throw error;
     }
     return result;
   };
@@ -234,6 +245,157 @@ if (trackerPage instanceof HTMLElement) {
     }
   };
 
+  const setInterviewStatus = (message, state = "") => {
+    if (!(interviewStatus instanceof HTMLElement)) return;
+    interviewStatus.textContent = message;
+    if (state) interviewStatus.dataset.state = state;
+    else interviewStatus.removeAttribute("data-state");
+  };
+
+  const evidenceList = (items) => {
+    const evidence = document.createElement("div");
+    evidence.className = "interview-evidence";
+    (items || []).forEach((item) => evidence.append(textElement("span", "", item)));
+    if (!evidence.childElementCount) {
+      evidence.append(textElement("span", "is-gap", "No resume evidence — prepare an honest gap response"));
+    }
+    return evidence;
+  };
+
+  const briefSection = (sequence, title) => {
+    const heading = document.createElement("header");
+    heading.className = "brief-section-heading";
+    heading.append(textElement("span", "", sequence), textElement("h3", "", title));
+    return heading;
+  };
+
+  const simpleList = (items) => {
+    const listElement = document.createElement("ol");
+    items.forEach((item) => listElement.append(textElement("li", "", item)));
+    return listElement;
+  };
+
+  const renderInterviewEmpty = () => {
+    if (!(interviewOutput instanceof HTMLElement)) return;
+    interviewOutput.replaceChildren();
+    const empty = document.createElement("div");
+    empty.className = "interview-brief-empty";
+    empty.append(
+      textElement("span", "", "01 / READY"),
+      textElement("strong", "", "Turn the application into a focused interview plan."),
+      textElement("p", "", "Forge will surface likely questions, the evidence to use, honest gaps, and useful questions to ask the interviewer."),
+    );
+    interviewOutput.append(empty);
+  };
+
+  const renderInterviewBrief = (brief) => {
+    if (!(interviewOutput instanceof HTMLElement)) return;
+    interviewOutput.replaceChildren();
+
+    const overview = document.createElement("section");
+    overview.className = "brief-overview";
+    overview.append(
+      textElement("span", "brief-sequence", "01 / POSITIONING"),
+      textElement("h3", "", brief.role_summary),
+      textElement("p", "", brief.positioning),
+    );
+
+    const coverage = document.createElement("section");
+    coverage.className = "brief-section";
+    coverage.append(briefSection("02", "Role coverage"));
+    const coverageGrid = document.createElement("div");
+    coverageGrid.className = "coverage-grid";
+    brief.coverage.forEach((item) => {
+      const card = document.createElement("article");
+      card.className = "coverage-item";
+      const assessment = textElement("span", "coverage-assessment", titleCase(item.assessment));
+      assessment.dataset.assessment = item.assessment;
+      card.append(
+        assessment,
+        textElement("h4", "", item.requirement),
+        textElement("p", "", item.rationale),
+        evidenceList(item.evidence),
+      );
+      coverageGrid.append(card);
+    });
+    coverage.append(coverageGrid);
+
+    const questions = document.createElement("section");
+    questions.className = "brief-section";
+    questions.append(briefSection("03", "Likely interview questions"));
+    const questionList = document.createElement("div");
+    questionList.className = "interview-question-list";
+    brief.questions.forEach((item, index) => {
+      const details = document.createElement("details");
+      if (index === 0) details.open = true;
+      const summary = document.createElement("summary");
+      summary.append(
+        textElement("span", "", String(index + 1).padStart(2, "0")),
+        document.createTextNode(item.question),
+      );
+      const content = document.createElement("div");
+      content.className = "question-content";
+      const intent = document.createElement("p");
+      intent.append(
+        textElement("strong", "", "What they are testing"),
+        document.createTextNode(item.interviewer_intent),
+      );
+      const plan = document.createElement("p");
+      plan.append(
+        textElement("strong", "", "Answer plan"),
+        document.createTextNode(item.answer_plan),
+      );
+      content.append(intent, plan, evidenceList(item.evidence));
+      details.append(summary, content);
+      questionList.append(details);
+    });
+    questions.append(questionList);
+
+    const actions = document.createElement("section");
+    actions.className = "brief-section brief-final-grid";
+    const ask = document.createElement("div");
+    ask.append(briefSection("04", "Questions to ask"), simpleList(brief.questions_to_ask));
+    const prepare = document.createElement("div");
+    prepare.append(briefSection("05", "Before the interview"), simpleList(brief.preparation_actions));
+    actions.append(ask, prepare);
+
+    if (brief.facts_to_confirm?.length) {
+      const confirm = document.createElement("div");
+      confirm.className = "facts-to-confirm";
+      confirm.append(briefSection("06", "Confirm in your own words"), simpleList(brief.facts_to_confirm));
+      actions.append(confirm);
+    }
+
+    const generatedOn = brief.updated_at ? dateLabel(brief.updated_at.slice(0, 10)) : "now";
+    const metadata = textElement("p", "brief-metadata", `Generated privately with ${brief.model} · ${generatedOn}`);
+    interviewOutput.append(overview, coverage, questions, actions, metadata);
+  };
+
+  const openInterviewBrief = async (item) => {
+    if (!(interviewDialog instanceof HTMLDialogElement)) return;
+    activeInterviewApplication = item;
+    if (interviewDialogContext) {
+      interviewDialogContext.textContent = `${item.job_title} · ${item.company_name} · ${item.resume_name}`;
+    }
+    if (interviewJobDescription instanceof HTMLTextAreaElement) interviewJobDescription.value = "";
+    if (interviewFocus instanceof HTMLInputElement) {
+      interviewFocus.value = item.status === "interview" ? "Upcoming interview" : "";
+    }
+    renderInterviewEmpty();
+    setInterviewStatus("Checking for a saved brief…", "pending");
+    interviewDialog.showModal();
+    try {
+      const brief = await api(`/api/v1/job-applications/${encodeURIComponent(item.id)}/interview-brief`);
+      if (activeInterviewApplication?.id !== item.id) return;
+      renderInterviewBrief(brief);
+      setInterviewStatus("Saved brief loaded.", "success");
+    } catch (error) {
+      if (activeInterviewApplication?.id !== item.id) return;
+      if (error?.status === 404) setInterviewStatus("No brief yet. Add context and generate one.");
+      else setInterviewStatus(error instanceof Error ? error.message : "The saved brief could not be loaded.", "error");
+    }
+  };
+
   const createApplicationCard = (item) => {
     const card = document.createElement("article");
     card.className = "application-card";
@@ -286,6 +448,10 @@ if (trackerPage instanceof HTMLElement) {
 
     const buttons = document.createElement("div");
     buttons.className = "record-actions";
+    const prepare = textElement("button", "ai-prep-action", "AI prep");
+    prepare.type = "button";
+    prepare.addEventListener("click", () => openInterviewBrief(item));
+    buttons.append(prepare);
     const edit = textElement("button", "", "Edit");
     edit.type = "button";
     edit.addEventListener("click", () => editApplication(item));
@@ -334,6 +500,47 @@ if (trackerPage instanceof HTMLElement) {
       return;
     }
     visible.forEach((item) => list.append(createApplicationCard(item)));
+  }
+
+  if (closeInterviewButton instanceof HTMLButtonElement && interviewDialog instanceof HTMLDialogElement) {
+    closeInterviewButton.addEventListener("click", () => interviewDialog.close());
+    interviewDialog.addEventListener("click", (event) => {
+      if (event.target === interviewDialog) interviewDialog.close();
+    });
+    interviewDialog.addEventListener("close", () => {
+      activeInterviewApplication = null;
+      setInterviewStatus("");
+    });
+  }
+  if (generateInterviewButton instanceof HTMLButtonElement) {
+    generateInterviewButton.addEventListener("click", async () => {
+      if (!activeInterviewApplication) return;
+      const applicationId = activeInterviewApplication.id;
+      generateInterviewButton.disabled = true;
+      setInterviewStatus("Building an evidence-grounded brief…", "pending");
+      try {
+        const brief = await api(
+          `/api/v1/job-applications/${encodeURIComponent(applicationId)}/interview-brief`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              job_description: interviewJobDescription instanceof HTMLTextAreaElement
+                ? interviewJobDescription.value
+                : null,
+              focus: interviewFocus instanceof HTMLInputElement ? interviewFocus.value : null,
+            }),
+          },
+        );
+        if (activeInterviewApplication?.id !== applicationId) return;
+        renderInterviewBrief(brief);
+        setInterviewStatus("Interview brief saved to this application.", "success");
+      } catch (error) {
+        if (activeInterviewApplication?.id !== applicationId) return;
+        setInterviewStatus(error instanceof Error ? error.message : "Forge could not generate the brief.", "error");
+      } finally {
+        generateInterviewButton.disabled = false;
+      }
+    });
   }
 
   if (cancelButton instanceof HTMLButtonElement) cancelButton.addEventListener("click", resetForm);

@@ -1,6 +1,6 @@
 # Axelyn Forge
 
-Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library and a shared builder for creating a first resume or editing imported PDF/DOCX content. Imported PDFs pass through LibreOffice to become DOCX before Forge produces an SDT-tagged standard template, structured JSON, and its JSON Schema. Candidates can preserve uncommon material in custom sections and generate private Word and PDF files. `/app/match` compares a selected resume with pasted or uploaded job descriptions, explains the gaps, and creates evidence-grounded tailored files when the fit supports it. `/app/tracker` records application stages, follow-up dates, notes, and the exact resume version attached to each role. FastAPI verifies the same Clerk session for every private operation.
+Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library and a shared builder for creating a first resume or editing imported PDF/DOCX content. Imported PDFs pass through LibreOffice to become DOCX before Forge produces an SDT-tagged standard template, structured JSON, and its JSON Schema. Candidates can preserve uncommon material in custom sections and generate private Word and PDF files. `/app/match` compares a selected resume with pasted or uploaded job descriptions, explains the gaps, and creates evidence-grounded tailored files when the fit supports it. `/app/tracker` records application stages, follow-up dates, notes, and the exact resume version attached to each role. Each tracked role can produce a private AI interview brief whose talking points cite verified evidence from that submitted resume. FastAPI verifies the same Clerk session for every private operation.
 
 The active product no longer depends on Discord.
 
@@ -88,6 +88,8 @@ The first public contract is versioned under `/api/v1`.
 | `POST` | `/api/v1/job-matches` | Analyze pasted or uploaded job-description content against an owned resume. |
 | `POST` | `/api/v1/job-matches/{id}/tailor` | Generate an evidence-grounded DOCX/PDF bundle for a Match or Some match result. |
 | `GET` | `/api/v1/job-match-documents/{id}/download` | Download an owned tailored resume document. |
+| `GET` | `/api/v1/job-applications/{id}/interview-brief` | Load the private interview brief saved for a tracked application. |
+| `POST` | `/api/v1/job-applications/{id}/interview-brief` | Generate or replace an evidence-grounded interview brief from the submitted resume snapshot. |
 
 Example request:
 

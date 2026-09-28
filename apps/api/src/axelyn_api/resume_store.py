@@ -163,6 +163,20 @@ class ResumeStore:
                     ON job_applications (user_id, updated_at DESC);
                 CREATE INDEX IF NOT EXISTS job_applications_owner_status
                     ON job_applications (user_id, status);
+
+                CREATE TABLE IF NOT EXISTS job_application_interview_briefs (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    application_id TEXT NOT NULL,
+                    object_key TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE (user_id, application_id),
+                    FOREIGN KEY (application_id) REFERENCES job_applications(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS interview_briefs_owner_updated
+                    ON job_application_interview_briefs (user_id, updated_at DESC);
                 """
             )
 
@@ -578,6 +592,61 @@ class ResumeStore:
                 (application_id, user_id),
             )
         return cursor.rowcount > 0
+
+    def get_interview_brief(
+        self, user_id: str, application_id: str
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM job_application_interview_briefs
+                WHERE user_id = ? AND application_id = ?
+                """,
+                (user_id, application_id),
+            ).fetchone()
+        return self._dict(row)
+
+    def upsert_interview_brief(
+        self,
+        *,
+        user_id: str,
+        application_id: str,
+        object_key: str,
+        model: str,
+    ) -> dict[str, Any] | None:
+        if self.get_job_application(user_id, application_id) is None:
+            return None
+        now = _now()
+        existing = self.get_interview_brief(user_id, application_id)
+        with self._connect() as connection:
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO job_application_interview_briefs (
+                        id, user_id, application_id, object_key, model,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        _identifier("brief"),
+                        user_id,
+                        application_id,
+                        object_key,
+                        model,
+                        now,
+                        now,
+                    ),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE job_application_interview_briefs
+                    SET object_key = ?, model = ?, updated_at = ?
+                    WHERE user_id = ? AND application_id = ?
+                    """,
+                    (object_key, model, now, user_id, application_id),
+                )
+        return self.get_interview_brief(user_id, application_id)
 
     def create_document(
         self,

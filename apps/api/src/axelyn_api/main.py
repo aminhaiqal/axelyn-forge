@@ -7,12 +7,15 @@ import tempfile
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, AsyncIterator, Optional
+from typing import Any, Annotated, AsyncIterator, Callable, Optional
 
 import uvicorn
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+
+from forge.errors import ProviderError
+from forge.interview_brief import InterviewBriefInputError, generate_interview_brief
 
 from . import __version__
 from .auth import ClerkAuthenticator, UserAuthenticator
@@ -37,6 +40,8 @@ from .models import (
     AuthenticatedUser,
     GeneratedDocumentBundle,
     GeneratedDocumentSummary,
+    InterviewBrief,
+    InterviewBriefRequest,
     JobApplicationCreate,
     JobApplicationSummary,
     JobApplicationUpdate,
@@ -331,6 +336,7 @@ def create_app(
     settings: Optional[Settings] = None,
     authenticate_user: Optional[UserAuthenticator] = None,
     document_converter: Optional[DocumentConverter] = None,
+    interview_brief_generator: Optional[Callable[..., dict[str, Any]]] = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings.from_environ()
     store = ServiceRequestStore(resolved_settings.database_path)
@@ -345,6 +351,7 @@ def create_app(
         resolved_settings.converter_endpoint,
         resolved_settings.converter_timeout_seconds,
     )
+    brief_generator = interview_brief_generator or generate_interview_brief
 
     def require_user(request: Request) -> str:
         return user_authenticator(request)
@@ -408,6 +415,7 @@ def create_app(
     app.state.resume_store = resume_store
     app.state.object_store = object_store
     app.state.document_converter = converter
+    app.state.interview_brief_generator = brief_generator
 
     if resolved_settings.cors_origins:
         app.add_middleware(
@@ -1302,10 +1310,123 @@ def create_app(
         existing = resume_store.get_job_application(user_id, application_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Job application not found.")
+        interview_brief = resume_store.get_interview_brief(user_id, application_id)
         object_store.delete(str(existing["resume_snapshot_object_key"]))
+        if interview_brief is not None:
+            object_store.delete(str(interview_brief["object_key"]))
         if not resume_store.delete_job_application(user_id, application_id):
             raise HTTPException(status_code=404, detail="Job application not found.")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    def interview_brief_response(row: dict[str, object]) -> InterviewBrief:
+        try:
+            payload = decode_json(object_store.get(str(row["object_key"])))
+            return InterviewBrief(
+                id=str(row["id"]),
+                application_id=str(row["application_id"]),
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+                **payload,
+            )
+        except (KeyError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The interview brief is temporarily unavailable.",
+            ) from error
+
+    @app.get(
+        "/api/v1/job-applications/{application_id}/interview-brief",
+        response_model=InterviewBrief,
+        tags=["job tracker"],
+    )
+    def get_interview_brief(
+        application_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> InterviewBrief:
+        if resume_store.get_job_application(user_id, application_id) is None:
+            raise HTTPException(status_code=404, detail="Job application not found.")
+        row = resume_store.get_interview_brief(user_id, application_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Interview brief not found.")
+        return interview_brief_response(row)
+
+    @app.post(
+        "/api/v1/job-applications/{application_id}/interview-brief",
+        response_model=InterviewBrief,
+        tags=["job tracker"],
+    )
+    def create_interview_brief(
+        application_id: str,
+        payload: InterviewBriefRequest,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> InterviewBrief:
+        application = resume_store.get_job_application(user_id, application_id)
+        if application is None:
+            raise HTTPException(status_code=404, detail="Job application not found.")
+        try:
+            resume = decode_json(
+                object_store.get(str(application["resume_snapshot_object_key"]))
+            )
+        except (KeyError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The attached resume snapshot is temporarily unavailable.",
+            ) from error
+        try:
+            generated = brief_generator(
+                application=application,
+                resume=resume,
+                job_description=payload.job_description,
+                focus=payload.focus,
+            )
+            validated = InterviewBrief(
+                id="pending",
+                application_id=application_id,
+                created_at="pending",
+                updated_at="pending",
+                **generated,
+            )
+        except InterviewBriefInputError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error
+        except ProviderError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI interview preparation is temporarily unavailable.",
+            ) from error
+        except (TypeError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI interview preparation returned an invalid brief.",
+            ) from error
+
+        brief_payload = validated.model_dump(
+            exclude={"id", "application_id", "created_at", "updated_at"}
+        )
+        existing = resume_store.get_interview_brief(user_id, application_id)
+        object_key = (
+            f"{_object_prefix(user_id)}/job-applications/{application_id}/"
+            f"interview-brief-{uuid.uuid4().hex}.json"
+        )
+        object_store.put(object_key, encode_json(brief_payload), "application/json")
+        try:
+            row = resume_store.upsert_interview_brief(
+                user_id=user_id,
+                application_id=application_id,
+                object_key=object_key,
+                model=str(brief_payload["model"]),
+            )
+        except Exception:
+            object_store.delete(object_key)
+            raise
+        if row is None:
+            object_store.delete(object_key)
+            raise HTTPException(status_code=404, detail="Job application not found.")
+        if existing is not None:
+            object_store.delete(str(existing["object_key"]))
+        return interview_brief_response(row)
 
     @app.post(
         "/api/v1/job-matches",

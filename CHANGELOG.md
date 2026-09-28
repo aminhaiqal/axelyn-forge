@@ -6,6 +6,7 @@ Axelyn Forge follows semantic versioning. Git tags use the corresponding `vMAJOR
 
 ### Added
 
+- Added private AI interview briefs to tracked applications, with strict evidence references to the exact submitted resume snapshot, role coverage, likely questions, answer plans, candidate questions, and preparation actions.
 - Added repeatable user-defined skill categories with optional suggestions, removable skill tags, required category and skill validation, and preserved imported skill text.
 
 - Added repeatable structured project entries to the resume builder, including contribution, technology, outcome, metrics, status, dates, and optional project links.

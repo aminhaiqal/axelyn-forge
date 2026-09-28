@@ -66,7 +66,8 @@ flowchart LR
 1. The signed-in user creates an application record with the company, role, posting URL, status, dates, notes, and one owned resume source or approved version.
 2. FastAPI validates that both the application and selected resume belong to the same Clerk user. It stores the resume IDs, name and target-role labels, and a private content snapshot representing the version used for that application.
 3. The user can move the record through Saved, Applied, Screening, Interview, Offer, Rejected, or Withdrawn and can filter the pipeline in the browser.
-4. If a linked resume is later removed, SQLite clears the obsolete source and version IDs while retaining the owner-scoped attachment snapshot for an accurate application history. Deleting the application also deletes its private snapshot.
+4. On demand, OpenRouter receives the role context, optional job description, and a server-built catalog of verified facts from the attached snapshot. It returns a strict interview brief with coverage, likely questions, evidence-linked answer plans, questions to ask, and preparation actions. Evidence references are limited to catalog IDs, so unsupported claims remain visible gaps.
+5. If a linked resume is later removed, SQLite clears the obsolete source and version IDs while retaining the owner-scoped attachment snapshot for an accurate application history. Deleting the application also deletes its private snapshot and saved interview brief.
 
 ## Delivery
 

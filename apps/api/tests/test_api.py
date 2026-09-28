@@ -41,6 +41,43 @@ class FakeDocumentConverter:
         )
 
 
+class FakeInterviewBriefGenerator:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        return {
+            "role_summary": "A platform role focused on reliable services.",
+            "positioning": "Lead with production API and delivery experience.",
+            "coverage": [
+                {
+                    "requirement": "Reliable delivery",
+                    "assessment": "strong",
+                    "rationale": "The attached resume supports this area.",
+                    "evidence": ["Senior Engineer — achievements"],
+                }
+            ],
+            "questions": [
+                {
+                    "question": f"Interview question {index}",
+                    "interviewer_intent": "Understand the candidate's approach.",
+                    "answer_plan": "Explain the context, action, and result.",
+                    "evidence": ["Senior Engineer — achievements"],
+                }
+                for index in range(1, 4)
+            ],
+            "questions_to_ask": [
+                "How is success measured?",
+                "What is the current architecture?",
+                "What should improve first?",
+            ],
+            "preparation_actions": ["Review the delivery example."],
+            "facts_to_confirm": [],
+            "model": "openai/gpt-test",
+        }
+
+
 class ApiTests(unittest.TestCase):
     @staticmethod
     def authenticate_user(request: Request) -> str:
@@ -133,6 +170,7 @@ class ApiTests(unittest.TestCase):
         self.storage = Path(self.temp_dir.name) / "objects"
         self.document_converter = FakeDocumentConverter()
         self.document_converter.normalized_docx = self.resume_docx()
+        self.interview_brief_generator = FakeInterviewBriefGenerator()
         app = create_app(
             Settings(
                 environment="test",
@@ -142,6 +180,7 @@ class ApiTests(unittest.TestCase):
             ),
             authenticate_user=self.authenticate_user,
             document_converter=self.document_converter,
+            interview_brief_generator=self.interview_brief_generator,
         )
         self.client_context = TestClient(app)
         self.client = self.client_context.__enter__()
@@ -756,6 +795,47 @@ class ApiTests(unittest.TestCase):
             "/api/v1/job-applications", headers=other_headers
         ).json())
 
+        generated_brief = self.client.post(
+            f"/api/v1/job-applications/{application['id']}/interview-brief",
+            headers=headers,
+            json={
+                "job_description": "Build reliable Python platforms.",
+                "focus": "Technical interview",
+            },
+        )
+        self.assertEqual(200, generated_brief.status_code, generated_brief.text)
+        brief = generated_brief.json()
+        self.assertTrue(brief["id"].startswith("brief_"))
+        self.assertEqual(application["id"], brief["application_id"])
+        self.assertEqual("openai/gpt-test", brief["model"])
+        self.assertEqual(3, len(brief["questions"]))
+        generator_call = self.interview_brief_generator.calls[-1]
+        self.assertEqual("Senior Platform Engineer", generator_call["application"]["job_title"])
+        self.assertEqual("Taylor Example", generator_call["resume"]["full_name"])
+        self.assertEqual("Technical interview", generator_call["focus"])
+        with sqlite3.connect(self.database) as connection:
+            brief_key = connection.execute(
+                """
+                SELECT object_key FROM job_application_interview_briefs
+                WHERE application_id = ?
+                """,
+                (application["id"],),
+            ).fetchone()[0]
+        brief_path = self.storage / brief_key
+        self.assertTrue(brief_path.is_file())
+        self.assertEqual(
+            404,
+            self.client.get(
+                f"/api/v1/job-applications/{application['id']}/interview-brief",
+                headers=other_headers,
+            ).status_code,
+        )
+        loaded_brief = self.client.get(
+            f"/api/v1/job-applications/{application['id']}/interview-brief",
+            headers=headers,
+        )
+        self.assertEqual(brief, loaded_brief.json())
+
         other_update = self.client.put(
             f"/api/v1/job-applications/{application['id']}",
             headers=other_headers,
@@ -809,6 +889,7 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(204, deleted.status_code)
         self.assertFalse(snapshot_path.exists())
+        self.assertFalse(brief_path.exists())
         self.assertEqual([], self.client.get(
             "/api/v1/job-applications", headers=headers
         ).json())

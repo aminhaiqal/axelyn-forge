@@ -132,6 +132,48 @@ if (!isAuthenticated) {
         </div>
       </section>
     </main>
+
+    <dialog class="interview-dialog" id="interview-dialog" aria-labelledby="interview-dialog-title">
+      <div class="interview-dialog-frame">
+        <header class="interview-dialog-header">
+          <div>
+            <p><span></span> AI interview brief</p>
+            <h2 id="interview-dialog-title">Prepare for the conversation.</h2>
+            <small id="interview-dialog-context"></small>
+          </div>
+          <button id="close-interview-dialog" type="button" aria-label="Close interview preparation">×</button>
+        </header>
+
+        <div class="interview-dialog-body">
+          <aside class="interview-brief-controls">
+            <p>
+              Forge uses the exact resume saved with this application. Paste the job description or interview details to make the brief more specific.
+            </p>
+            <label>
+              <span>Job description or interview details</span>
+              <textarea id="interview-job-description" maxlength="20000" rows="9" placeholder="Paste the role requirements, recruiter email, or interview agenda."></textarea>
+            </label>
+            <label>
+              <span>Preparation focus <small>optional</small></span>
+              <input id="interview-focus" type="text" maxlength="1000" placeholder="e.g. system design round, recruiter screen" />
+            </label>
+            <p class="interview-privacy">Private · grounded in your submitted resume · gaps stay gaps</p>
+            <p class="interview-status" id="interview-status" aria-live="polite"></p>
+            <button class="generate-interview-brief" id="generate-interview-brief" type="button">
+              Generate interview brief <span aria-hidden="true">→</span>
+            </button>
+          </aside>
+
+          <section class="interview-brief-output" id="interview-brief-output" aria-live="polite">
+            <div class="interview-brief-empty">
+              <span>01 / READY</span>
+              <strong>Turn the application into a focused interview plan.</strong>
+              <p>Forge will surface likely questions, the evidence to use, honest gaps, and useful questions to ask the interviewer.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </dialog>
   </div>
   <script is:inline src="/scripts/job-tracker.js" defer></script>
 </BaseLayout>

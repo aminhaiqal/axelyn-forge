@@ -583,6 +583,49 @@ class JobApplicationSummary(BaseModel):
     updated_at: str
 
 
+class InterviewBriefRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    job_description: Optional[str] = Field(default=None, max_length=20_000)
+    focus: Optional[str] = Field(default=None, max_length=1_000)
+
+    @field_validator("job_description", "focus", mode="before")
+    @classmethod
+    def blank_values_are_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+
+class InterviewCoverageItem(BaseModel):
+    requirement: str
+    assessment: Literal["strong", "partial", "gap"]
+    rationale: str
+    evidence: List[str]
+
+
+class InterviewQuestion(BaseModel):
+    question: str
+    interviewer_intent: str
+    answer_plan: str
+    evidence: List[str]
+
+
+class InterviewBrief(BaseModel):
+    id: str
+    application_id: str
+    role_summary: str
+    positioning: str
+    coverage: List[InterviewCoverageItem]
+    questions: List[InterviewQuestion]
+    questions_to_ask: List[str]
+    preparation_actions: List[str]
+    facts_to_confirm: List[str]
+    model: str
+    created_at: str
+    updated_at: str
+
+
 JobMatchState = Literal["match", "some_match", "no_match"]
 
 
