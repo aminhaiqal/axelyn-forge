@@ -239,7 +239,6 @@ def retrieve_job_description_with_openrouter(
                     "schema": WEB_JOB_DESCRIPTION_SCHEMA,
                     "strict": True,
                 },
-                "verbosity": "low",
             },
             reasoning={"effort": "low"},
             max_output_tokens=16000,

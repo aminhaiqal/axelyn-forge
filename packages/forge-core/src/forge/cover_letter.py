@@ -234,7 +234,6 @@ def generate_cover_letter_draft(
                     "schema": COVER_LETTER_DRAFT_SCHEMA,
                     "strict": True,
                 },
-                "verbosity": "low",
             },
             max_output_tokens=6000,
             store=False,

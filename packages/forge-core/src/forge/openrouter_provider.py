@@ -232,7 +232,6 @@ def generate_tailoring_plan(
                     "schema": TAILORING_PLAN_SCHEMA,
                     "strict": True,
                 },
-                "verbosity": "low",
             },
             max_output_tokens=10000,
             store=False,

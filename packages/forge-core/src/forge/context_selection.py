@@ -312,7 +312,6 @@ def select_context_with_openrouter(
                     "schema": response_schema,
                     "strict": True,
                 },
-                "verbosity": "low",
             },
             max_output_tokens=4000,
             store=False,

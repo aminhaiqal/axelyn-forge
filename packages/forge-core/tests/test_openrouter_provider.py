@@ -92,6 +92,7 @@ class OpenRouterProviderTests(unittest.TestCase):
             call["extra_body"],
         )
         self.assertTrue(call["text"]["format"]["strict"])
+        self.assertNotIn("verbosity", call["text"])
         self.assertEqual(TAILORING_PLAN_SCHEMA, call["text"]["format"]["schema"])
         payload = json.loads(call["input"])
         self.assertEqual("A supplied full-stack job description", payload["jobDescription"])
