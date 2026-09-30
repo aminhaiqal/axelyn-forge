@@ -433,7 +433,14 @@ if (forgePage instanceof HTMLElement) {
       sendButton.disabled = true;
       messageInput.disabled = true;
       toolButtons.forEach((button) => { button.disabled = true; });
-      setStatus(messageStatus, "Testing your statement against the role and saved evidence…", "pending");
+      const hasPublicLink = /https?:\/\/[^\s<>"']+/i.test(content);
+      setStatus(
+        messageStatus,
+        hasPublicLink
+          ? "Reading the linked website, separating public context from your responsibilities, and testing the evidence…"
+          : "Testing your statement against the role and saved evidence…",
+        "pending",
+      );
       try {
         const updated = await api(`/api/v1/forge-ai/threads/${encodeURIComponent(activeThread.id)}/messages`, {
           method: "POST",
@@ -443,7 +450,12 @@ if (forgePage instanceof HTMLElement) {
         messageInput.value = "";
         renderThread(updated);
         await loadThreads();
-        setStatus(messageStatus, "The full exchange is saved. Working memory was compressed without discarding the transcript.");
+        setStatus(
+          messageStatus,
+          hasPublicLink
+            ? "The public website context and your own stated responsibilities were assessed separately. The full exchange is saved."
+            : "The full exchange is saved. Working memory was compressed without discarding the transcript.",
+        );
         transcript?.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       } catch (error) {
         setStatus(messageStatus, error instanceof Error ? error.message : "Forge AI could not assess that evidence.", "error");

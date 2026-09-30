@@ -128,6 +128,7 @@ class ForgeAIProviderTests(unittest.TestCase):
         self.assertEqual(14, len(request["recentConversation"]))
         self.assertEqual("Message 6", request["recentConversation"][0]["content"])
         self.assertGreater(len(request["verifiedResumeEvidence"]), 2)
+        self.assertEqual([], request["linkedWebsiteContexts"])
 
     def test_retries_a_transient_provider_failure(self):
         responses = FlakyResponses(provider_payload())

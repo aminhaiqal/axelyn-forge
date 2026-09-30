@@ -101,6 +101,7 @@ from .resume_store import ResumeStore
 from .resume_templates import render_resume, template_catalog
 from .storage import create_object_store
 from .store import ServiceRequestStore
+from .website_context import extract_public_urls, retrieve_website_context
 
 
 PROFILE_PHOTO_MAX_BYTES = 5 * 1024 * 1024
@@ -379,6 +380,7 @@ def create_app(
     resume_draft_generator: Optional[Callable[..., dict[str, object]]] = None,
     forge_ai_generator: Optional[Callable[..., dict[str, object]]] = None,
     resume_enhancement_generator: Optional[Callable[..., dict[str, object]]] = None,
+    website_context_reader: Optional[Callable[..., object]] = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings.from_environ()
     store = ServiceRequestStore(resolved_settings.database_path)
@@ -398,6 +400,7 @@ def create_app(
     enhancement_generator = (
         resume_enhancement_generator or generate_resume_enhancement
     )
+    website_reader = website_context_reader or retrieve_website_context
     draft_generator = resume_draft_generator
     if draft_generator is None and resolved_settings.environment.casefold() != "test":
         draft_generator = structure_resume_with_openrouter
@@ -568,6 +571,7 @@ def create_app(
     app.state.resume_draft_generator = draft_generator
     app.state.forge_ai_generator = coach_generator
     app.state.resume_enhancement_generator = enhancement_generator
+    app.state.website_context_reader = website_reader
 
     if resolved_settings.cors_origins:
         app.add_middleware(
@@ -1842,6 +1846,25 @@ def create_app(
             }
             for row in resume_store.list_forge_ai_messages(user_id, thread_id)
         ]
+        website_contexts: list[dict[str, object]] = []
+        for linked_url in extract_public_urls(user_message):
+            try:
+                website_context = website_reader(
+                    url=linked_url,
+                    user_message=user_message,
+                )
+                if isinstance(website_context, dict):
+                    website_contexts.append(website_context)
+                else:
+                    website_contexts.append(website_context.as_prompt_dict())
+            except ProviderError:
+                website_contexts.append(
+                    {
+                        "status": "unavailable",
+                        "requestedUrl": linked_url,
+                        "error": "The public page could not be read.",
+                    }
+                )
         try:
             generated = coach_generator(
                 target_role=str(match["target_role"]),
@@ -1852,6 +1875,7 @@ def create_app(
                 memory=memory.model_dump(mode="json"),
                 recent_messages=recent_messages,
                 user_message=user_message,
+                website_contexts=website_contexts,
             )
             next_memory = ForgeAIMemory(**generated["memory"])
             assistant_message = str(generated["assistant_message"]).strip()

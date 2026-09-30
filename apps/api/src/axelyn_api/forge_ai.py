@@ -41,6 +41,12 @@ Evidence rules:
 - `resume` facts must cite one or more supplied evidence IDs.
 - A fact newly stated by the user may be recorded with source `user`; describe it as
   user-confirmed until it is supported by a source document.
+- `linkedWebsiteContexts` contains public background read from URLs in the latest user
+  message. Use it to understand the business, product, audience, and visible workflows.
+  It does not prove that the candidate worked on the site or built any internal system.
+  Keep the candidate's personal responsibilities separately user-confirmed.
+- If a linked website has status `unavailable`, say that it could not be read and rely
+  only on information the user supplied. Never imply that an unavailable page was read.
 - Do not turn a vague agreement into a detailed claim. Ask for project, action,
   technology, scale, and outcome when those details are missing.
 - Preserve rejected claims and negative answers so you do not ask for or propose them
@@ -144,6 +150,7 @@ def generate_forge_ai_response(
     memory: dict[str, object],
     recent_messages: list[dict[str, object]],
     user_message: str,
+    website_contexts: list[dict[str, object]] | None = None,
     client: Any = None,
     model: str | None = None,
 ) -> dict[str, object]:
@@ -168,6 +175,7 @@ def generate_forge_ai_response(
             "structuredMemory": memory,
             "recentConversation": recent_messages[-14:],
             "latestUserMessage": user_message,
+            "linkedWebsiteContexts": website_contexts or [],
         },
         ensure_ascii=False,
     )

@@ -123,6 +123,23 @@ class FakeForgeAIGenerator:
         }
 
 
+class FakeWebsiteContextReader:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        return {
+            "status": "found",
+            "requestedUrl": kwargs["url"],
+            "title": "Pastelocity - Handcrafted Caftans & Modest Fashion",
+            "siteName": "Pastelocity",
+            "summary": "A modest-fashion commerce site with products and custom orders.",
+            "keyFacts": ["Offers kaftans, blouses, and custom orders."],
+            "retrievedSourceUrls": [kwargs["url"]],
+        }
+
+
 class FakeResumeEnhancementGenerator:
     def __init__(self):
         self.calls = []
@@ -252,6 +269,7 @@ class ApiTests(unittest.TestCase):
         self.interview_brief_generator = FakeInterviewBriefGenerator()
         self.resume_draft_generator = FakeResumeDraftGenerator()
         self.forge_ai_generator = FakeForgeAIGenerator()
+        self.website_context_reader = FakeWebsiteContextReader()
         self.resume_enhancement_generator = FakeResumeEnhancementGenerator()
         app = create_app(
             Settings(
@@ -266,6 +284,7 @@ class ApiTests(unittest.TestCase):
             resume_draft_generator=self.resume_draft_generator,
             forge_ai_generator=self.forge_ai_generator,
             resume_enhancement_generator=self.resume_enhancement_generator,
+            website_context_reader=self.website_context_reader,
         )
         self.client_context = TestClient(app)
         self.client = self.client_context.__enter__()
@@ -1230,7 +1249,8 @@ class ApiTests(unittest.TestCase):
         )
 
         detailed_fact = (
-            "I personally deployed the service to Kubernetes, added production observability, "
+            "For https://pastelocity.com.my/, I personally deployed the service to Kubernetes, "
+            "added production observability, "
             "and owned the release incident review. "
             + "The supporting project record contains exact implementation detail. " * 90
         ).strip()
@@ -1248,6 +1268,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(detailed_fact, updated["memory"]["confirmed_facts"][0]["fact"])
         self.assertEqual("user", updated["memory"]["confirmed_facts"][0]["source"])
         self.assertEqual(detailed_fact, self.forge_ai_generator.calls[-1]["user_message"])
+        self.assertEqual(
+            "https://pastelocity.com.my/",
+            self.website_context_reader.calls[-1]["url"],
+        )
+        self.assertEqual(
+            "Pastelocity",
+            self.forge_ai_generator.calls[-1]["website_contexts"][0]["siteName"],
+        )
 
         listed = self.client.get(
             "/api/v1/forge-ai/threads", headers=headers

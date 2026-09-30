@@ -182,7 +182,7 @@ Run the full OpenRouter-assisted workflow:
   --output-dir output
 ```
 
-Set `OPENROUTER_API_KEY` before running AI-assisted commands. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. OpenRouter requests use `store=False`, require zero-data-retention endpoints, deny provider data collection, and write only usage metadata to SQLite without prompt content or API keys. Model overrides use OpenRouter model IDs such as `openai/gpt-5.4-mini`; the evidence coach can be configured independently with `OPENROUTER_FORGE_AI_MODEL`.
+Set `OPENROUTER_API_KEY` before running AI-assisted commands. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. OpenRouter requests use `store=False`, require zero-data-retention endpoints, deny provider data collection, and write only usage metadata to SQLite without prompt content or API keys. Model overrides use OpenRouter model IDs such as `openai/gpt-5.4-mini`; the evidence coach can be configured independently with `OPENROUTER_FORGE_AI_MODEL`. When a Forge AI prompt contains a public URL, its domain-restricted reading stage uses `OPENROUTER_WEB_CONTEXT_MODEL` and supplies public site context separately from the candidate's user-confirmed responsibilities.
 
 Forge uses the OpenAI-compatible Python client as its HTTP transport, configured with OpenRouter's base URL and API key. It does not send these workflows to the OpenAI API endpoint.
 

@@ -113,9 +113,9 @@ if (!isAuthenticated) {
             <div class="forge-transcript" id="forge-transcript" aria-live="polite"></div>
             <form class="forge-composer" id="forge-composer">
               <label for="forge-message">Add facts, correct the record, or ask for a hard assessment</label>
-              <textarea id="forge-message" name="content" rows="4" placeholder="Describe the real project, what you personally did, the tools involved, and the outcome…" required></textarea>
+              <textarea id="forge-message" name="content" rows="4" placeholder="Describe the real project, what you personally did, the tools involved, and the outcome. You can include a public website URL for business or project context…" required></textarea>
               <div>
-                <p id="forge-message-status" role="status" aria-live="polite">No arbitrary character limit. Detail helps; unsupported detail does not count.</p>
+                <p id="forge-message-status" role="status" aria-live="polite">Public links are read for context. They do not prove your personal responsibilities.</p>
                 <button type="submit" id="forge-send-message">Submit evidence <span aria-hidden="true">→</span></button>
               </div>
             </form>
