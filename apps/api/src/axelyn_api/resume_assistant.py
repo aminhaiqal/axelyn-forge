@@ -77,7 +77,7 @@ class AIResumeStructure(BaseModel):
     portfolio_url: str = Field(max_length=500)
     github_url: str = Field(max_length=500)
     other_professional_link: str = Field(max_length=500)
-    summary: str = Field(max_length=2_000)
+    summary: str
     sections: ResumeFallbackSections
     experience_entries: list[ResumeExperienceEntry] = Field(max_length=30)
     education_entries: list[ResumeEducationEntry] = Field(max_length=20)

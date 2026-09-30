@@ -75,7 +75,7 @@ if (!isAuthenticated) {
             </div>
           </div>
 
-          <label><span>Professional summary</span><textarea name="summary" rows="5" maxlength="2000" placeholder="Write 2–4 concise sentences about your experience, strengths, and direction."></textarea></label>
+          <label><span>Professional summary</span><textarea name="summary" rows="5" placeholder="Write 2–4 concise sentences about your experience, strengths, and direction."></textarea></label>
 
           <div class="builder-subsection">
             <div class="builder-subsection-heading">
@@ -98,7 +98,7 @@ if (!isAuthenticated) {
               <strong>Preserved imported education</strong>
               <p>This text came from an older or uploaded resume. Keep it here, or move it into structured entries above and clear it when finished.</p>
             </div>
-            <label><span>Imported education text</span><textarea name="section_education" rows="9" maxlength="12000"></textarea></label>
+            <label><span>Imported education text</span><textarea name="section_education" rows="9"></textarea></label>
           </div>
         </section>
 
@@ -111,7 +111,7 @@ if (!isAuthenticated) {
               <strong>Preserved imported work content</strong>
               <p>This text came from an older or uploaded resume. Keep it here, or move it into structured entries above and clear it when finished.</p>
             </div>
-            <label><span>Imported experience text</span><textarea name="section_experience" rows="10" maxlength="30000"></textarea></label>
+            <label><span>Imported experience text</span><textarea name="section_experience" rows="10"></textarea></label>
           </div>
         </section>
 
@@ -124,7 +124,7 @@ if (!isAuthenticated) {
               <strong>Preserved imported projects</strong>
               <p>This text came from an older or uploaded resume. Keep it here, or move it into structured entries above and clear it when finished.</p>
             </div>
-            <label><span>Imported project text</span><textarea name="section_projects" rows="10" maxlength="30000"></textarea></label>
+            <label><span>Imported project text</span><textarea name="section_projects" rows="10"></textarea></label>
           </div>
         </section>
 
@@ -137,7 +137,7 @@ if (!isAuthenticated) {
               <strong>Preserved imported skills</strong>
               <p>This text came from an older or uploaded resume. Keep it here, or move it into structured categories above and clear it when finished.</p>
             </div>
-            <label><span>Imported skill text</span><textarea name="section_skills" rows="8" maxlength="12000"></textarea></label>
+            <label><span>Imported skill text</span><textarea name="section_skills" rows="8"></textarea></label>
           </div>
         </section>
 
@@ -175,7 +175,7 @@ if (!isAuthenticated) {
       <article class="custom-section-card">
         <div><span>Custom section</span><button type="button" data-remove-custom>Remove</button></div>
         <label><span>Section title</span><input data-custom-title maxlength="80" placeholder="e.g. Certifications" required /></label>
-        <label><span>Content</span><textarea data-custom-lines rows="6" maxlength="20000" placeholder="Keep one item or bullet on each line."></textarea></label>
+        <label><span>Content</span><textarea data-custom-lines rows="6" placeholder="Keep one item or bullet on each line."></textarea></label>
       </article>
     </template>
 
@@ -206,12 +206,12 @@ if (!isAuthenticated) {
           <div class="education-optional-fields">
             <label><span>GPA / CGPA</span><input data-education-field="gpa" maxlength="80" placeholder="3.72 / 4.00" /></label>
             <label><span>Honours / Classification</span><input data-education-field="honours" maxlength="160" placeholder="First Class Honours" /></label>
-            <label class="education-field-wide"><span>Relevant Coursework</span><textarea data-education-field="relevant_coursework" rows="3" maxlength="2000" placeholder="Software Architecture, Database Systems, Machine Learning"></textarea></label>
+            <label class="education-field-wide"><span>Relevant Coursework</span><textarea data-education-field="relevant_coursework" rows="3" placeholder="Software Architecture, Database Systems, Machine Learning"></textarea></label>
             <label class="education-field-wide"><span>Final Year Project / Thesis Title</span><input data-education-field="thesis_title" maxlength="300" placeholder="Intelligent Regulatory Document Classification System" /></label>
-            <label class="education-field-wide"><span>Project / Thesis Description</span><textarea data-education-field="thesis_description" rows="4" maxlength="4000" placeholder="Briefly describe what you built or researched."></textarea></label>
-            <label class="education-field-wide"><span>Academic Achievements / Awards</span><textarea data-education-field="academic_achievements" rows="4" maxlength="4000" placeholder="Dean’s List, scholarships, competitions, or academic awards. Keep one item on each line."></textarea></label>
-            <label class="education-field-wide"><span>Activities &amp; Societies</span><textarea data-education-field="activities" rows="3" maxlength="4000" placeholder="Clubs, associations, leadership positions, or student organisations."></textarea></label>
-            <label class="education-field-wide"><span>Relevant Skills Learned</span><textarea data-education-field="relevant_skills" rows="3" maxlength="2000" placeholder="Optional skills gained through this qualification."></textarea></label>
+            <label class="education-field-wide"><span>Project / Thesis Description</span><textarea data-education-field="thesis_description" rows="4" placeholder="Briefly describe what you built or researched."></textarea></label>
+            <label class="education-field-wide"><span>Academic Achievements / Awards</span><textarea data-education-field="academic_achievements" rows="4" placeholder="Dean’s List, scholarships, competitions, or academic awards. Keep one item on each line."></textarea></label>
+            <label class="education-field-wide"><span>Activities &amp; Societies</span><textarea data-education-field="activities" rows="3" placeholder="Clubs, associations, leadership positions, or student organisations."></textarea></label>
+            <label class="education-field-wide"><span>Relevant Skills Learned</span><textarea data-education-field="relevant_skills" rows="3" placeholder="Optional skills gained through this qualification."></textarea></label>
           </div>
         </details>
       </article>
@@ -238,8 +238,8 @@ if (!isAuthenticated) {
               <label><input type="radio" data-work-current value="no" checked /><span>No</span></label>
             </div>
           </fieldset>
-          <label class="work-field-wide"><span>Job Description / Responsibilities</span><textarea data-work-field="responsibilities" rows="5" maxlength="10000" placeholder="Describe your main responsibilities in this role."></textarea></label>
-          <label class="work-field-wide"><span>Key Achievements</span><textarea data-work-field="achievements" rows="5" maxlength="10000" placeholder="What did you accomplish or improve during this role? Keep one achievement on each line."></textarea></label>
+          <label class="work-field-wide"><span>Job Description / Responsibilities</span><textarea data-work-field="responsibilities" rows="5" placeholder="Describe your main responsibilities in this role."></textarea></label>
+          <label class="work-field-wide"><span>Key Achievements</span><textarea data-work-field="achievements" rows="5" placeholder="What did you accomplish or improve during this role? Keep one achievement on each line."></textarea></label>
         </div>
       </article>
     </template>
@@ -271,15 +271,15 @@ if (!isAuthenticated) {
             <p>Focus on what you personally contributed and the change the project created.</p>
           </div>
           <div class="project-story-fields">
-            <label><span>What problem does this project solve?</span><small>Briefly explain the problem or need behind the project.</small><textarea data-project-field="problem" rows="4" maxlength="4000"></textarea></label>
-            <label><span>What does the project do?</span><small>Describe the product, system, application, or solution.</small><textarea data-project-field="description" rows="4" maxlength="4000"></textarea></label>
-            <label><span>Who is it built for?</span><small>Customers, businesses, internal users, students, developers, etc.</small><textarea data-project-field="audience" rows="3" maxlength="2000"></textarea></label>
-            <label><span>What did you personally work on?</span><small>Describe your own contribution, not only what the whole team built.</small><textarea data-project-field="personal_contribution" rows="4" maxlength="8000" placeholder="Designed the backend API, payment integration, and PostgreSQL database."></textarea></label>
-            <label><span>What were your main responsibilities?</span><small>Architecture, frontend, backend, database, deployment, testing, integrations, etc.</small><textarea data-project-field="responsibilities" rows="4" maxlength="8000"></textarea></label>
-            <label><span>What did you build or implement?</span><small>Authentication system, REST API, recommendation engine, payment workflow, etc.</small><textarea data-project-field="deliverables" rows="4" maxlength="8000"></textarea></label>
-            <label><span>What technologies did you use?</span><small>Python, React, FastAPI, PostgreSQL, AWS, Docker, etc.</small><textarea data-project-field="technologies" rows="3" maxlength="4000"></textarea></label>
-            <label><span>What was the result or impact?</span><small>Explain what improved because this project existed.</small><textarea data-project-field="impact" rows="4" maxlength="8000"></textarea></label>
-            <label class="project-field-wide"><span>Do you have measurable results?</span><small>Examples: 5,000 users, 20 customers, 100K documents processed, 60% faster, RM20K revenue, or 99.9% uptime.</small><textarea data-project-field="metrics" rows="3" maxlength="4000"></textarea></label>
+            <label><span>What problem does this project solve?</span><small>Briefly explain the problem or need behind the project.</small><textarea data-project-field="problem" rows="4"></textarea></label>
+            <label><span>What does the project do?</span><small>Describe the product, system, application, or solution.</small><textarea data-project-field="description" rows="4"></textarea></label>
+            <label><span>Who is it built for?</span><small>Customers, businesses, internal users, students, developers, etc.</small><textarea data-project-field="audience" rows="3"></textarea></label>
+            <label><span>What did you personally work on?</span><small>Describe your own contribution, not only what the whole team built.</small><textarea data-project-field="personal_contribution" rows="4" placeholder="Designed the backend API, payment integration, and PostgreSQL database."></textarea></label>
+            <label><span>What were your main responsibilities?</span><small>Architecture, frontend, backend, database, deployment, testing, integrations, etc.</small><textarea data-project-field="responsibilities" rows="4"></textarea></label>
+            <label><span>What did you build or implement?</span><small>Authentication system, REST API, recommendation engine, payment workflow, etc.</small><textarea data-project-field="deliverables" rows="4"></textarea></label>
+            <label><span>What technologies did you use?</span><small>Python, React, FastAPI, PostgreSQL, AWS, Docker, etc.</small><textarea data-project-field="technologies" rows="3"></textarea></label>
+            <label><span>What was the result or impact?</span><small>Explain what improved because this project existed.</small><textarea data-project-field="impact" rows="4"></textarea></label>
+            <label class="project-field-wide"><span>Do you have measurable results?</span><small>Examples: 5,000 users, 20 customers, 100K documents processed, 60% faster, RM20K revenue, or 99.9% uptime.</small><textarea data-project-field="metrics" rows="3"></textarea></label>
           </div>
         </div>
         <details class="project-optional">
@@ -287,7 +287,7 @@ if (!isAuthenticated) {
           <div class="project-optional-fields">
             <label><span>Project URL <small>optional</small></span><input data-project-field="project_url" type="url" maxlength="500" placeholder="https://monitorscape.example" /></label>
             <label><span>GitHub / Repository URL <small>optional</small></span><input data-project-field="repository_url" type="url" maxlength="500" placeholder="https://github.com/username/project" /></label>
-            <label class="project-field-wide"><span>What was the most challenging part of the project? <small>optional</small></span><textarea data-project-field="challenge" rows="4" maxlength="4000" placeholder="Describe the constraint, complexity, or technical challenge you worked through."></textarea></label>
+            <label class="project-field-wide"><span>What was the most challenging part of the project? <small>optional</small></span><textarea data-project-field="challenge" rows="4" placeholder="Describe the constraint, complexity, or technical challenge you worked through."></textarea></label>
           </div>
         </details>
       </article>

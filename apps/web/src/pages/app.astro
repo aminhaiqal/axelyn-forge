@@ -43,9 +43,9 @@ if (!isAuthenticated) {
             </div>
           </div>
 
-          <form class="upload-panel" id="resume-upload-form">
+          <section class="upload-panel" aria-label="Import resume files">
             <label class="drop-zone" id="resume-drop-zone" for="resume-files">
-              <input id="resume-files" name="files" type="file" accept=".docx,.pdf" multiple required />
+              <input id="resume-files" type="file" accept=".docx,.pdf" multiple />
               <span class="upload-mark" aria-hidden="true">+</span>
               <span class="upload-copy">
                 <strong>Bring in your resume files</strong>
@@ -53,16 +53,9 @@ if (!isAuthenticated) {
               </span>
               <span class="choose-files">Choose files</span>
             </label>
-            <div class="upload-options">
-              <label>
-                <span>Shared target role <small>optional</small></span>
-                <input name="target_role" type="text" maxlength="160" placeholder="e.g. Frontend Engineer" />
-              </label>
-              <button class="primary-button" type="submit">Import resumes <span aria-hidden="true">→</span></button>
-            </div>
-            <div class="file-selection" id="file-selection" hidden></div>
+            <div class="file-queue" id="file-queue" hidden></div>
             <p class="form-status" id="upload-status" aria-live="polite"></p>
-          </form>
+          </section>
 
           <div class="source-list" id="resume-source-list" aria-live="polite"></div>
         </div>
@@ -83,6 +76,26 @@ if (!isAuthenticated) {
         <span>00</span>
         <div><strong>No resume sources yet.</strong><p>Create one from the guided form or import your first PDF or Word file.</p></div>
       </div>
+    </template>
+
+    <template id="upload-file-template">
+      <article class="upload-file" data-state="queued">
+        <div class="upload-file-identity">
+          <span class="upload-file-type"></span>
+          <div class="upload-file-copy">
+            <strong></strong>
+            <small class="upload-file-state">Ready to import</small>
+          </div>
+        </div>
+        <div class="upload-file-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="upload-progress-track"><span class="upload-progress-fill"></span></span>
+          <span class="upload-progress-value">0%</span>
+        </div>
+        <button class="upload-file-action" type="button" data-action="import-file">
+          <span class="upload-action-label">Import</span>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h13m-5-5 5 5-5 5" /></svg>
+        </button>
+      </article>
     </template>
 
     <footer class="library-footer">

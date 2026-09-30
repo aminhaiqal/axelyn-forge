@@ -104,12 +104,12 @@ class ApiTests(unittest.TestCase):
         return user_id
 
     @staticmethod
-    def resume_docx() -> bytes:
+    def resume_docx(experience_line: str = "Built production APIs.") -> bytes:
         content_types = b"""<?xml version="1.0" encoding="UTF-8"?>
         <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
           <Default Extension="xml" ContentType="application/xml"/>
         </Types>"""
-        document = b"""<?xml version="1.0" encoding="UTF-8"?>
+        document = f"""<?xml version="1.0" encoding="UTF-8"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
           <w:body>
             <w:p><w:r><w:t>Taylor Example</w:t></w:r></w:p>
@@ -120,9 +120,9 @@ class ApiTests(unittest.TestCase):
             <w:p><w:r><w:t>Experience</w:t></w:r></w:p>
             <w:p><w:r><w:t>Senior Engineer | Example Systems</w:t></w:r></w:p>
             <w:p><w:r><w:t>2022 - Present</w:t></w:r></w:p>
-            <w:p><w:pPr><w:numPr/></w:pPr><w:r><w:t>Built production APIs.</w:t></w:r></w:p>
+            <w:p><w:pPr><w:numPr/></w:pPr><w:r><w:t>{experience_line}</w:t></w:r></w:p>
           </w:body>
-        </w:document>"""
+        </w:document>""".encode()
         output = BytesIO()
         with zipfile.ZipFile(output, "w") as archive:
             for name, payload in (
@@ -549,6 +549,24 @@ class ApiTests(unittest.TestCase):
             document_xml = archive.read("word/document.xml")
         self.assertIn(b"Taylor Example", document_xml)
         self.assertIn(b"Built production APIs", document_xml)
+
+    def test_pdf_import_preserves_long_resume_section_lines(self):
+        headers = {"Authorization": "Bearer test-session"}
+        long_line = "Designed reliable production systems with documented tradeoffs. " * 50
+        self.assertGreater(len(long_line), 2_000)
+        self.document_converter.normalized_docx = self.resume_docx(long_line)
+
+        imported = self.client.post(
+            "/api/v1/resumes/imports",
+            headers=headers,
+            files=[("files", ("long-resume.pdf", self.resume_pdf(), "application/pdf"))],
+        )
+
+        self.assertEqual(201, imported.status_code, imported.text)
+        source_id = imported.json()["items"][0]["source"]["id"]
+        detail = self.client.get(f"/api/v1/resumes/{source_id}", headers=headers)
+        experience = detail.json()["draft"]["sections"]["experience"]
+        self.assertIn(long_line.strip(), experience[-1])
 
     def test_manual_resume_form_keeps_custom_sections_and_uses_standard_template(self):
         headers = {"Authorization": "Bearer test-session"}

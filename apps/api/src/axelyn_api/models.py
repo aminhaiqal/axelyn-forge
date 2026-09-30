@@ -143,8 +143,8 @@ class ResumeExperienceEntry(BaseModel):
         pattern=r"^(?:|[0-9]{4}-(?:0[1-9]|1[0-2]))$",
     )
     currently_working_here: bool = False
-    responsibilities: str = Field(default="", max_length=10_000)
-    achievements: str = Field(default="", max_length=10_000)
+    responsibilities: str = ""
+    achievements: str = ""
 
     @model_validator(mode="after")
     def current_role_has_no_end_date(self) -> Self:
@@ -174,12 +174,12 @@ class ResumeEducationEntry(BaseModel):
     currently_studying_here: bool = False
     gpa: str = Field(default="", max_length=80)
     honours: str = Field(default="", max_length=160)
-    relevant_coursework: str = Field(default="", max_length=2_000)
+    relevant_coursework: str = ""
     thesis_title: str = Field(default="", max_length=300)
-    thesis_description: str = Field(default="", max_length=4_000)
-    academic_achievements: str = Field(default="", max_length=4_000)
-    activities: str = Field(default="", max_length=4_000)
-    relevant_skills: str = Field(default="", max_length=2_000)
+    thesis_description: str = ""
+    academic_achievements: str = ""
+    activities: str = ""
+    relevant_skills: str = ""
 
     @model_validator(mode="after")
     def current_study_has_no_end_date(self) -> Self:
@@ -207,16 +207,16 @@ class ResumeProjectEntry(BaseModel):
         pattern=r"^(?:|[0-9]{4}-(?:0[1-9]|1[0-2]))$",
     )
     currently_working_on_project: bool = False
-    problem: str = Field(default="", max_length=4_000)
-    description: str = Field(default="", max_length=4_000)
-    audience: str = Field(default="", max_length=2_000)
-    personal_contribution: str = Field(default="", max_length=8_000)
-    responsibilities: str = Field(default="", max_length=8_000)
-    technologies: str = Field(default="", max_length=4_000)
-    challenge: str = Field(default="", max_length=4_000)
-    deliverables: str = Field(default="", max_length=8_000)
-    impact: str = Field(default="", max_length=8_000)
-    metrics: str = Field(default="", max_length=4_000)
+    problem: str = ""
+    description: str = ""
+    audience: str = ""
+    personal_contribution: str = ""
+    responsibilities: str = ""
+    technologies: str = ""
+    challenge: str = ""
+    deliverables: str = ""
+    impact: str = ""
+    metrics: str = ""
     project_status: ResumeProjectStatus = ""
 
     @model_validator(mode="after")
@@ -258,12 +258,10 @@ class ResumeCustomSection(BaseModel):
 
     @field_validator("lines")
     @classmethod
-    def lines_are_bounded(cls, value: List[str]) -> List[str]:
+    def lines_are_clean(cls, value: List[str]) -> List[str]:
         cleaned = []
         for line in value:
             normalized = line.strip()
-            if len(normalized) > 2_000:
-                raise ValueError("custom section lines are limited to 2,000 characters")
             if normalized:
                 cleaned.append(normalized)
         return cleaned
@@ -287,8 +285,8 @@ class ResumeDraft(BaseModel):
         "", "image/jpeg", "image/png", "image/webp"
     ] = ""
     contact_line: str = Field(default="", max_length=300)
-    summary: str = Field(default="", max_length=2_000)
-    extracted_text: str = Field(default="", max_length=100_000)
+    summary: str = ""
+    extracted_text: str = ""
     sections: dict[str, List[str]] = Field(default_factory=dict)
     experience_entries: List[ResumeExperienceEntry] = Field(
         default_factory=list,
@@ -332,7 +330,7 @@ class ResumeDraft(BaseModel):
 
     @field_validator("sections")
     @classmethod
-    def sections_are_bounded(
+    def sections_are_clean(
         cls, value: dict[str, List[str]]
     ) -> dict[str, List[str]]:
         unknown = set(value) - RESUME_SECTION_NAMES
@@ -345,8 +343,6 @@ class ResumeDraft(BaseModel):
             cleaned[section] = []
             for line in lines:
                 normalized = line.strip()
-                if len(normalized) > 2_000:
-                    raise ValueError("resume section lines are limited to 2,000 characters")
                 if normalized:
                     cleaned[section].append(normalized)
         return cleaned

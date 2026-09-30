@@ -331,7 +331,7 @@ def normalize_resume_text(text: str) -> dict[str, object]:
         "github_url": github_url[:500],
         "other_professional_link": other_link[:500],
         "contact_line": " | ".join(contact_parts)[:300],
-        "summary": summary[:2_000],
+        "summary": summary,
         "sections": sections,
         "custom_sections": custom_sections,
     }
