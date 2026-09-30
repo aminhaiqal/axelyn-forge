@@ -116,6 +116,19 @@ def _retryable_provider_error(error: Exception) -> bool:
     }
 
 
+def _parse_json_output(output_text: str) -> Any:
+    """Parse structured output, tolerating a provider-added JSON code fence."""
+    candidate = output_text.strip()
+    fenced = re.fullmatch(
+        r"```(?:json)?\s*(\{.*\})\s*```",
+        candidate,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if fenced:
+        candidate = fenced.group(1)
+    return json.loads(candidate)
+
+
 def extract_public_urls(message: str) -> list[str]:
     """Return up to two unique, normalized public URLs from a user message."""
     values: list[str] = []
@@ -233,7 +246,7 @@ def retrieve_website_context(
     if not output_text:
         raise ProviderError("Linked website returned no readable context")
     try:
-        result = json.loads(output_text)
+        result = _parse_json_output(output_text)
     except json.JSONDecodeError as error:
         raise ProviderError("Linked website returned invalid context") from error
     if isinstance(result, dict):

@@ -48,7 +48,8 @@ class FakeResponses:
             id="response-web",
             model="openai/gpt-test",
             output=web_output(),
-            output_text=json.dumps(
+            output_text="```json\n"
+            + json.dumps(
                 {
                     "status": "found",
                     "title": "Pastelocity - Handcrafted Caftans & Modest Fashion",
@@ -62,7 +63,8 @@ class FakeResponses:
                     ],
                     "error": None,
                 }
-            ),
+            )
+            + "\n```",
         )
 
 
