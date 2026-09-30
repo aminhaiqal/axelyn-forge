@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from copy import deepcopy
 from typing import Any, Literal
 
@@ -19,6 +21,10 @@ from forge.openrouter_client import (
 )
 
 from .resume_enhancer import evidence_label
+
+
+LOGGER = logging.getLogger(__name__)
+FORGE_AI_RETRY_DELAYS = (0.5, 1.5)
 
 
 FORGE_AI_INSTRUCTIONS = """
@@ -81,7 +87,7 @@ class ForgeAIProviderResponse(BaseModel):
     memory: ProviderMemory
 
 
-def _strict_schema() -> dict[str, Any]:
+def _strict_schema(allowed_evidence_ids: set[str]) -> dict[str, Any]:
     schema = deepcopy(ForgeAIProviderResponse.model_json_schema())
 
     def make_strict(value: object) -> None:
@@ -98,8 +104,34 @@ def _strict_schema() -> dict[str, Any]:
                 make_strict(child)
 
     make_strict(schema)
+    evidence_id_schema = {
+        "type": "string",
+        "enum": sorted(allowed_evidence_ids),
+    }
+    schema["properties"]["citations"]["items"] = evidence_id_schema
+    schema["$defs"]["ProviderMemoryFact"]["properties"]["evidence_ids"][
+        "items"
+    ] = evidence_id_schema
     Draft202012Validator.check_schema(schema)
     return schema
+
+
+def _retryable_provider_error(error: Exception) -> bool:
+    status_code = getattr(error, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code in {408, 409, 425, 429} or status_code >= 500
+    return type(error).__name__ in {
+        "APIConnectionError",
+        "APITimeoutError",
+        "InternalServerError",
+        "RateLimitError",
+    }
+
+
+def _provider_error_context(error: Exception) -> str:
+    status_code = getattr(error, "status_code", None)
+    status = status_code if isinstance(status_code, int) else "none"
+    return f"type={type(error).__name__} status={status}"
 
 
 def generate_forge_ai_response(
@@ -139,29 +171,52 @@ def generate_forge_ai_response(
         },
         ensure_ascii=False,
     )
-    schema = _strict_schema()
+    schema = _strict_schema(allowed_ids)
     if client is None:
         client = create_openrouter_client()
-    try:
-        response = client.responses.create(
-            model=selected_model,
-            instructions=FORGE_AI_INSTRUCTIONS,
-            input=payload,
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "forge_ai_response",
-                    "description": "Evidence-grounded coaching response and durable memory",
-                    "schema": schema,
-                    "strict": True,
-                }
-            },
-            max_output_tokens=6_000,
-            store=False,
-            extra_body=openrouter_request_options(),
-        )
-    except Exception as exc:
-        raise ProviderError(f"OpenRouter Forge AI request failed: {exc}") from exc
+    response = None
+    for attempt in range(len(FORGE_AI_RETRY_DELAYS) + 1):
+        try:
+            response = client.responses.create(
+                model=selected_model,
+                instructions=FORGE_AI_INSTRUCTIONS,
+                input=payload,
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "forge_ai_response",
+                        "description": "Evidence-grounded coaching response and durable memory",
+                        "schema": schema,
+                        "strict": True,
+                    }
+                },
+                max_output_tokens=6_000,
+                store=False,
+                extra_body=openrouter_request_options(),
+            )
+            break
+        except Exception as exc:
+            can_retry = attempt < len(FORGE_AI_RETRY_DELAYS) and _retryable_provider_error(
+                exc
+            )
+            if not can_retry:
+                LOGGER.error(
+                    "Forge AI provider request failed (%s)",
+                    _provider_error_context(exc),
+                )
+                raise ProviderError(
+                    f"OpenRouter Forge AI request failed: {_provider_error_context(exc)}"
+                ) from exc
+            delay = FORGE_AI_RETRY_DELAYS[attempt]
+            LOGGER.warning(
+                "Forge AI provider request failed (%s); retrying in %.1fs",
+                _provider_error_context(exc),
+                delay,
+            )
+            time.sleep(delay)
+
+    if response is None:
+        raise ProviderError("OpenRouter returned no Forge AI response")
 
     output_text = getattr(response, "output_text", "")
     if not output_text:

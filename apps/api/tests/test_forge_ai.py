@@ -1,6 +1,7 @@
 import json
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from forge.errors import ProviderError
 
@@ -61,6 +62,25 @@ class FakeResponses:
         )
 
 
+class RateLimitError(Exception):
+    status_code = 429
+
+
+class FlakyResponses(FakeResponses):
+    def __init__(self, payload: dict[str, object], failures: int = 1):
+        super().__init__(payload)
+        self.failures = failures
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        if len(self.calls) <= self.failures:
+            raise RateLimitError("temporary provider limit")
+        return SimpleNamespace(
+            output_text=json.dumps(self.payload),
+            model="openai/gpt-test",
+        )
+
+
 class ForgeAIProviderTests(unittest.TestCase):
     def test_generates_private_evidence_linked_response_with_bounded_context(self):
         responses = FakeResponses(provider_payload())
@@ -99,10 +119,43 @@ class ForgeAIProviderTests(unittest.TestCase):
         self.assertTrue(call["extra_body"]["provider"]["zdr"])
         self.assertEqual("deny", call["extra_body"]["provider"]["data_collection"])
         self.assertTrue(call["text"]["format"]["strict"])
+        schema = call["text"]["format"]["schema"]
+        self.assertIn(
+            "experience_1_achievements",
+            schema["properties"]["citations"]["items"]["enum"],
+        )
         request = json.loads(call["input"])
         self.assertEqual(14, len(request["recentConversation"]))
         self.assertEqual("Message 6", request["recentConversation"][0]["content"])
         self.assertGreater(len(request["verifiedResumeEvidence"]), 2)
+
+    def test_retries_a_transient_provider_failure(self):
+        responses = FlakyResponses(provider_payload())
+        client = SimpleNamespace(responses=responses)
+
+        with patch("axelyn_api.forge_ai.time.sleep") as sleep:
+            result = generate_forge_ai_response(
+                target_role="Platform Engineer",
+                company=None,
+                job_description="Build reliable systems.",
+                saved_analysis={},
+                resume=resume(),
+                memory={
+                    "summary": "Initial review.",
+                    "confirmed_facts": [],
+                    "rejected_claims": [],
+                    "open_questions": [],
+                    "decisions": [],
+                },
+                recent_messages=[],
+                user_message="Assess the claim.",
+                client=client,
+                model="openai/gpt-test",
+            )
+
+        self.assertEqual("verified", result["claim_status"])
+        self.assertEqual(2, len(responses.calls))
+        sleep.assert_called_once_with(0.5)
 
     def test_rejects_claims_that_reference_unknown_evidence(self):
         client = SimpleNamespace(
