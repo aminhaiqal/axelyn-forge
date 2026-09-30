@@ -98,6 +98,18 @@ if (!isAuthenticated) {
               <span id="forge-conversation-title">Evidence discussion</span>
               <strong id="forge-conversation-state">Active</strong>
             </div>
+            <div class="forge-tools" aria-labelledby="forge-tools-title">
+              <div>
+                <h3 id="forge-tools-title">Resume tools</h3>
+                <p>Run a focused review using the full role, resume evidence, and remembered discussion.</p>
+              </div>
+              <div class="forge-tool-grid">
+                <button type="button" data-forge-tool="Rewrite my professional summary for this role. Give me a concise version using only defensible evidence, and explain any important requirement you cannot support."><span>01</span> Improve summary</button>
+                <button type="button" data-forge-tool="Review my experience and project bullets for this role. Propose stronger, concise bullets using only evidence already in the record. Do not invent metrics, ownership, or technology."><span>02</span> Strengthen bullets</button>
+                <button type="button" data-forge-tool="Audit my skills section against this job. Recommend only skills directly supported by resume evidence or concrete facts I have confirmed, and list unsupported job requirements separately."><span>03</span> Align skills</button>
+                <button type="button" data-forge-tool="Give me a hard gap audit. Separate wording problems from real experience gaps, tell me what cannot honestly be fixed by rewriting, and ask the most useful evidence question next."><span>04</span> Audit gaps</button>
+              </div>
+            </div>
             <div class="forge-transcript" id="forge-transcript" aria-live="polite"></div>
             <form class="forge-composer" id="forge-composer">
               <label for="forge-message">Add facts, correct the record, or ask for a hard assessment</label>
@@ -107,6 +119,24 @@ if (!isAuthenticated) {
                 <button type="submit" id="forge-send-message">Submit evidence <span aria-hidden="true">→</span></button>
               </div>
             </form>
+
+            <section class="forge-output" id="forge-output" aria-labelledby="forge-output-title">
+              <div class="forge-output-copy">
+                <span>Apply the evidence</span>
+                <h3 id="forge-output-title">Build an enhanced resume</h3>
+                <p id="forge-output-message">Forge rewrites editable summary, bullet, project, and skills content through a strict evidence-cited plan. Your uploaded source remains unchanged.</p>
+              </div>
+              <button type="button" id="forge-build-resume">Build DOCX + PDF <span aria-hidden="true">→</span></button>
+              <div class="forge-output-result" id="forge-output-result" hidden>
+                <div class="forge-output-score"><strong id="forge-output-score">0%</strong><span>Projected evidence coverage</span></div>
+                <p id="forge-output-overview"></p>
+                <div class="forge-output-downloads" id="forge-output-downloads"></div>
+                <details id="forge-output-audit">
+                  <summary>Review every applied change and its evidence</summary>
+                  <div id="forge-output-operations"></div>
+                </details>
+              </div>
+            </section>
           </section>
 
           <aside class="forge-ledger" aria-labelledby="forge-ledger-title">

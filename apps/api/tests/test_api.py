@@ -1,4 +1,5 @@
 import base64
+import copy
 import json
 import sqlite3
 import tempfile
@@ -122,6 +123,40 @@ class FakeForgeAIGenerator:
         }
 
 
+class FakeResumeEnhancementGenerator:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        draft = copy.deepcopy(kwargs["resume"])
+        before = str(draft.get("summary") or "")
+        after = "Platform engineer building reliable Python APIs and cloud services."
+        draft["summary"] = after
+        return {
+            "draft": draft,
+            "overview": "Strengthened the summary around verified platform evidence.",
+            "gaps": ["Kubernetes scale remains unsupported."],
+            "changed_sections": ["Summary"],
+            "operations": [
+                {
+                    "target": "summary",
+                    "section": "Summary",
+                    "before": before,
+                    "after": after,
+                    "evidence": [
+                        {
+                            "id": "profile_summary",
+                            "label": "Profile summary",
+                            "source": "resume",
+                        }
+                    ],
+                }
+            ],
+            "model": "openai/gpt-test",
+        }
+
+
 class ApiTests(unittest.TestCase):
     @staticmethod
     def authenticate_user(request: Request) -> str:
@@ -217,6 +252,7 @@ class ApiTests(unittest.TestCase):
         self.interview_brief_generator = FakeInterviewBriefGenerator()
         self.resume_draft_generator = FakeResumeDraftGenerator()
         self.forge_ai_generator = FakeForgeAIGenerator()
+        self.resume_enhancement_generator = FakeResumeEnhancementGenerator()
         app = create_app(
             Settings(
                 environment="test",
@@ -229,6 +265,7 @@ class ApiTests(unittest.TestCase):
             interview_brief_generator=self.interview_brief_generator,
             resume_draft_generator=self.resume_draft_generator,
             forge_ai_generator=self.forge_ai_generator,
+            resume_enhancement_generator=self.resume_enhancement_generator,
         )
         self.client_context = TestClient(app)
         self.client = self.client_context.__enter__()
@@ -1233,6 +1270,59 @@ class ApiTests(unittest.TestCase):
                 (thread["id"],),
             ).fetchone()[0]
         self.assertEqual(detailed_fact, stored)
+
+        private_enhance = self.client.post(
+            f"/api/v1/forge-ai/threads/{thread['id']}/enhance",
+            headers=other_headers,
+        )
+        self.assertEqual(404, private_enhance.status_code)
+        enhanced = self.client.post(
+            f"/api/v1/forge-ai/threads/{thread['id']}/enhance",
+            headers=headers,
+        )
+        self.assertEqual(201, enhanced.status_code, enhanced.text)
+        enhancement = enhanced.json()
+        self.assertEqual("Summary", enhancement["changed_sections"][0])
+        self.assertEqual(1, len(enhancement["operations"]))
+        self.assertEqual(2, len(enhancement["documents"]))
+        self.assertEqual("openai/gpt-test", enhancement["model"])
+        self.assertEqual(
+            detailed_fact,
+            self.resume_enhancement_generator.calls[-1]["memory"]["confirmed_facts"][0]["fact"],
+        )
+        for document in enhancement["documents"]:
+            self.assertIn("forge-enhanced-resume", document["filename"])
+            downloaded = self.client.get(
+                f"/api/v1/job-match-documents/{document['id']}/download",
+                headers=headers,
+            )
+            private_download = self.client.get(
+                f"/api/v1/job-match-documents/{document['id']}/download",
+                headers=other_headers,
+            )
+            self.assertEqual(200, downloaded.status_code)
+            self.assertEqual(404, private_download.status_code)
+        reloaded_thread = self.client.get(
+            f"/api/v1/forge-ai/threads/{thread['id']}", headers=headers
+        ).json()
+        self.assertEqual(2, len(reloaded_thread["documents"]))
+        self.assertEqual(4, len(reloaded_thread["messages"]))
+        self.assertIn("Applied changes", reloaded_thread["messages"][-1]["content"])
+        self.assertEqual(
+            "Profile summary",
+            reloaded_thread["messages"][-1]["citations"][0]["label"],
+        )
+
+        with sqlite3.connect(self.database) as connection:
+            draft_key = connection.execute(
+                "SELECT draft_object_key FROM resume_sources WHERE id = ?",
+                (source_id,),
+            ).fetchone()[0]
+        original_draft = json.loads((self.storage / draft_key).read_text())
+        self.assertNotEqual(
+            "Platform engineer building reliable Python APIs and cloud services.",
+            original_draft["summary"],
+        )
 
 
 if __name__ == "__main__":

@@ -13,6 +13,14 @@ if (forgePage instanceof HTMLElement) {
   const messageInput = document.querySelector("#forge-message");
   const sendButton = document.querySelector("#forge-send-message");
   const messageStatus = document.querySelector("#forge-message-status");
+  const toolButtons = Array.from(document.querySelectorAll("[data-forge-tool]"));
+  const buildButton = document.querySelector("#forge-build-resume");
+  const outputMessage = document.querySelector("#forge-output-message");
+  const outputResult = document.querySelector("#forge-output-result");
+  const outputScore = document.querySelector("#forge-output-score");
+  const outputOverview = document.querySelector("#forge-output-overview");
+  const outputDownloads = document.querySelector("#forge-output-downloads");
+  const outputOperations = document.querySelector("#forge-output-operations");
   let matches = [];
   let threads = [];
   let activeThread = null;
@@ -158,6 +166,48 @@ if (forgePage instanceof HTMLElement) {
     gap: "Confirmed gap",
   })[status] || "Evidence review";
 
+  const appendInlineFormatting = (element, value) => {
+    const parts = value.split(/(\*\*[^*]+\*\*)/g);
+    parts.forEach((part) => {
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+        const strong = document.createElement("strong");
+        strong.textContent = part.slice(2, -2);
+        element.append(strong);
+      } else if (part) {
+        element.append(document.createTextNode(part));
+      }
+    });
+  };
+
+  const renderAssistantText = (container, value) => {
+    const clean = value.replace(
+      /\s*\[(?=[^\]]*(?:legacy_|experience_|project_|skills_|profile_|education_|custom_))[^\]]+\]/gi,
+      "",
+    );
+    let list = null;
+    clean.split(/\r?\n/).forEach((rawLine) => {
+      const line = rawLine.trim();
+      if (!line) {
+        list = null;
+        return;
+      }
+      if (/^[-*•]\s+/.test(line)) {
+        if (!(list instanceof HTMLUListElement)) {
+          list = document.createElement("ul");
+          container.append(list);
+        }
+        const item = document.createElement("li");
+        appendInlineFormatting(item, line.replace(/^[-*•]\s+/, ""));
+        list.append(item);
+        return;
+      }
+      list = null;
+      const paragraph = document.createElement("p");
+      appendInlineFormatting(paragraph, line);
+      container.append(paragraph);
+    });
+  };
+
   const renderMessages = (messages) => {
     if (!(transcript instanceof HTMLElement)) return;
     transcript.replaceChildren();
@@ -176,9 +226,13 @@ if (forgePage instanceof HTMLElement) {
 
       const body = document.createElement("div");
       body.className = "forge-message-content";
-      const content = document.createElement("p");
-      content.textContent = message.content;
-      body.append(content);
+      if (message.role === "assistant") {
+        renderAssistantText(body, message.content);
+      } else {
+        const content = document.createElement("p");
+        content.textContent = message.content;
+        body.append(content);
+      }
       if (message.role === "assistant") {
         const status = document.createElement("span");
         status.className = "forge-claim-status";
@@ -190,9 +244,18 @@ if (forgePage instanceof HTMLElement) {
         const citations = document.createElement("div");
         citations.className = "forge-citations";
         citations.setAttribute("aria-label", "Resume evidence cited");
+        const labelCounts = message.citations.reduce((counts, citation) => {
+          counts.set(citation.label, (counts.get(citation.label) || 0) + 1);
+          return counts;
+        }, new Map());
+        const labelIndexes = new Map();
         message.citations.forEach((citation) => {
           const item = document.createElement("span");
-          item.textContent = citation.label;
+          const nextIndex = (labelIndexes.get(citation.label) || 0) + 1;
+          labelIndexes.set(citation.label, nextIndex);
+          item.textContent = labelCounts.get(citation.label) > 1
+            ? `${citation.label} · evidence ${nextIndex}`
+            : citation.label;
           item.title = citation.id;
           citations.append(item);
         });
@@ -200,6 +263,64 @@ if (forgePage instanceof HTMLElement) {
       }
       article.append(meta, body);
       transcript.append(article);
+    });
+  };
+
+  const renderDocumentLinks = (documents) => {
+    if (!(outputDownloads instanceof HTMLElement)) return;
+    outputDownloads.replaceChildren();
+    documents.forEach((documentItem) => {
+      const link = document.createElement("a");
+      const format = documentItem.media_type === "application/pdf" ? "PDF" : "Word";
+      link.href = `${apiBase}/api/v1/job-match-documents/${encodeURIComponent(documentItem.id)}/download`;
+      link.download = documentItem.filename;
+      link.textContent = `Download enhanced ${format}`;
+      outputDownloads.append(link);
+    });
+  };
+
+  const renderSavedEnhancements = (documents) => {
+    const enhanced = (documents || []).filter((documentItem) =>
+      documentItem.filename.includes("forge-enhanced-resume")
+    );
+    if (!(outputResult instanceof HTMLElement)) return;
+    if (!enhanced.length) {
+      outputResult.hidden = true;
+      return;
+    }
+    outputResult.hidden = false;
+    if (outputScore) outputScore.textContent = "Saved";
+    if (outputOverview) outputOverview.textContent = "Your latest enhanced Word and PDF files remain available in this evidence case.";
+    renderDocumentLinks(enhanced.slice(0, 2));
+    if (outputOperations instanceof HTMLElement) outputOperations.replaceChildren();
+  };
+
+  const renderEnhancement = (enhancement) => {
+    if (!(outputResult instanceof HTMLElement)) return;
+    outputResult.hidden = false;
+    if (outputScore) outputScore.textContent = `${enhancement.projected_score}%`;
+    if (outputOverview) {
+      const sections = enhancement.changed_sections.length
+        ? ` Changed: ${enhancement.changed_sections.join(", ")}.`
+        : "";
+      outputOverview.textContent = `${enhancement.overview}${sections}`;
+    }
+    renderDocumentLinks(enhancement.documents);
+    if (!(outputOperations instanceof HTMLElement)) return;
+    outputOperations.replaceChildren();
+    enhancement.operations.forEach((operation) => {
+      const item = document.createElement("article");
+      item.className = "forge-operation";
+      const heading = document.createElement("strong");
+      heading.textContent = `${operation.section} · ${operation.target}`;
+      const value = document.createElement("p");
+      value.textContent = Array.isArray(operation.after)
+        ? operation.after.join(", ")
+        : operation.after;
+      const evidence = document.createElement("small");
+      evidence.textContent = `Evidence: ${operation.evidence.map((source) => `${source.label}${source.source === "user_confirmed" ? " (confirmed by you)" : ""}`).join(" · ")}`;
+      item.append(heading, value, evidence);
+      outputOperations.append(item);
     });
   };
 
@@ -234,6 +355,7 @@ if (forgePage instanceof HTMLElement) {
     renderLedgerEntries("#forge-open-questions", thread.memory.open_questions, "No open evidence questions.");
     renderLedgerEntries("#forge-rejected-claims", thread.memory.rejected_claims, "No rejected claims are recorded.");
     renderGaps(thread.missing_keywords);
+    renderSavedEnhancements(thread.documents);
     renderThreads();
     history.replaceState({}, "", `${window.location.pathname}?thread=${encodeURIComponent(thread.id)}`);
     if (scroll) workbench?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -310,6 +432,7 @@ if (forgePage instanceof HTMLElement) {
       }
       sendButton.disabled = true;
       messageInput.disabled = true;
+      toolButtons.forEach((button) => { button.disabled = true; });
       setStatus(messageStatus, "Testing your statement against the role and saved evidence…", "pending");
       try {
         const updated = await api(`/api/v1/forge-ai/threads/${encodeURIComponent(activeThread.id)}/messages`, {
@@ -327,7 +450,39 @@ if (forgePage instanceof HTMLElement) {
       } finally {
         sendButton.disabled = false;
         messageInput.disabled = false;
+        toolButtons.forEach((button) => { button.disabled = false; });
         messageInput.focus();
+      }
+    });
+  }
+
+  toolButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!activeThread || !(messageInput instanceof HTMLTextAreaElement) || !(composer instanceof HTMLFormElement)) return;
+      messageInput.value = button.dataset.forgeTool || "";
+      composer.requestSubmit();
+    });
+  });
+
+  if (buildButton instanceof HTMLButtonElement) {
+    buildButton.addEventListener("click", async () => {
+      if (!activeThread) return;
+      buildButton.disabled = true;
+      buildButton.firstChild.textContent = "Building evidence-cited resume ";
+      setStatus(outputMessage, "Reviewing every editable line, applying supported rewrites, and rendering Word and PDF…", "pending");
+      try {
+        const enhancement = await api(`/api/v1/forge-ai/threads/${encodeURIComponent(activeThread.id)}/enhance`, {
+          method: "POST",
+        });
+        renderEnhancement(enhancement);
+        activeThread.documents = [...enhancement.documents, ...(activeThread.documents || [])];
+        setStatus(outputMessage, `Enhanced resume created from ${enhancement.operations.length} audited ${enhancement.operations.length === 1 ? "change" : "changes"}. The uploaded source was not modified.`, "success");
+        outputResult?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } catch (error) {
+        setStatus(outputMessage, error instanceof Error ? error.message : "The enhanced resume could not be built.", "error");
+      } finally {
+        buildButton.disabled = false;
+        buildButton.firstChild.textContent = "Build DOCX + PDF ";
       }
     });
   }

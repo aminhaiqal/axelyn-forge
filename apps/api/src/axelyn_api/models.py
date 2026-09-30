@@ -715,6 +715,30 @@ class ForgeAIMessage(BaseModel):
     created_at: str
 
 
+class ForgeAIEnhancementEvidence(BaseModel):
+    id: str
+    label: str
+    source: Literal["resume", "user_confirmed"]
+
+
+class ForgeAIEnhancementOperation(BaseModel):
+    target: str
+    section: str
+    before: str | List[str]
+    after: str | List[str]
+    evidence: List[ForgeAIEnhancementEvidence]
+
+
+class ForgeAIEnhancementResult(BaseModel):
+    projected_score: int = Field(ge=0, le=100)
+    overview: str
+    changed_sections: List[str]
+    operations: List[ForgeAIEnhancementOperation]
+    gaps: List[str]
+    documents: List[JobMatchDocumentSummary]
+    model: str
+
+
 class ForgeAIThreadSummary(BaseModel):
     id: str
     match_id: str
@@ -738,6 +762,7 @@ class ForgeAIThreadDetail(ForgeAIThreadSummary):
     matched_keywords: List[str]
     memory: ForgeAIMemory
     messages: List[ForgeAIMessage]
+    documents: List[JobMatchDocumentSummary]
 
 
 class ForgeAIThreadCreate(BaseModel):

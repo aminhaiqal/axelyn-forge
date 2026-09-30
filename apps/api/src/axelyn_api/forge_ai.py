@@ -18,6 +18,8 @@ from forge.openrouter_client import (
     openrouter_request_options,
 )
 
+from .resume_enhancer import evidence_label
+
 
 FORGE_AI_INSTRUCTIONS = """
 You are Forge AI, a serious evidence counsel for a candidate tailoring a resume to
@@ -44,6 +46,8 @@ Conversation rules:
 - Respond to the user's latest message and move the evidence review forward.
 - Ask at most two focused questions at a time.
 - Cite resume evidence IDs used in your response.
+- Put citations only in the citations field. Do not print raw evidence IDs or citation
+  brackets inside assistant_message.
 - Keep the structured memory complete and current. It is the durable compressed state;
   the full transcript is stored separately.
 - Return only the JSON required by the response schema.
@@ -178,7 +182,7 @@ def generate_forge_ai_response(
     if generated.claim_status == "verified" and not generated.citations:
         raise ProviderError("Forge AI marked an uncited response as verified")
 
-    labels = {item["id"]: item["label"] for item in evidence}
+    labels = {item["id"]: evidence_label(item) for item in evidence}
     result = generated.model_dump(mode="json")
     result["citation_details"] = [
         {"id": identifier, "label": labels[identifier]}

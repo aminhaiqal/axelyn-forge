@@ -38,6 +38,7 @@ from .job_match import (
     tailor_resume_draft,
 )
 from .models import (
+    ForgeAIEnhancementResult,
     ForgeAIMessage,
     ForgeAIMessageCreate,
     ForgeAIMemory,
@@ -91,6 +92,10 @@ from .resume_import import (
     normalize_resume_text,
     resume_plain_text,
     unmapped_resume_content,
+)
+from .resume_enhancer import (
+    ResumeEnhancementUnavailable,
+    generate_resume_enhancement,
 )
 from .resume_store import ResumeStore
 from .resume_templates import render_resume, template_catalog
@@ -373,6 +378,7 @@ def create_app(
     interview_brief_generator: Optional[Callable[..., dict[str, Any]]] = None,
     resume_draft_generator: Optional[Callable[..., dict[str, object]]] = None,
     forge_ai_generator: Optional[Callable[..., dict[str, object]]] = None,
+    resume_enhancement_generator: Optional[Callable[..., dict[str, object]]] = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings.from_environ()
     store = ServiceRequestStore(resolved_settings.database_path)
@@ -389,6 +395,9 @@ def create_app(
     )
     brief_generator = interview_brief_generator or generate_interview_brief
     coach_generator = forge_ai_generator or generate_forge_ai_response
+    enhancement_generator = (
+        resume_enhancement_generator or generate_resume_enhancement
+    )
     draft_generator = resume_draft_generator
     if draft_generator is None and resolved_settings.environment.casefold() != "test":
         draft_generator = structure_resume_with_openrouter
@@ -488,6 +497,12 @@ def create_app(
             matched_keywords=analysis.matched_keywords,
             memory=memory,
             messages=[forge_ai_message(row) for row in message_rows],
+            documents=[
+                _job_document_summary(row)
+                for row in resume_store.list_job_match_documents(
+                    user_id, str(thread["match_id"])
+                )
+            ],
         )
 
     def resolve_application_resume(
@@ -552,6 +567,7 @@ def create_app(
     app.state.interview_brief_generator = brief_generator
     app.state.resume_draft_generator = draft_generator
     app.state.forge_ai_generator = coach_generator
+    app.state.resume_enhancement_generator = enhancement_generator
 
     if resolved_settings.cors_origins:
         app.add_middleware(
@@ -1914,6 +1930,197 @@ def create_app(
         )
         assert updated is not None
         return forge_ai_thread_detail(user_id, updated)
+
+    @app.post(
+        "/api/v1/forge-ai/threads/{thread_id}/enhance",
+        response_model=ForgeAIEnhancementResult,
+        status_code=status.HTTP_201_CREATED,
+        tags=["forge ai"],
+    )
+    def enhance_resume_with_forge_ai(
+        thread_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> ForgeAIEnhancementResult:
+        thread = resume_store.get_forge_ai_thread(user_id, thread_id)
+        if thread is None:
+            raise HTTPException(status_code=404, detail="Forge AI workspace not found.")
+        match, source, resume, job_description, saved_analysis, memory, analysis = (
+            forge_ai_context(user_id, thread)
+        )
+        try:
+            generated = enhancement_generator(
+                target_role=str(match["target_role"]),
+                company=str(match["company"]) if match["company"] else None,
+                job_description=job_description,
+                saved_analysis=saved_analysis.model_dump(mode="json"),
+                resume=resume,
+                memory=memory.model_dump(mode="json"),
+            )
+            enhanced = generated["draft"]
+            if not isinstance(enhanced, dict):
+                raise TypeError("enhanced resume must be an object")
+            enhanced = tailor_resume_draft(
+                enhanced,
+                target_role=str(match["target_role"]),
+                matched_keywords=analysis.matched_keywords,
+            )
+            overview = str(generated["overview"]).strip()
+            changed_sections = generated["changed_sections"]
+            operations = generated["operations"]
+            gaps = generated["gaps"]
+            model = str(generated["model"])
+            if not overview or not model:
+                raise ValueError("invalid enhancement response")
+        except ResumeEnhancementUnavailable as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"{error}. Forge AI will not manufacture content to force a better fit."
+                ),
+            ) from error
+        except ProviderError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Forge AI could not build the enhanced resume right now. "
+                    "Your source and evidence discussion are unchanged."
+                ),
+            ) from error
+        except (KeyError, TypeError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Forge AI returned an invalid enhancement. Nothing was changed.",
+            ) from error
+
+        projected_analysis = analyze_job_match(
+            target_role=str(match["target_role"]),
+            company=str(match["company"]) if match["company"] else None,
+            job_description=job_description,
+            resume_text=draft_to_evidence_text(enhanced),
+        )
+        document_payload, _, _ = _render_resume_docx(
+            draft=enhanced,
+            title=f"{source['display_name']} — {match['target_role']} — Forge enhanced",
+            description=(
+                "Evidence-cited enhanced resume generated from an immutable source "
+                "and a private Forge AI discussion."
+            ),
+        )
+        safe_role = re.sub(
+            r"[^A-Za-z0-9._-]+", "-", str(match["target_role"])
+        ).strip("-.")
+        base_filename = f"{safe_role or 'role'}-forge-enhanced-resume"
+        try:
+            pdf_payload = converter.docx_to_pdf(
+                document_payload, f"{base_filename}.docx"
+            )
+        except DocumentConversionError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The PDF converter is temporarily unavailable.",
+            ) from error
+
+        generation_id = uuid.uuid4().hex
+        object_prefix = (
+            f"{_object_prefix(user_id)}/job-matches/{match['id']}/"
+            f"forge-ai/{thread_id}/{generation_id}"
+        )
+        artifacts = [
+            {
+                "filename": f"{base_filename}.docx",
+                "media_type": DOCX_MEDIA_TYPE,
+                "object_key": f"{object_prefix}.docx",
+                "payload": document_payload,
+            },
+            {
+                "filename": f"{base_filename}.pdf",
+                "media_type": PDF_MEDIA_TYPE,
+                "object_key": f"{object_prefix}.pdf",
+                "payload": pdf_payload,
+            },
+        ]
+        stored_keys: list[str] = []
+        try:
+            for artifact in artifacts:
+                object_store.put(
+                    str(artifact["object_key"]),
+                    bytes(artifact["payload"]),
+                    str(artifact["media_type"]),
+                )
+                stored_keys.append(str(artifact["object_key"]))
+            rows = resume_store.create_job_match_documents(
+                user_id=user_id,
+                match_id=str(match["id"]),
+                documents=[
+                    {
+                        "filename": str(artifact["filename"]),
+                        "media_type": str(artifact["media_type"]),
+                        "object_key": str(artifact["object_key"]),
+                    }
+                    for artifact in artifacts
+                ],
+            )
+        except Exception:
+            for key in stored_keys:
+                object_store.delete(key)
+            raise
+        assert rows is not None
+        unique_citations: dict[str, dict[str, object]] = {}
+        audit_lines: list[str] = []
+        uses_user_confirmed = False
+        for operation in operations:
+            if not isinstance(operation, dict):
+                continue
+            after = operation.get("after")
+            rendered_after = (
+                ", ".join(str(value) for value in after)
+                if isinstance(after, list)
+                else str(after or "")
+            )
+            audit_lines.append(
+                f"- {operation.get('section', 'Resume')}: {rendered_after}"
+            )
+            evidence_items = operation.get("evidence")
+            if not isinstance(evidence_items, list):
+                continue
+            for evidence_item in evidence_items:
+                if not isinstance(evidence_item, dict):
+                    continue
+                identifier = str(evidence_item.get("id") or "")
+                label = str(evidence_item.get("label") or "")
+                if identifier and label:
+                    unique_citations[identifier] = {"id": identifier, "label": label}
+                if evidence_item.get("source") == "user_confirmed":
+                    uses_user_confirmed = True
+        audit_message = (
+            f"Built an enhanced resume with {len(audit_lines)} audited "
+            f"{'change' if len(audit_lines) == 1 else 'changes'} and projected "
+            f"{projected_analysis.match_percentage}% evidence coverage.\n\n"
+            "**Applied changes**\n"
+            + "\n".join(audit_lines)
+        )
+        if gaps:
+            audit_message += "\n\n**Requirements still unsupported**\n" + "\n".join(
+                f"- {gap}" for gap in gaps
+            )
+        resume_store.create_forge_ai_message(
+            user_id=user_id,
+            thread_id=thread_id,
+            role="assistant",
+            content=audit_message,
+            citations_json=json.dumps(list(unique_citations.values()), ensure_ascii=False),
+            claim_status="user_confirmed" if uses_user_confirmed else "verified",
+            model=model,
+        )
+        return ForgeAIEnhancementResult(
+            projected_score=projected_analysis.match_percentage,
+            overview=overview,
+            changed_sections=changed_sections,
+            operations=operations,
+            gaps=gaps,
+            documents=[_job_document_summary(row) for row in rows],
+            model=model,
+        )
 
     @app.post(
         "/api/v1/job-matches",
