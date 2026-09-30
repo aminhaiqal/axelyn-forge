@@ -151,7 +151,7 @@ docker compose -f infra/compose.yaml config
 clerk doctor
 ```
 
-CI runs the Python tests, checks and builds the Astro app, and builds the API, converter, frontend, and gateway container images. Pushes to `main` and version tags publish all four images to GitHub Container Registry.
+CI runs the Python tests, checks and builds the Astro app, and builds the API, converter, frontend, and gateway container images. Pushes to `main` publish all four images to GitHub Container Registry, invoke the production host's restricted `deploy <commit-sha>` command, and verify the public health endpoint. Version tags publish immutable images without changing production.
 
 ## Private data
 

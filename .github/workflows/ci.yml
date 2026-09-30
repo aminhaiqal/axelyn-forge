@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   backend:
@@ -146,3 +146,59 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://forge.axelyn.com
+    concurrency:
+      group: axelyn-forge-production
+      cancel-in-progress: false
+    steps:
+      - name: Configure restricted deployment SSH key
+        env:
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -eu
+          install -d -m 700 "$RUNNER_TEMP/forge-ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/forge-ssh/deploy-key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$RUNNER_TEMP/forge-ssh/known-hosts"
+          chmod 600 "$RUNNER_TEMP/forge-ssh/deploy-key" "$RUNNER_TEMP/forge-ssh/known-hosts"
+          ssh-keygen -y -f "$RUNNER_TEMP/forge-ssh/deploy-key" > /dev/null
+
+      - name: Deploy the published commit
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -eu
+          timeout 15m ssh \
+            -i "$RUNNER_TEMP/forge-ssh/deploy-key" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/forge-ssh/known-hosts" \
+            "$VPS_USER@$VPS_HOST" \
+            "deploy $GITHUB_SHA"
+
+      - name: Verify the production health endpoint
+        run: |
+          set -eu
+          for attempt in $(seq 1 12); do
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              --max-time 15 \
+              https://forge.axelyn.com/api/v1/health > /dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Production health verification failed." >&2
+          exit 1

@@ -68,4 +68,4 @@ flowchart LR
 
 ## Delivery
 
-Pull requests and pushes to `main` run Python tests, the Astro type check and production build, and all Docker image builds. Pushes to `main` or a `v*` tag publish separate API, converter, frontend, and gateway images to GitHub Container Registry. Deployment remains environment-specific, so the Clerk production keys and other credentials stay outside the repository.
+Pull requests and pushes to `main` run Python tests, the Astro type check and production build, and all Docker image builds. Pushes to `main` or a `v*` tag publish separate API, converter, frontend, and gateway images to GitHub Container Registry. After a successful `main` publish, GitHub Actions uses the protected production environment to invoke the host's restricted deployment command and verifies the public health endpoint. Clerk, storage, OpenRouter, tunnel, and SSH credentials stay outside the repository.
