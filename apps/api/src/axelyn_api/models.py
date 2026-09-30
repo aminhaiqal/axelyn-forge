@@ -679,3 +679,70 @@ class JobMatchDocumentBundle(BaseModel):
 
 class JobMatchDetail(JobMatchResult):
     documents: List[JobMatchDocumentSummary]
+
+
+ForgeAIClaimStatus = Literal["verified", "user_confirmed", "needs_evidence", "gap"]
+ForgeAIThreadStatus = Literal["active", "ready"]
+
+
+class ForgeAICitation(BaseModel):
+    id: str
+    label: str
+
+
+class ForgeAIMemoryFact(BaseModel):
+    fact: str
+    source: Literal["resume", "user"]
+    evidence_ids: List[str]
+
+
+class ForgeAIMemory(BaseModel):
+    summary: str
+    confirmed_facts: List[ForgeAIMemoryFact]
+    rejected_claims: List[str]
+    open_questions: List[str]
+    decisions: List[str]
+
+
+class ForgeAIMessage(BaseModel):
+    id: str
+    thread_id: str
+    role: Literal["user", "assistant"]
+    content: str
+    citations: List[ForgeAICitation]
+    claim_status: ForgeAIClaimStatus
+    model: Optional[str]
+    created_at: str
+
+
+class ForgeAIThreadSummary(BaseModel):
+    id: str
+    match_id: str
+    source_id: str
+    target_role: str
+    company: Optional[str]
+    resume_name: str
+    baseline_score: int = Field(ge=0, le=100)
+    current_score: int = Field(ge=0, le=100)
+    status: ForgeAIThreadStatus
+    memory_version: int = Field(ge=1)
+    message_count: int = Field(ge=0)
+    created_at: str
+    updated_at: str
+
+
+class ForgeAIThreadDetail(ForgeAIThreadSummary):
+    match_state: JobMatchState
+    match_label: Literal["Match", "Some match", "No match"]
+    missing_keywords: List[str]
+    matched_keywords: List[str]
+    memory: ForgeAIMemory
+    messages: List[ForgeAIMessage]
+
+
+class ForgeAIThreadCreate(BaseModel):
+    match_id: str = Field(min_length=1)
+
+
+class ForgeAIMessageCreate(BaseModel):
+    content: str = Field(min_length=1)

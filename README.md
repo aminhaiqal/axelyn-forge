@@ -1,6 +1,6 @@
 # Axelyn Forge
 
-Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library and a builder for creating a resume from a guided form. Uploaded PDF/DOCX resumes are processed once into a finished DOCX and matching PDF; users replace an import by deleting it and uploading a new source. Forge retains its normalized source, structured JSON, and JSON Schema as internal processing data. Candidates can preserve uncommon material in custom sections and generate private Word and PDF files. `/app/match` compares a selected resume with pasted or uploaded job descriptions, explains the gaps, and creates evidence-grounded tailored files when the fit supports it. `/app/tracker` records application stages, follow-up dates, notes, and the exact resume version attached to each role. Each tracked role can produce a private AI interview brief whose talking points cite verified evidence from that submitted resume. FastAPI verifies the same Clerk session for every private operation.
+Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library and a builder for creating a resume from a guided form. Uploaded PDF/DOCX resumes are processed once into a finished DOCX and matching PDF; users replace an import by deleting it and uploading a new source. Forge retains its normalized source, structured JSON, and JSON Schema as internal processing data. Candidates can preserve uncommon material in custom sections and generate private Word and PDF files. `/app/match` compares a selected resume with pasted or uploaded job descriptions, explains the gaps, and creates evidence-grounded tailored files when the fit supports it. `/app/forge` opens a persistent evidence discussion for a saved match: the full transcript is retained, working context is compressed into structured memory, resume claims cite source evidence, and the score only advances from concrete facts. The coach will stop below 80% when the record cannot honestly support more. `/app/tracker` records application stages, follow-up dates, notes, and the exact resume version attached to each role. Each tracked role can produce a private AI interview brief whose talking points cite verified evidence from that submitted resume. FastAPI verifies the same Clerk session for every private operation.
 
 The active product no longer depends on Discord.
 
@@ -90,6 +90,9 @@ The first public contract is versioned under `/api/v1`.
 | `GET` | `/api/v1/job-matches/{id}` | Reopen one owned analysis with its generated document links. |
 | `POST` | `/api/v1/job-matches/{id}/tailor` | Generate an evidence-grounded DOCX/PDF bundle for a Match or Some match result. |
 | `GET` | `/api/v1/job-match-documents/{id}/download` | Download an owned tailored resume document. |
+| `GET`, `POST` | `/api/v1/forge-ai/threads` | List evidence discussions or open one for an owned saved match. |
+| `GET` | `/api/v1/forge-ai/threads/{id}` | Reopen the full transcript, compressed memory, and current evidence score. |
+| `POST` | `/api/v1/forge-ai/threads/{id}/messages` | Add evidence or a question and receive a source-aware coaching response. |
 | `GET` | `/api/v1/job-applications/{id}/interview-brief` | Load the private interview brief saved for a tracked application. |
 | `POST` | `/api/v1/job-applications/{id}/interview-brief` | Generate or replace an evidence-grounded interview brief from the submitted resume snapshot. |
 
@@ -178,7 +181,7 @@ Run the full OpenRouter-assisted workflow:
   --output-dir output
 ```
 
-Set `OPENROUTER_API_KEY` before running AI-assisted commands. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. OpenRouter requests use `store=False`, require zero-data-retention endpoints, deny provider data collection, and write only usage metadata to SQLite without prompt content or API keys. Model overrides use OpenRouter model IDs such as `openai/gpt-5.4-mini`.
+Set `OPENROUTER_API_KEY` before running AI-assisted commands. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. OpenRouter requests use `store=False`, require zero-data-retention endpoints, deny provider data collection, and write only usage metadata to SQLite without prompt content or API keys. Model overrides use OpenRouter model IDs such as `openai/gpt-5.4-mini`; the evidence coach can be configured independently with `OPENROUTER_FORGE_AI_MODEL`.
 
 Forge uses the OpenAI-compatible Python client as its HTTP transport, configured with OpenRouter's base URL and API key. It does not send these workflows to the OpenAI API endpoint.
 

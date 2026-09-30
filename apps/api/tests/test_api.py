@@ -91,6 +91,37 @@ class FakeResumeDraftGenerator:
         return draft
 
 
+class FakeForgeAIGenerator:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        memory = dict(kwargs["memory"])
+        memory["summary"] = "The candidate supplied a concrete deployment example for review."
+        memory["confirmed_facts"] = [
+            {
+                "fact": kwargs["user_message"],
+                "source": "user",
+                "evidence_ids": [],
+            }
+        ]
+        memory["open_questions"] = [
+            "What measurable outcome can you defend for this work?"
+        ]
+        return {
+            "assistant_message": (
+                "I recorded that as user-confirmed evidence. It is useful context, but a "
+                "source document or a defensible project record would make it stronger."
+            ),
+            "citations": [],
+            "citation_details": [],
+            "claim_status": "user_confirmed",
+            "memory": memory,
+            "model": "openai/gpt-test",
+        }
+
+
 class ApiTests(unittest.TestCase):
     @staticmethod
     def authenticate_user(request: Request) -> str:
@@ -185,6 +216,7 @@ class ApiTests(unittest.TestCase):
         self.document_converter.normalized_docx = self.resume_docx()
         self.interview_brief_generator = FakeInterviewBriefGenerator()
         self.resume_draft_generator = FakeResumeDraftGenerator()
+        self.forge_ai_generator = FakeForgeAIGenerator()
         app = create_app(
             Settings(
                 environment="test",
@@ -196,6 +228,7 @@ class ApiTests(unittest.TestCase):
             document_converter=self.document_converter,
             interview_brief_generator=self.interview_brief_generator,
             resume_draft_generator=self.resume_draft_generator,
+            forge_ai_generator=self.forge_ai_generator,
         )
         self.client_context = TestClient(app)
         self.client = self.client_context.__enter__()
@@ -1088,6 +1121,118 @@ class ApiTests(unittest.TestCase):
             headers=headers,
         )
         self.assertEqual(409, blocked.status_code)
+
+    def test_forge_ai_keeps_private_full_history_and_compressed_memory(self):
+        headers = {"Authorization": "Bearer test-session"}
+        other_headers = {"Authorization": "Bearer other-session"}
+        imported = self.client.post(
+            "/api/v1/resumes/imports",
+            headers=headers,
+            files=[
+                (
+                    "files",
+                    (
+                        "backend-resume.docx",
+                        self.resume_docx(),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
+                )
+            ],
+        )
+        source_id = imported.json()["items"][0]["source"]["id"]
+        matched = self.client.post(
+            "/api/v1/job-matches",
+            headers=headers,
+            data={
+                "source_id": source_id,
+                "target_role": "Platform Engineer",
+                "company": "Example Systems",
+                "job_description": (
+                    "Build Python APIs and Kubernetes services for reliable cloud platforms. "
+                    "Own production operations, observability, and delivery outcomes."
+                ),
+            },
+        )
+        self.assertEqual(201, matched.status_code, matched.text)
+        match_id = matched.json()["id"]
+
+        self.assertEqual(
+            [], self.client.get("/api/v1/forge-ai/threads", headers=headers).json()
+        )
+        private_create = self.client.post(
+            "/api/v1/forge-ai/threads",
+            headers=other_headers,
+            json={"match_id": match_id},
+        )
+        self.assertEqual(404, private_create.status_code)
+
+        created = self.client.post(
+            "/api/v1/forge-ai/threads",
+            headers=headers,
+            json={"match_id": match_id},
+        )
+        self.assertEqual(201, created.status_code, created.text)
+        thread = created.json()
+        self.assertTrue(thread["id"].startswith("fai_"))
+        self.assertEqual(match_id, thread["match_id"])
+        self.assertEqual(1, thread["memory_version"])
+        self.assertEqual(1, len(thread["messages"]))
+        self.assertEqual("assistant", thread["messages"][0]["role"])
+
+        reopened = self.client.post(
+            "/api/v1/forge-ai/threads",
+            headers=headers,
+            json={"match_id": match_id},
+        )
+        self.assertEqual(1, len(reopened.json()["messages"]))
+        self.assertEqual(
+            404,
+            self.client.get(
+                f"/api/v1/forge-ai/threads/{thread['id']}", headers=other_headers
+            ).status_code,
+        )
+
+        detailed_fact = (
+            "I personally deployed the service to Kubernetes, added production observability, "
+            "and owned the release incident review. "
+            + "The supporting project record contains exact implementation detail. " * 90
+        ).strip()
+        reply = self.client.post(
+            f"/api/v1/forge-ai/threads/{thread['id']}/messages",
+            headers=headers,
+            json={"content": detailed_fact},
+        )
+        self.assertEqual(201, reply.status_code, reply.text)
+        updated = reply.json()
+        self.assertEqual(2, updated["memory_version"])
+        self.assertEqual(3, len(updated["messages"]))
+        self.assertEqual(detailed_fact, updated["messages"][1]["content"])
+        self.assertEqual("user_confirmed", updated["messages"][2]["claim_status"])
+        self.assertEqual(detailed_fact, updated["memory"]["confirmed_facts"][0]["fact"])
+        self.assertEqual("user", updated["memory"]["confirmed_facts"][0]["source"])
+        self.assertEqual(detailed_fact, self.forge_ai_generator.calls[-1]["user_message"])
+
+        listed = self.client.get(
+            "/api/v1/forge-ai/threads", headers=headers
+        ).json()
+        self.assertEqual(1, len(listed))
+        self.assertEqual(3, listed[0]["message_count"])
+        self.assertEqual(updated["current_score"], listed[0]["current_score"])
+        self.assertEqual(
+            404,
+            self.client.post(
+                f"/api/v1/forge-ai/threads/{thread['id']}/messages",
+                headers=other_headers,
+                json={"content": "Try to access another user's evidence case."},
+            ).status_code,
+        )
+
+        with sqlite3.connect(self.database) as connection:
+            stored = connection.execute(
+                "SELECT content FROM forge_ai_messages WHERE thread_id = ? AND role = 'user'",
+                (thread["id"],),
+            ).fetchone()[0]
+        self.assertEqual(detailed_fact, stored)
 
 
 if __name__ == "__main__":

@@ -214,11 +214,15 @@ if (matchPage instanceof HTMLElement) {
     const marker = document.querySelector("#match-score-marker");
     const verdict = document.querySelector("#match-verdict");
     const reference = document.querySelector("#match-reference");
+    const forgeBridge = document.querySelector("#forge-ai-bridge");
     if (score) score.textContent = String(result.match_percentage);
     if (label) label.textContent = result.match_label;
     if (marker instanceof HTMLElement) marker.style.left = `${Math.max(1, Math.min(99, result.match_percentage))}%`;
     if (verdict) verdict.textContent = result.reasons[0] || "Analysis complete.";
     if (reference) reference.textContent = result.id;
+    if (forgeBridge instanceof HTMLAnchorElement) {
+      forgeBridge.href = `/app/forge?match=${encodeURIComponent(result.id)}`;
+    }
     fillList("#match-reasons", result.reasons.slice(1), "The percentage reflects the priority language supported by this resume.");
     fillKeywords("#match-keywords", result.matched_keywords, "No direct evidence found");
     fillList("#match-evidence", result.evidence_highlights, "No strong evidence passage was found in this resume.");

@@ -1,0 +1,144 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import AppSidebar from "../../components/AppSidebar.astro";
+import "../../styles/forge-ai.css";
+
+const apiBase = import.meta.env.PUBLIC_API_BASE_URL ?? "";
+const { isAuthenticated, redirectToSignIn } = Astro.locals.auth();
+
+if (!isAuthenticated) {
+  return redirectToSignIn();
+}
+---
+
+<BaseLayout
+  title="Forge AI — Axelyn Forge"
+  description="Build a stronger, truthful job application through persistent, evidence-backed resume coaching."
+>
+  <div class="forge-page" data-workspace-shell data-api-base={apiBase}>
+    <AppSidebar active="forge" />
+
+    <main class="forge-main">
+      <header class="forge-heading">
+        <div>
+          <p class="forge-kicker"><span></span> Forge AI / evidence counsel</p>
+          <h1>Make the case.<br /><em>Keep it true.</em></h1>
+        </div>
+        <div class="forge-manifesto">
+          <strong>Serious career work needs a record.</strong>
+          <p>Forge AI remembers the discussion, tests every claim against your saved resume and job description, and keeps asking until the evidence is clear. If the facts cannot support 80%, it will say so.</p>
+          <ul aria-label="Forge AI operating rules">
+            <li>No invented achievements</li>
+            <li>Source-linked resume facts</li>
+            <li>Full transcript retained</li>
+          </ul>
+        </div>
+      </header>
+
+      <section class="forge-start" aria-labelledby="forge-start-title">
+        <div class="forge-section-index">01 / Select a case</div>
+        <div class="forge-start-copy">
+          <h2 id="forge-start-title">Begin with a saved job match</h2>
+          <p>The job description, resume snapshot, and original match result become the fixed record for this discussion.</p>
+        </div>
+        <div class="forge-start-controls">
+          <label for="forge-match-select">Job match</label>
+          <select id="forge-match-select">
+            <option value="">Loading your saved matches…</option>
+          </select>
+          <button type="button" id="forge-open-case">Open evidence review <span aria-hidden="true">→</span></button>
+          <p id="forge-start-status" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="forge-workbench" id="forge-workbench" aria-label="Forge AI evidence workspace" hidden>
+        <header class="forge-case-header">
+          <div>
+            <p>Active evidence case</p>
+            <h2 id="forge-case-role">Role</h2>
+            <span id="forge-case-context">Company · Resume</span>
+          </div>
+          <div class="forge-memory-state">
+            <span>Durable memory</span>
+            <strong id="forge-memory-version">v1</strong>
+            <small>Full transcript + compressed working context</small>
+          </div>
+        </header>
+
+        <section class="forge-scoreboard" aria-labelledby="forge-score-title">
+          <div class="forge-score-readout">
+            <span>Current evidence coverage</span>
+            <div><strong id="forge-current-score">0</strong><i>%</i></div>
+          </div>
+          <div class="forge-score-plot">
+            <div class="forge-score-copy">
+              <h3 id="forge-score-title">The threshold must be earned</h3>
+              <p id="forge-score-status">Only facts you can defend count toward the score.</p>
+            </div>
+            <div class="forge-progress" id="forge-progress" style="--forge-score: 0%; --forge-baseline: 0%;">
+              <span class="forge-progress-fill"></span>
+              <i class="forge-baseline-marker"><b>Start</b></i>
+              <i class="forge-target-marker"><b>80 target</b></i>
+            </div>
+          </div>
+        </section>
+
+        <div class="forge-workspace-grid">
+          <aside class="forge-history" aria-labelledby="forge-history-title">
+            <div class="forge-panel-heading">
+              <span>Cases</span>
+              <strong id="forge-thread-count">0</strong>
+            </div>
+            <h3 id="forge-history-title">Match discussions</h3>
+            <div id="forge-thread-list" class="forge-thread-list" aria-live="polite"></div>
+          </aside>
+
+          <section class="forge-conversation" aria-labelledby="forge-conversation-title">
+            <div class="forge-panel-heading">
+              <span id="forge-conversation-title">Evidence discussion</span>
+              <strong id="forge-conversation-state">Active</strong>
+            </div>
+            <div class="forge-transcript" id="forge-transcript" aria-live="polite"></div>
+            <form class="forge-composer" id="forge-composer">
+              <label for="forge-message">Add facts, correct the record, or ask for a hard assessment</label>
+              <textarea id="forge-message" name="content" rows="4" placeholder="Describe the real project, what you personally did, the tools involved, and the outcome…" required></textarea>
+              <div>
+                <p id="forge-message-status" role="status" aria-live="polite">No arbitrary character limit. Detail helps; unsupported detail does not count.</p>
+                <button type="submit" id="forge-send-message">Submit evidence <span aria-hidden="true">→</span></button>
+              </div>
+            </form>
+          </section>
+
+          <aside class="forge-ledger" aria-labelledby="forge-ledger-title">
+            <div class="forge-panel-heading">
+              <span>Evidence ledger</span>
+              <strong id="forge-ledger-count">0 facts</strong>
+            </div>
+            <h3 id="forge-ledger-title">What the record supports</h3>
+
+            <section>
+              <h4>Confirmed facts</h4>
+              <div id="forge-confirmed-facts" class="forge-ledger-list"></div>
+            </section>
+            <section>
+              <h4>Open questions</h4>
+              <div id="forge-open-questions" class="forge-ledger-list"></div>
+            </section>
+            <section>
+              <h4>Rejected or unsupported</h4>
+              <div id="forge-rejected-claims" class="forge-ledger-list"></div>
+            </section>
+            <section>
+              <h4>Current gaps</h4>
+              <div id="forge-missing-keywords" class="forge-gap-list"></div>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    import "../../scripts/forge-ai.js";
+  </script>
+</BaseLayout>

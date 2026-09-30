@@ -136,6 +136,42 @@ class ResumeStore:
                 CREATE INDEX IF NOT EXISTS job_match_documents_owner_created
                     ON job_match_documents (user_id, created_at DESC);
 
+                CREATE TABLE IF NOT EXISTS forge_ai_threads (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    match_id TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    baseline_score INTEGER NOT NULL,
+                    current_score INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    memory_json TEXT NOT NULL,
+                    memory_version INTEGER NOT NULL,
+                    model TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE (user_id, match_id),
+                    FOREIGN KEY (match_id) REFERENCES job_matches(id) ON DELETE CASCADE,
+                    FOREIGN KEY (source_id) REFERENCES resume_sources(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS forge_ai_threads_owner_updated
+                    ON forge_ai_threads (user_id, updated_at DESC);
+
+                CREATE TABLE IF NOT EXISTS forge_ai_messages (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    thread_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    claim_status TEXT NOT NULL,
+                    model TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (thread_id) REFERENCES forge_ai_threads(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS forge_ai_messages_thread_created
+                    ON forge_ai_messages (user_id, thread_id, created_at);
+
                 CREATE TABLE IF NOT EXISTS job_applications (
                     id TEXT PRIMARY KEY,
                     user_id TEXT NOT NULL,
@@ -902,6 +938,194 @@ class ResumeStore:
                 (user_id, match_id),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def create_forge_ai_thread(
+        self,
+        *,
+        user_id: str,
+        match_id: str,
+        source_id: str,
+        title: str,
+        baseline_score: int,
+        memory_json: str,
+        status: str,
+    ) -> dict[str, Any] | None:
+        existing = self.get_forge_ai_thread_for_match(user_id, match_id)
+        if existing is not None:
+            return existing
+        if self.get_job_match(user_id, match_id) is None:
+            return None
+        thread_id = _identifier("fai")
+        now = _now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO forge_ai_threads (
+                    id, user_id, match_id, source_id, title,
+                    baseline_score, current_score, status,
+                    memory_json, memory_version, model, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?)
+                """,
+                (
+                    thread_id,
+                    user_id,
+                    match_id,
+                    source_id,
+                    title,
+                    baseline_score,
+                    baseline_score,
+                    status,
+                    memory_json,
+                    now,
+                    now,
+                ),
+            )
+        return self.get_forge_ai_thread(user_id, thread_id)
+
+    def get_forge_ai_thread(
+        self, user_id: str, thread_id: str
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM forge_ai_threads WHERE id = ? AND user_id = ?",
+                (thread_id, user_id),
+            ).fetchone()
+        return self._dict(row)
+
+    def get_forge_ai_thread_for_match(
+        self, user_id: str, match_id: str
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM forge_ai_threads WHERE match_id = ? AND user_id = ?",
+                (match_id, user_id),
+            ).fetchone()
+        return self._dict(row)
+
+    def list_forge_ai_threads(self, user_id: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT threads.*,
+                       matches.target_role, matches.company,
+                       sources.display_name AS resume_name,
+                       (
+                           SELECT COUNT(*) FROM forge_ai_messages AS messages
+                           WHERE messages.user_id = threads.user_id
+                             AND messages.thread_id = threads.id
+                       ) AS message_count
+                FROM forge_ai_threads AS threads
+                JOIN job_matches AS matches
+                  ON matches.id = threads.match_id
+                 AND matches.user_id = threads.user_id
+                JOIN resume_sources AS sources
+                  ON sources.id = threads.source_id
+                 AND sources.user_id = threads.user_id
+                WHERE threads.user_id = ?
+                ORDER BY threads.updated_at DESC, threads.rowid DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def create_forge_ai_message(
+        self,
+        *,
+        user_id: str,
+        thread_id: str,
+        role: str,
+        content: str,
+        citations_json: str,
+        claim_status: str,
+        model: str | None,
+    ) -> dict[str, Any] | None:
+        if self.get_forge_ai_thread(user_id, thread_id) is None:
+            return None
+        message_id = _identifier("fmsg")
+        now = _now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO forge_ai_messages (
+                    id, user_id, thread_id, role, content, citations_json,
+                    claim_status, model, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    message_id,
+                    user_id,
+                    thread_id,
+                    role,
+                    content,
+                    citations_json,
+                    claim_status,
+                    model,
+                    now,
+                ),
+            )
+            connection.execute(
+                "UPDATE forge_ai_threads SET updated_at = ? WHERE id = ? AND user_id = ?",
+                (now, thread_id, user_id),
+            )
+        return self.get_forge_ai_message(user_id, message_id)
+
+    def get_forge_ai_message(
+        self, user_id: str, message_id: str
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM forge_ai_messages WHERE id = ? AND user_id = ?",
+                (message_id, user_id),
+            ).fetchone()
+        return self._dict(row)
+
+    def list_forge_ai_messages(
+        self, user_id: str, thread_id: str
+    ) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM forge_ai_messages
+                WHERE user_id = ? AND thread_id = ?
+                ORDER BY created_at, rowid
+                """,
+                (user_id, thread_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_forge_ai_thread(
+        self,
+        *,
+        user_id: str,
+        thread_id: str,
+        current_score: int,
+        status: str,
+        memory_json: str,
+        model: str,
+    ) -> dict[str, Any] | None:
+        now = _now()
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE forge_ai_threads
+                SET current_score = ?, status = ?, memory_json = ?,
+                    memory_version = memory_version + 1,
+                    model = ?, updated_at = ?
+                WHERE id = ? AND user_id = ?
+                """,
+                (
+                    current_score,
+                    status,
+                    memory_json,
+                    model,
+                    now,
+                    thread_id,
+                    user_id,
+                ),
+            )
+        if cursor.rowcount == 0:
+            return None
+        return self.get_forge_ai_thread(user_id, thread_id)
 
     def source_object_keys(self, user_id: str, source_id: str) -> list[str] | None:
         source = self.get_source(user_id, source_id)

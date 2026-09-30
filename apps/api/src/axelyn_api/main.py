@@ -1,6 +1,7 @@
 """FastAPI application factory and production entry point."""
 
 import hashlib
+import json
 import os
 import re
 import tempfile
@@ -26,6 +27,7 @@ from .converter import (
     DocumentConverter,
     create_document_converter,
 )
+from .forge_ai import generate_forge_ai_response
 from .job_match import (
     IMAGE_SUFFIXES,
     JOB_FILE_SUFFIXES,
@@ -36,6 +38,12 @@ from .job_match import (
     tailor_resume_draft,
 )
 from .models import (
+    ForgeAIMessage,
+    ForgeAIMessageCreate,
+    ForgeAIMemory,
+    ForgeAIThreadCreate,
+    ForgeAIThreadDetail,
+    ForgeAIThreadSummary,
     HealthResponse,
     AuthenticatedUser,
     GeneratedDocumentBundle,
@@ -364,6 +372,7 @@ def create_app(
     document_converter: Optional[DocumentConverter] = None,
     interview_brief_generator: Optional[Callable[..., dict[str, Any]]] = None,
     resume_draft_generator: Optional[Callable[..., dict[str, object]]] = None,
+    forge_ai_generator: Optional[Callable[..., dict[str, object]]] = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings.from_environ()
     store = ServiceRequestStore(resolved_settings.database_path)
@@ -379,6 +388,7 @@ def create_app(
         resolved_settings.converter_timeout_seconds,
     )
     brief_generator = interview_brief_generator or generate_interview_brief
+    coach_generator = forge_ai_generator or generate_forge_ai_response
     draft_generator = resume_draft_generator
     if draft_generator is None and resolved_settings.environment.casefold() != "test":
         draft_generator = structure_resume_with_openrouter
@@ -395,6 +405,90 @@ def create_app(
                     "upload a replacement file."
                 ),
             )
+
+    def forge_ai_message(row: dict[str, object]) -> ForgeAIMessage:
+        try:
+            citations = json.loads(str(row["citations_json"]))
+        except (json.JSONDecodeError, TypeError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Forge AI message data is temporarily unavailable.",
+            ) from error
+        return ForgeAIMessage(**row, citations=citations)
+
+    def forge_ai_context(
+        user_id: str,
+        thread: dict[str, object],
+    ) -> tuple[
+        dict[str, object],
+        dict[str, object],
+        dict[str, object],
+        str,
+        JobMatchAnalysis,
+        ForgeAIMemory,
+        JobMatchAnalysis,
+    ]:
+        match = resume_store.get_job_match(user_id, str(thread["match_id"]))
+        source = resume_store.get_source(user_id, str(thread["source_id"]))
+        if match is None or source is None:
+            raise HTTPException(status_code=404, detail="Forge AI workspace not found.")
+        try:
+            resume = decode_json(
+                object_store.get(str(match["resume_snapshot_object_key"]))
+            )
+            job_description = object_store.get(
+                str(match["job_description_object_key"])
+            ).decode("utf-8")
+            saved_analysis = JobMatchAnalysis(
+                **decode_json(object_store.get(str(match["analysis_object_key"])))
+            )
+            memory = ForgeAIMemory(**json.loads(str(thread["memory_json"])))
+        except (KeyError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Forge AI context is temporarily unavailable.",
+            ) from error
+        user_facts = "\n".join(
+            fact.fact for fact in memory.confirmed_facts if fact.source == "user"
+        )
+        evidence_text = draft_to_evidence_text(resume)
+        if user_facts:
+            evidence_text = f"{evidence_text}\n{user_facts}"
+        current_analysis = analyze_job_match(
+            target_role=str(match["target_role"]),
+            company=str(match["company"]) if match["company"] else None,
+            job_description=job_description,
+            resume_text=evidence_text,
+        )
+        return (
+            match,
+            source,
+            resume,
+            job_description,
+            saved_analysis,
+            memory,
+            current_analysis,
+        )
+
+    def forge_ai_thread_detail(
+        user_id: str,
+        thread: dict[str, object],
+    ) -> ForgeAIThreadDetail:
+        match, source, _, _, _, memory, analysis = forge_ai_context(user_id, thread)
+        message_rows = resume_store.list_forge_ai_messages(user_id, str(thread["id"]))
+        return ForgeAIThreadDetail(
+            **thread,
+            target_role=str(match["target_role"]),
+            company=str(match["company"]) if match["company"] else None,
+            resume_name=str(source["display_name"]),
+            message_count=len(message_rows),
+            match_state=analysis.match_state,
+            match_label=analysis.match_label,
+            missing_keywords=analysis.missing_keywords,
+            matched_keywords=analysis.matched_keywords,
+            memory=memory,
+            messages=[forge_ai_message(row) for row in message_rows],
+        )
 
     def resolve_application_resume(
         user_id: str,
@@ -457,6 +551,7 @@ def create_app(
     app.state.document_converter = converter
     app.state.interview_brief_generator = brief_generator
     app.state.resume_draft_generator = draft_generator
+    app.state.forge_ai_generator = coach_generator
 
     if resolved_settings.cors_origins:
         app.add_middleware(
@@ -1577,6 +1672,248 @@ def create_app(
             ],
             **analysis.model_dump(),
         )
+
+    @app.get(
+        "/api/v1/forge-ai/threads",
+        response_model=list[ForgeAIThreadSummary],
+        tags=["forge ai"],
+    )
+    def list_forge_ai_threads(
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> list[ForgeAIThreadSummary]:
+        return [
+            ForgeAIThreadSummary(**row)
+            for row in resume_store.list_forge_ai_threads(user_id)
+        ]
+
+    @app.post(
+        "/api/v1/forge-ai/threads",
+        response_model=ForgeAIThreadDetail,
+        status_code=status.HTTP_201_CREATED,
+        tags=["forge ai"],
+    )
+    def create_forge_ai_thread(
+        payload: ForgeAIThreadCreate,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> ForgeAIThreadDetail:
+        match = resume_store.get_job_match(user_id, payload.match_id)
+        if match is None:
+            raise HTTPException(status_code=404, detail="Job match not found.")
+        source = resume_store.get_source(user_id, str(match["source_id"]))
+        if source is None:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+
+        existing = resume_store.get_forge_ai_thread_for_match(user_id, payload.match_id)
+        if existing is not None:
+            return forge_ai_thread_detail(user_id, existing)
+        try:
+            analysis = JobMatchAnalysis(
+                **decode_json(object_store.get(str(match["analysis_object_key"])))
+            )
+        except (KeyError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Job match data is temporarily unavailable.",
+            ) from error
+
+        questions = [
+            f"What specific project, action, and outcome can verify your {keyword} experience?"
+            for keyword in analysis.missing_keywords[:6]
+        ]
+        memory = ForgeAIMemory(
+            summary=(
+                f"Evidence review for {match['target_role']} begins at "
+                f"{analysis.match_percentage}% resume coverage."
+            ),
+            confirmed_facts=[],
+            rejected_claims=[],
+            open_questions=questions,
+            decisions=[
+                "Unsupported claims stay out of the tailored resume.",
+                "The uploaded resume source remains immutable.",
+            ],
+        )
+        thread = resume_store.create_forge_ai_thread(
+            user_id=user_id,
+            match_id=payload.match_id,
+            source_id=str(match["source_id"]),
+            title=str(match["target_role"]),
+            baseline_score=analysis.match_percentage,
+            memory_json=memory.model_dump_json(),
+            status="ready" if analysis.match_percentage >= 80 else "active",
+        )
+        if thread is None:
+            raise HTTPException(status_code=404, detail="Job match not found.")
+
+        if analysis.match_percentage >= 80:
+            opening = (
+                f"Your saved resume currently supports {analysis.match_percentage}% of this "
+                "role's priority language. We can now inspect the strongest evidence and make "
+                "sure every tailored statement remains defensible."
+            )
+            opening_status = "verified"
+        elif analysis.missing_keywords:
+            opening = (
+                f"The saved analysis starts at {analysis.match_percentage}% evidence coverage. "
+                "I will only raise that score when your resume or a concrete fact you confirm "
+                f"supports it. First: what real project, action, and outcome demonstrate "
+                f"{analysis.missing_keywords[0]}?"
+            )
+            opening_status = "needs_evidence"
+        else:
+            opening = (
+                f"The saved analysis starts at {analysis.match_percentage}% evidence coverage. "
+                "Tell me which requirement you want to examine, and we will test it against "
+                "facts you can defend in an interview."
+            )
+            opening_status = "needs_evidence"
+        resume_store.create_forge_ai_message(
+            user_id=user_id,
+            thread_id=str(thread["id"]),
+            role="assistant",
+            content=opening,
+            citations_json="[]",
+            claim_status=opening_status,
+            model=None,
+        )
+        refreshed = resume_store.get_forge_ai_thread(user_id, str(thread["id"]))
+        assert refreshed is not None
+        return forge_ai_thread_detail(user_id, refreshed)
+
+    @app.get(
+        "/api/v1/forge-ai/threads/{thread_id}",
+        response_model=ForgeAIThreadDetail,
+        tags=["forge ai"],
+    )
+    def get_forge_ai_thread(
+        thread_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> ForgeAIThreadDetail:
+        thread = resume_store.get_forge_ai_thread(user_id, thread_id)
+        if thread is None:
+            raise HTTPException(status_code=404, detail="Forge AI workspace not found.")
+        return forge_ai_thread_detail(user_id, thread)
+
+    @app.post(
+        "/api/v1/forge-ai/threads/{thread_id}/messages",
+        response_model=ForgeAIThreadDetail,
+        status_code=status.HTTP_201_CREATED,
+        tags=["forge ai"],
+    )
+    def create_forge_ai_message(
+        thread_id: str,
+        payload: ForgeAIMessageCreate,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> ForgeAIThreadDetail:
+        thread = resume_store.get_forge_ai_thread(user_id, thread_id)
+        if thread is None:
+            raise HTTPException(status_code=404, detail="Forge AI workspace not found.")
+        user_message = payload.content.strip()
+        if not user_message:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Write a message before sending it.",
+            )
+
+        match, _, resume, job_description, saved_analysis, memory, _ = (
+            forge_ai_context(user_id, thread)
+        )
+        recent_messages = [
+            {
+                "role": row["role"],
+                "content": row["content"],
+                "citations": json.loads(str(row["citations_json"])),
+            }
+            for row in resume_store.list_forge_ai_messages(user_id, thread_id)
+        ]
+        try:
+            generated = coach_generator(
+                target_role=str(match["target_role"]),
+                company=str(match["company"]) if match["company"] else None,
+                job_description=job_description,
+                saved_analysis=saved_analysis.model_dump(mode="json"),
+                resume=resume,
+                memory=memory.model_dump(mode="json"),
+                recent_messages=recent_messages,
+                user_message=user_message,
+            )
+            next_memory = ForgeAIMemory(**generated["memory"])
+            assistant_message = str(generated["assistant_message"]).strip()
+            claim_status = str(generated["claim_status"])
+            citations = generated["citation_details"]
+            model = str(generated["model"])
+            if not assistant_message or claim_status not in {
+                "verified",
+                "user_confirmed",
+                "needs_evidence",
+                "gap",
+            }:
+                raise ValueError("invalid Forge AI response")
+            ForgeAIMessage(
+                id="validation",
+                thread_id=thread_id,
+                role="assistant",
+                content=assistant_message,
+                citations=citations,
+                claim_status=claim_status,
+                model=model,
+                created_at="validation",
+            )
+        except ProviderError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Forge AI is temporarily unavailable. "
+                    "Your evidence workspace is unchanged."
+                ),
+            ) from error
+        except (KeyError, TypeError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Forge AI returned an invalid response. Your evidence workspace is unchanged.",
+            ) from error
+
+        user_facts = "\n".join(
+            fact.fact for fact in next_memory.confirmed_facts if fact.source == "user"
+        )
+        evidence_text = draft_to_evidence_text(resume)
+        if user_facts:
+            evidence_text = f"{evidence_text}\n{user_facts}"
+        current_analysis = analyze_job_match(
+            target_role=str(match["target_role"]),
+            company=str(match["company"]) if match["company"] else None,
+            job_description=job_description,
+            resume_text=evidence_text,
+        )
+
+        resume_store.create_forge_ai_message(
+            user_id=user_id,
+            thread_id=thread_id,
+            role="user",
+            content=user_message,
+            citations_json="[]",
+            claim_status="needs_evidence",
+            model=None,
+        )
+        resume_store.create_forge_ai_message(
+            user_id=user_id,
+            thread_id=thread_id,
+            role="assistant",
+            content=assistant_message,
+            citations_json=json.dumps(citations, ensure_ascii=False),
+            claim_status=claim_status,
+            model=model,
+        )
+        updated = resume_store.update_forge_ai_thread(
+            user_id=user_id,
+            thread_id=thread_id,
+            current_score=current_analysis.match_percentage,
+            status="ready" if current_analysis.match_percentage >= 80 else "active",
+            memory_json=next_memory.model_dump_json(),
+            model=model,
+        )
+        assert updated is not None
+        return forge_ai_thread_detail(user_id, updated)
 
     @app.post(
         "/api/v1/job-matches",

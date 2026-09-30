@@ -78,6 +78,12 @@
 .result-detail li::before { content: "+"; position: absolute; left: 0; color: var(--color-copper); }
 .keyword-cloud { display: flex; flex-wrap: wrap; gap: 7px; }
 .keyword-cloud span { padding: 7px 9px; border: 1px solid #426072; color: #dbe3e6; font: .53rem var(--font-mono); }
+.forge-ai-bridge { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 22px; padding: 17px 19px; border: 1px solid #56707d; color: #f2f5f6; background: #173140; }
+.forge-ai-bridge:hover { border-color: var(--color-copper); }
+.forge-ai-bridge span { display: grid; gap: 4px; }
+.forge-ai-bridge b { font: 650 .74rem var(--font-display); }
+.forge-ai-bridge small { color: #9eb0b8; font-size: .54rem; line-height: 1.5; }
+.forge-ai-bridge i { color: var(--color-copper); font: normal 1rem var(--font-mono); }
 .keyword-cloud.missing span { border-color: #755647; color: #efb79f; }
 .keyword-cloud span[data-empty="true"] { color: #8397a1; border-style: dashed; }
 .tailor-block { display: grid; gap: 18px; margin-top: 25px; padding: 23px; border: 1px solid #45606e; background: #172f3d; }
