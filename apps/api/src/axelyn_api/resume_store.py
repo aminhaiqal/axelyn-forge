@@ -321,76 +321,6 @@ class ResumeStore:
             return None
         return self.get_source(user_id, source_id)
 
-    def accept_source(
-        self,
-        *,
-        user_id: str,
-        source_id: str,
-        name: str,
-        target_role: str | None,
-        normalized_object_key: str,
-    ) -> dict[str, Any] | None:
-        source = self.get_source(user_id, source_id)
-        if source is None:
-            return None
-        now = _now()
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT id, created_at FROM resume_variants
-                WHERE source_id = ? AND user_id = ?
-                """,
-                (source_id, user_id),
-            ).fetchone()
-            if row is None:
-                variant_id = _identifier("rsv")
-                created_at = now
-                connection.execute(
-                    """
-                    INSERT INTO resume_variants (
-                        id, user_id, source_id, name, target_role,
-                        normalized_object_key, status, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, 'ready', ?, ?)
-                    """,
-                    (
-                        variant_id,
-                        user_id,
-                        source_id,
-                        name,
-                        target_role,
-                        normalized_object_key,
-                        created_at,
-                        now,
-                    ),
-                )
-            else:
-                variant_id = str(row["id"])
-                connection.execute(
-                    """
-                    UPDATE resume_variants
-                    SET name = ?, target_role = ?, normalized_object_key = ?,
-                        status = 'ready', updated_at = ?
-                    WHERE id = ? AND user_id = ?
-                    """,
-                    (
-                        name,
-                        target_role,
-                        normalized_object_key,
-                        now,
-                        variant_id,
-                        user_id,
-                    ),
-                )
-            connection.execute(
-                """
-                UPDATE resume_sources
-                SET status = 'ready', updated_at = ?
-                WHERE id = ? AND user_id = ?
-                """,
-                (now, source_id, user_id),
-            )
-        return self.get_variant(user_id, variant_id)
-
     def upsert_source_artifacts(
         self,
         *,
@@ -463,26 +393,6 @@ class ResumeStore:
             ).fetchone()
         return self._dict(row)
 
-    def list_variants(self, user_id: str) -> list[dict[str, Any]]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT * FROM resume_variants
-                WHERE user_id = ?
-                ORDER BY updated_at DESC, created_at DESC
-                """,
-                (user_id,),
-            ).fetchall()
-        return [dict(row) for row in rows]
-
-    def get_variant(self, user_id: str, variant_id: str) -> dict[str, Any] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "SELECT * FROM resume_variants WHERE id = ? AND user_id = ?",
-                (variant_id, user_id),
-            ).fetchone()
-        return self._dict(row)
-
     def create_job_application(
         self,
         *,
@@ -499,7 +409,6 @@ class ResumeStore:
         next_action_on: str | None,
         notes: str | None,
         resume_source_id: str,
-        resume_variant_id: str | None,
         resume_name: str,
         resume_target_role: str | None,
         resume_snapshot_object_key: str,
@@ -511,10 +420,10 @@ class ResumeStore:
                 INSERT INTO job_applications (
                     id, user_id, company_name, job_title, job_url, location,
                     work_arrangement, employment_type, status, applied_on,
-                    next_action_on, notes, resume_source_id, resume_variant_id,
-                    resume_name, resume_target_role, resume_snapshot_object_key,
+                    next_action_on, notes, resume_source_id, resume_name,
+                    resume_target_role, resume_snapshot_object_key,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     application_id,
@@ -530,7 +439,6 @@ class ResumeStore:
                     next_action_on,
                     notes,
                     resume_source_id,
-                    resume_variant_id,
                     resume_name,
                     resume_target_role,
                     resume_snapshot_object_key,
@@ -580,7 +488,6 @@ class ResumeStore:
         next_action_on: str | None,
         notes: str | None,
         resume_source_id: str | None,
-        resume_variant_id: str | None,
         resume_name: str,
         resume_target_role: str | None,
         resume_snapshot_object_key: str,
@@ -592,7 +499,7 @@ class ResumeStore:
                 SET company_name = ?, job_title = ?, job_url = ?, location = ?,
                     work_arrangement = ?, employment_type = ?, status = ?,
                     applied_on = ?, next_action_on = ?, notes = ?,
-                    resume_source_id = ?, resume_variant_id = ?, resume_name = ?,
+                    resume_source_id = ?, resume_variant_id = NULL, resume_name = ?,
                     resume_target_role = ?, resume_snapshot_object_key = ?, updated_at = ?
                 WHERE id = ? AND user_id = ?
                 """,
@@ -608,7 +515,6 @@ class ResumeStore:
                     next_action_on,
                     notes,
                     resume_source_id,
-                    resume_variant_id,
                     resume_name,
                     resume_target_role,
                     resume_snapshot_object_key,
@@ -683,124 +589,6 @@ class ResumeStore:
                     (object_key, model, now, user_id, application_id),
                 )
         return self.get_interview_brief(user_id, application_id)
-
-    def create_document(
-        self,
-        *,
-        user_id: str,
-        variant_id: str,
-        filename: str,
-        media_type: str,
-        object_key: str,
-        template_id: str,
-        template_version: str,
-    ) -> dict[str, Any] | None:
-        if self.get_variant(user_id, variant_id) is None:
-            return None
-        document_id = _identifier("doc")
-        created_at = _now()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO generated_documents (
-                    id, user_id, variant_id, filename, media_type, object_key,
-                    template_id, template_version, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    document_id,
-                    user_id,
-                    variant_id,
-                    filename,
-                    media_type,
-                    object_key,
-                    template_id,
-                    template_version,
-                    created_at,
-                ),
-            )
-        return self.get_document(user_id, document_id)
-
-    def create_documents(
-        self,
-        *,
-        user_id: str,
-        variant_id: str,
-        documents: Sequence[dict[str, str]],
-    ) -> list[dict[str, Any]] | None:
-        """Record one generated bundle in a single metadata transaction."""
-        if self.get_variant(user_id, variant_id) is None:
-            return None
-        created_at = _now()
-        rows = [
-            {
-                "id": _identifier("doc"),
-                "filename": document["filename"],
-                "media_type": document["media_type"],
-                "object_key": document["object_key"],
-                "template_id": document["template_id"],
-                "template_version": document["template_version"],
-            }
-            for document in documents
-        ]
-        with self._connect() as connection:
-            connection.executemany(
-                """
-                INSERT INTO generated_documents (
-                    id, user_id, variant_id, filename, media_type, object_key,
-                    template_id, template_version, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        row["id"],
-                        user_id,
-                        variant_id,
-                        row["filename"],
-                        row["media_type"],
-                        row["object_key"],
-                        row["template_id"],
-                        row["template_version"],
-                        created_at,
-                    )
-                    for row in rows
-                ],
-            )
-        return [
-            {
-                **row,
-                "user_id": user_id,
-                "variant_id": variant_id,
-                "created_at": created_at,
-            }
-            for row in rows
-        ]
-
-    def list_documents(
-        self,
-        user_id: str,
-        variant_id: str | None = None,
-    ) -> list[dict[str, Any]]:
-        query = """
-            SELECT * FROM generated_documents
-            WHERE user_id = ?
-        """
-        parameters: tuple[str, ...] = (user_id,)
-        if variant_id is not None:
-            query += " AND variant_id = ?"
-            parameters = (user_id, variant_id)
-        query += " ORDER BY created_at DESC, rowid DESC"
-        with self._connect() as connection:
-            rows = connection.execute(query, parameters).fetchall()
-        return [dict(row) for row in rows]
-
-    def get_document(self, user_id: str, document_id: str) -> dict[str, Any] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "SELECT * FROM generated_documents WHERE id = ? AND user_id = ?",
-                (document_id, user_id),
-            ).fetchone()
-        return self._dict(row)
 
     def create_job_match(
         self,

@@ -1,4 +1,4 @@
-"""Domain errors surfaced by the Forge CLI and API."""
+"""Domain errors shared by Forge services."""
 
 
 class ForgeError(Exception):

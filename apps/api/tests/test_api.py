@@ -1,4 +1,3 @@
-import base64
 import copy
 import json
 import sqlite3
@@ -478,47 +477,19 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(1, len(owner_list.json()))
         self.assertEqual([], other_list.json())
-        self.assertEqual(404, other_read.status_code)
+        self.assertEqual(405, other_read.status_code)
 
-        source_row = self.client.app.state.resume_store.get_source(
-            "user_test_123", source_id
-        )
-        self.assertIsNotNone(source_row)
-        stored_draft = json.loads(object_store.get(source_row["draft_object_key"]))
-        editable_payload = {
-            **stored_draft,
-            "display_name": "Backend resume",
-            "target_role": None,
-            "full_name": "Taylor Example",
-            "email_address": "taylor@example.com",
-            "phone_number": "+60 12-345 6789",
-            "location": "Kuala Lumpur, Malaysia",
-        }
-        saved = self.client.put(
-            f"/api/v1/resumes/{source_id}/draft",
-            headers=headers,
-            json=editable_payload,
-        )
-        accepted = self.client.post(
-            f"/api/v1/resumes/{source_id}/accept",
-            headers=headers,
-            json={
-                **editable_payload,
-                "variant_name": "Backend Engineer - Master",
-            },
-        )
-        photo = self.client.put(
-            f"/api/v1/resumes/{source_id}/profile-photo",
-            headers=headers,
-            files={"photo": ("photo.png", b"not-needed", "image/png")},
-        )
-        detail = self.client.get(f"/api/v1/resumes/{source_id}", headers=headers)
-        editable_word = self.client.get(
-            f"/api/v1/resumes/{source_id}/editable.docx", headers=headers
-        )
-        for response in (saved, accepted, photo, detail, editable_word):
-            self.assertEqual(409, response.status_code, response.text)
-            self.assertIn("Delete this resume", response.json()["detail"])
+        for expected, method, path in (
+            (405, "GET", f"/api/v1/resumes/{source_id}"),
+            (404, "PUT", f"/api/v1/resumes/{source_id}/draft"),
+            (404, "POST", f"/api/v1/resumes/{source_id}/accept"),
+            (404, "PUT", f"/api/v1/resumes/{source_id}/profile-photo"),
+            (404, "GET", f"/api/v1/resumes/{source_id}/editable.docx"),
+        ):
+            self.assertEqual(
+                expected,
+                self.client.request(method, path, headers=headers).status_code,
+            )
         self.assertEqual(1, len(self.document_converter.requests))
         self.assertTrue(self.document_converter.requests[0][0].startswith(b"PK"))
 
@@ -632,225 +603,6 @@ class ApiTests(unittest.TestCase):
         experience = draft["sections"]["experience"]
         self.assertIn(long_line.strip(), experience[-1])
 
-    def test_manual_resume_form_keeps_custom_sections_and_uses_standard_template(self):
-        headers = {"Authorization": "Bearer test-session"}
-        templates = self.client.get("/api/v1/resume-templates")
-
-        self.assertEqual(200, templates.status_code)
-        self.assertEqual(
-            ["ats-classic"],
-            [item["id"] for item in templates.json()],
-        )
-
-        created = self.client.post(
-            "/api/v1/resumes",
-            headers=headers,
-            json={
-                "display_name": "First resume",
-                "target_role": "Platform Engineer",
-                "template_id": "ats-classic",
-                "full_name": "Taylor Example",
-                "headline": "Platform Engineer",
-                "email_address": "taylor@example.com",
-                "phone_number": "+60 12-345 6789",
-                "location": "Kuala Lumpur, Malaysia",
-                "linkedin_url": "https://linkedin.com/in/taylor-example",
-                "portfolio_url": "https://taylor.example",
-                "github_url": "https://github.com/taylor-example",
-                "other_professional_link": "https://kaggle.com/taylor-example",
-                "summary": "Builds reliable systems.",
-                "sections": {
-                    "skills": ["Python, PostgreSQL, Docker"],
-                },
-                "experience_entries": [
-                    {
-                        "company_name": "Example Systems",
-                        "job_title": "Engineer",
-                        "employment_type": "Full-time",
-                        "location": "Kuala Lumpur, Malaysia",
-                        "work_arrangement": "Hybrid",
-                        "start_date": "2022-01",
-                        "end_date": "",
-                        "currently_working_here": True,
-                        "responsibilities": "Own reliable backend services.",
-                        "achievements": "Built production APIs.",
-                    }
-                ],
-                "education_entries": [
-                    {
-                        "institution_name": "Universiti Teknologi Malaysia",
-                        "qualification": "Bachelor of Computer Science",
-                        "field_of_study": "Software Engineering",
-                        "education_level": "Bachelor’s Degree",
-                        "location": "Johor Bahru, Malaysia",
-                        "start_date": "2020-09",
-                        "end_date": "2024-06",
-                        "currently_studying_here": True,
-                        "gpa": "3.72 / 4.00",
-                        "honours": "First Class Honours",
-                        "relevant_coursework": "Software Architecture, Database Systems",
-                        "thesis_title": "Intelligent Document Classification",
-                        "thesis_description": "Built a classification pipeline.",
-                        "academic_achievements": "Dean’s List",
-                        "activities": "Computing Society",
-                        "relevant_skills": "Machine learning, research",
-                    }
-                ],
-                "project_entries": [
-                    {
-                        "project_name": "Monitorscape",
-                        "project_type": "Commercial Product",
-                        "role": "Backend Developer",
-                        "project_url": "https://monitorscape.example",
-                        "repository_url": "https://github.com/example/monitorscape",
-                        "start_date": "2024-02",
-                        "end_date": "2025-08",
-                        "currently_working_on_project": True,
-                        "problem": "Teams could not see infrastructure failures quickly.",
-                        "description": "A production infrastructure monitoring platform.",
-                        "audience": "Operations teams and managed-service customers.",
-                        "personal_contribution": "Designed the event ingestion API.",
-                        "responsibilities": "Backend architecture, deployment, and testing.",
-                        "technologies": "Python, FastAPI, PostgreSQL, Docker",
-                        "challenge": "Processed noisy events without duplicate alerts.",
-                        "deliverables": "Implemented authentication and alert workflows.",
-                        "impact": "Reduced incident response time.",
-                        "metrics": "Processed 100K events with 99.9% uptime.",
-                        "project_status": "Live / Production",
-                    }
-                ],
-                "skill_categories": [
-                    {
-                        "category": "Backend Framework",
-                        "skills": ["Django", "FastAPI"],
-                    },
-                    {
-                        "category": "Programming Language",
-                        "skills": ["Python", "Go", "python"],
-                    },
-                ],
-                "custom_sections": [
-                    {
-                        "title": "Publications",
-                        "lines": ["Reliable Systems Review | 2025"],
-                    }
-                ],
-            },
-        )
-
-        self.assertEqual(201, created.status_code, created.text)
-        source = created.json()
-        source_id = source["id"]
-        self.assertEqual("application/vnd.axelyn.resume+json", source["media_type"])
-        self.assertEqual([], source["unmapped_content"])
-        self.assertEqual("", source["draft"]["extracted_text"])
-        self.assertEqual("ats-classic", source["draft"]["template_id"])
-        self.assertTrue(
-            source["draft"]["experience_entries"][0]["currently_working_here"]
-        )
-        self.assertTrue(
-            source["draft"]["education_entries"][0]["currently_studying_here"]
-        )
-        self.assertEqual("", source["draft"]["education_entries"][0]["end_date"])
-        self.assertTrue(
-            source["draft"]["project_entries"][0]["currently_working_on_project"]
-        )
-        self.assertEqual("", source["draft"]["project_entries"][0]["end_date"])
-        self.assertEqual(
-            ["Python", "Go"], source["draft"]["skill_categories"][1]["skills"]
-        )
-        self.assertEqual(
-            "Backend Framework",
-            source["draft"]["skill_categories"][0]["category"],
-        )
-        self.assertEqual(
-            "Publications", source["draft"]["custom_sections"][0]["title"]
-        )
-
-        photo_payload = base64.b64decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
-            "+A8AAQUBAScY42YAAAAASUVORK5CYII="
-        )
-        uploaded_photo = self.client.put(
-            f"/api/v1/resumes/{source_id}/profile-photo",
-            headers=headers,
-            files={"photo": ("taylor.png", photo_payload, "image/png")},
-        )
-        self.assertEqual(200, uploaded_photo.status_code, uploaded_photo.text)
-        source = uploaded_photo.json()
-        self.assertEqual("taylor.png", source["draft"]["profile_photo_filename"])
-        self.assertEqual("image/png", source["draft"]["profile_photo_media_type"])
-        downloaded_photo = self.client.get(
-            f"/api/v1/resumes/{source_id}/profile-photo", headers=headers
-        )
-        other_photo = self.client.get(
-            f"/api/v1/resumes/{source_id}/profile-photo",
-            headers={"Authorization": "Bearer other-session"},
-        )
-        self.assertEqual(photo_payload, downloaded_photo.content)
-        self.assertEqual("private, no-store", downloaded_photo.headers["cache-control"])
-        self.assertEqual(404, other_photo.status_code)
-
-        accepted = self.client.post(
-            f"/api/v1/resumes/{source_id}/accept",
-            headers=headers,
-            json={
-                **source["draft"],
-                "display_name": "First resume",
-                "target_role": "Platform Engineer",
-                "variant_name": "Platform Engineer — Master",
-            },
-        )
-        self.assertEqual(200, accepted.status_code, accepted.text)
-
-        rendered = self.client.post(
-            f"/api/v1/resume-variants/{accepted.json()['id']}/render",
-            headers=headers,
-        )
-        self.assertEqual(201, rendered.status_code, rendered.text)
-        self.assertEqual(
-            {"ats-classic"},
-            {document["template_id"] for document in rendered.json()["documents"]},
-        )
-        with zipfile.ZipFile(BytesIO(self.document_converter.requests[-1][0])) as archive:
-            document_xml = archive.read("word/document.xml")
-        self.assertIn(b"PUBLICATIONS", document_xml)
-        self.assertIn(b"Reliable Systems Review", document_xml)
-        self.assertIn(b"taylor@example.com", document_xml)
-        self.assertIn(b"Kuala Lumpur, Malaysia", document_xml)
-        self.assertIn(b"https://github.com/taylor-example", document_xml)
-        self.assertIn(b"Example Systems", document_xml)
-        self.assertIn(b"Own reliable backend services", document_xml)
-        self.assertIn(b"Jan 2022", document_xml)
-        self.assertIn(b"Present", document_xml)
-        self.assertIn("• Built production APIs".encode(), document_xml)
-        self.assertIn(b"Universiti Teknologi Malaysia", document_xml)
-        self.assertIn(b"Intelligent Document Classification", document_xml)
-        self.assertIn("Dean’s List".encode(), document_xml)
-        self.assertIn(b"Sep 2020", document_xml)
-        self.assertIn(b"Monitorscape", document_xml)
-        self.assertIn(b"Designed the event ingestion API", document_xml)
-        self.assertIn(b"Python, FastAPI, PostgreSQL, Docker", document_xml)
-        self.assertIn(b"Processed 100K events with 99.9% uptime", document_xml)
-        self.assertIn(b"Feb 2024", document_xml)
-        self.assertIn(b"Framework: Django, FastAPI", document_xml)
-        self.assertIn(b"Programming Language: Python, Go", document_xml)
-
-        removed_photo = self.client.delete(
-            f"/api/v1/resumes/{source_id}/profile-photo", headers=headers
-        )
-        missing_photo = self.client.get(
-            f"/api/v1/resumes/{source_id}/profile-photo", headers=headers
-        )
-        self.assertEqual(204, removed_photo.status_code)
-        self.assertEqual(404, missing_photo.status_code)
-
-        other_read = self.client.get(
-            f"/api/v1/resumes/{source_id}",
-            headers={"Authorization": "Bearer other-session"},
-        )
-        self.assertEqual(404, other_read.status_code)
-
     def test_resume_import_rejects_unsupported_files_and_requires_auth(self):
         unsupported = self.client.post(
             "/api/v1/resumes/imports",
@@ -866,34 +618,20 @@ class ApiTests(unittest.TestCase):
     def test_job_tracker_is_private_and_preserves_resume_attachment_snapshot(self):
         headers = {"Authorization": "Bearer test-session"}
         other_headers = {"Authorization": "Bearer other-session"}
-        created_resume = self.client.post(
-            "/api/v1/resumes",
+        imported = self.client.post(
+            "/api/v1/resumes/imports",
             headers=headers,
-            json={
-                "display_name": "Platform resume",
-                "target_role": "Platform Engineer",
-                "full_name": "Taylor Example",
-                "headline": "Platform Engineer",
-                "email_address": "taylor@example.com",
-                "phone_number": "+60 12-345 6789",
-                "location": "Kuala Lumpur, Malaysia",
-                "summary": "Builds reliable cloud platforms.",
-            },
+            files=[(
+                "files",
+                (
+                    "platform-resume.docx",
+                    self.resume_docx(),
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
+            )],
         )
-        self.assertEqual(201, created_resume.status_code, created_resume.text)
-        source = created_resume.json()
-        accepted = self.client.post(
-            f"/api/v1/resumes/{source['id']}/accept",
-            headers=headers,
-            json={
-                **source["draft"],
-                "display_name": "Platform resume",
-                "target_role": "Platform Engineer",
-                "variant_name": "Platform Engineer — Master",
-            },
-        )
-        self.assertEqual(200, accepted.status_code, accepted.text)
-        variant = accepted.json()
+        self.assertEqual(201, imported.status_code, imported.text)
+        source = imported.json()["items"][0]["source"]
 
         created = self.client.post(
             "/api/v1/job-applications",
@@ -910,14 +648,13 @@ class ApiTests(unittest.TestCase):
                 "next_action_on": "2026-10-05",
                 "notes": "Referred by the infrastructure team.",
                 "resume_source_id": source["id"],
-                "resume_variant_id": variant["id"],
             },
         )
         self.assertEqual(201, created.status_code, created.text)
         application = created.json()
         self.assertTrue(application["id"].startswith("job_"))
-        self.assertEqual("Platform Engineer — Master", application["resume_name"])
-        self.assertEqual("Platform Engineer", application["resume_target_role"])
+        self.assertEqual("platform-resume", application["resume_name"])
+        self.assertIsNone(application["resume_target_role"])
         with sqlite3.connect(self.database) as connection:
             snapshot_key = connection.execute(
                 "SELECT resume_snapshot_object_key FROM job_applications WHERE id = ?",
@@ -1004,7 +741,6 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(200, updated.status_code, updated.text)
         self.assertEqual("interview", updated.json()["status"])
-        self.assertEqual(variant["id"], updated.json()["resume_variant_id"])
 
         removed_source = self.client.delete(
             f"/api/v1/resumes/{source['id']}", headers=headers
@@ -1014,8 +750,7 @@ class ApiTests(unittest.TestCase):
             "/api/v1/job-applications", headers=headers
         ).json()[0]
         self.assertIsNone(preserved["resume_source_id"])
-        self.assertIsNone(preserved["resume_variant_id"])
-        self.assertEqual("Platform Engineer — Master", preserved["resume_name"])
+        self.assertEqual("platform-resume", preserved["resume_name"])
         self.assertTrue(snapshot_path.is_file())
 
         deleted = self.client.delete(

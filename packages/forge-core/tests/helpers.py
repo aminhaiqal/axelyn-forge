@@ -1,24 +1,15 @@
-import json
 import tempfile
 import zipfile
 from pathlib import Path
 
 from lxml import etree
 
-ROOT = Path(__file__).resolve().parents[3]
-DATA = ROOT / "data" / "profile.json"
-SCHEMA = ROOT / "schemas" / "profile.schema.json"
-BINDINGS = ROOT / "bindings" / "software-engineer.json"
-COVER_TEMPLATE = ROOT / "templates" / "Amin_Haiqal_Cover_Letter_SDT_Template.docx"
-COVER_DATA = ROOT / "data" / "cover_letter.json"
-COVER_SCHEMA = ROOT / "schemas" / "cover-letter.schema.json"
-COVER_BINDINGS = ROOT / "bindings" / "cover-letter.json"
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W}
 
 
 def _build_resume_test_template(path: Path) -> None:
-    tags = list(json.loads(BINDINGS.read_text(encoding="utf-8"))["bindings"])
+    tags = ["profile.fullName", "summary.text", "education.utm.meta"]
     document = etree.Element(f"{{{W}}}document", nsmap={"w": W})
     body = etree.SubElement(document, f"{{{W}}}body")
     for tag in tags:

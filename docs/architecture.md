@@ -17,10 +17,7 @@ flowchart LR
     Converter --> LibreOffice[Headless LibreOffice Writer]
     Converter --> Tesseract[Tesseract OCR]
 
-    CLI[Forge CLI] --> Core
-    Core --> Evidence[(Evidence and usage SQLite)]
-    Core --> Provider[OpenRouter Responses API]
-    Core --> Artifacts[JSON / DOCX / PDF]
+    API --> Provider[OpenRouter Responses API]
 ```
 
 ## Boundaries
@@ -31,7 +28,7 @@ flowchart LR
 
 `apps/converter` owns resource-bounded office document conversion and image OCR. It has no public route or published port. Each request uses isolated temporary files, validates document signatures and image dimensions, and runs under a one-operation default concurrency limit. LibreOffice converts uploaded PDFs to normalized Word sources and generated DOCX files to PDFs; Tesseract reads PNG/JPEG job-post screenshots.
 
-`packages/forge-core` owns document-domain behavior. It remains independent of HTTP and can be driven through the `forge` CLI or imported by a later background worker. Template inspection, evidence selection, semantic operations, DOCX rendering, PDF conversion, and usage accounting stay in this package.
+`packages/forge-core` contains only the document and provider primitives shared by the API and converter.
 
 `infra` owns runtime assembly. Nginx routes pages to the private Astro service and `/api` to the private FastAPI service. It preserves the original host and scheme for safe Clerk redirects. SQLite state is kept in a named volume. Only the gateway publishes a host port locally. LibreOffice runs in the private converter and CLI images; candidate files are never copied into the public API image.
 
@@ -44,14 +41,13 @@ flowchart LR
 
 ## Resume library flow
 
-1. The signed-in user creates a first resume with the guided form or sends up to five DOCX/PDF files to the same-origin import endpoint.
+1. The signed-in user sends up to five DOCX/PDF files to the same-origin import endpoint.
 2. FastAPI validates imported signatures and size limits. A PDF is first converted into DOCX by the private LibreOffice service; an uploaded DOCX becomes the normalized Word source directly.
 3. Forge extracts and structures content from the normalized DOCX, renders a finished DOCX, and sends that same document to the private converter for a matching PDF.
 4. The library exposes only the finished DOCX and PDF. The original source, normalized Word data, structured JSON, and Draft 2020-12 JSON Schema remain internal and owner-scoped.
-5. An imported resume is immutable after processing. Replacing it requires deleting the source and uploading a new file; the API enforces this rule on its detail, draft, photo, editable-document, and acceptance routes.
-6. A form-created source remains editable in the builder. Standard fields cover common resume content; custom sections preserve publications, awards, volunteering, clearances, and other uncommon material.
-7. The standard renderer uses one reading order, selectable text, standard headings, and no tables, columns, icons, or text boxes.
-8. Download authorization checks both the artifact ID and Clerk user ID. Storage credentials and object keys never reach browser code.
+5. A resume is immutable after processing. Replacing it requires deleting the source and uploading a new file.
+6. The standard renderer uses one reading order, selectable text, standard headings, and no tables, columns, icons, or text boxes.
+7. Download authorization checks both the artifact ID and Clerk user ID. Storage credentials and object keys never reach browser code.
 
 ## Job match and tailoring flow
 
@@ -63,7 +59,7 @@ flowchart LR
 
 ## Job tracker flow
 
-1. The signed-in user creates an application record with the company, role, posting URL, status, dates, notes, and one owned resume source or approved version.
+1. The signed-in user creates an application record with the company, role, posting URL, status, dates, notes, and one owned resume source.
 2. FastAPI validates that both the application and selected resume belong to the same Clerk user. It stores the resume IDs, name and target-role labels, and a private content snapshot representing the version used for that application.
 3. The user can move the record through Saved, Applied, Screening, Interview, Offer, Rejected, or Withdrawn and can filter the pipeline in the browser.
 4. On demand, OpenRouter receives the role context, optional job description, and a server-built catalog of verified facts from the attached snapshot. It returns a strict interview brief with coverage, likely questions, evidence-linked answer plans, questions to ask, and preparation actions. Evidence references are limited to catalog IDs, so unsupported claims remain visible gaps.
@@ -71,4 +67,4 @@ flowchart LR
 
 ## Delivery
 
-Pull requests and pushes to `main` run Python tests, the Astro type check and production build, and all Docker image builds. Pushes to `main` or a `v*` tag publish separate API, converter, frontend, gateway, and core images to GitHub Container Registry. Deployment remains environment-specific, so the Clerk production keys and other credentials stay outside the repository.
+Pull requests and pushes to `main` run Python tests, the Astro type check and production build, and all Docker image builds. Pushes to `main` or a `v*` tag publish separate API, converter, frontend, and gateway images to GitHub Container Registry. Deployment remains environment-specific, so the Clerk production keys and other credentials stay outside the repository.

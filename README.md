@@ -1,6 +1,6 @@
 # Axelyn Forge
 
-Axelyn Forge is an API-first service for producing focused resumes, cover letters, and reusable career-document systems from verified experience. The Astro and Tailwind web app has a Clerk-protected `/app` resume library and a builder for creating a resume from a guided form. Uploaded PDF/DOCX resumes are processed once into a finished DOCX and matching PDF; users replace an import by deleting it and uploading a new source. Forge retains its normalized source, structured JSON, and JSON Schema as internal processing data. Candidates can preserve uncommon material in custom sections and generate private Word and PDF files. `/app/match` compares a selected resume with pasted or uploaded job descriptions, explains the gaps, and creates evidence-grounded tailored files when the fit supports it. `/app/forge` opens a persistent evidence discussion for a saved match: the full transcript is retained, working context is compressed into structured memory, resume claims cite source evidence, and the score only advances from concrete facts. Focused tools review the summary, bullets, skills, or gaps; a strict evidence-cited enhancement plan can then create a derived DOCX/PDF without modifying the uploaded source. The coach will stop below 80% when the record cannot honestly support more. `/app/tracker` records application stages, follow-up dates, notes, and the exact resume version attached to each role. Each tracked role can produce a private AI interview brief whose talking points cite verified evidence from that submitted resume. FastAPI verifies the same Clerk session for every private operation.
+Axelyn Forge is an API-first resume workspace. Signed-in users upload PDF/DOCX resumes, which are processed once into finished DOCX/PDF pairs and remain immutable until deleted. `/app/match` records evidence-grounded job comparisons and tailored versions. `/app/forge` keeps persistent, compressed coaching context and can read public links without treating them as proof of the candidate's work. `/app/tracker` records applications and produces evidence-cited interview briefs. FastAPI verifies the Clerk session for every private operation.
 
 The active product no longer depends on Discord.
 
@@ -12,9 +12,9 @@ apps/
   converter/               Private LibreOffice conversion service
   web/                     Astro SSR app, Tailwind UI, and Clerk controls
 packages/
-  forge-core/              Document engine, CLI, and core tests
+  forge-core/              Shared document and provider primitives
 infra/
-  docker/                  API, frontend, gateway, and core images
+  docker/                  API, converter, frontend, and gateway images
   nginx/                   Public gateway and API rate limiting
   compose.yaml             Local and single-host production stack
 .github/workflows/
@@ -70,19 +70,10 @@ The first public contract is versioned under `/api/v1`.
 | `GET` | `/api/v1/me` | Return the authenticated Clerk user ID. |
 | `POST` | `/api/v1/service-requests` | Validate and store a customer service brief. |
 | `GET` | `/api/v1/resumes` | List resume sources owned by the signed-in user. |
-| `POST` | `/api/v1/resumes` | Create a private resume source from structured form content. |
-| `GET` | `/api/v1/resume-templates` | List the available ATS-friendly layouts. |
 | `POST` | `/api/v1/resumes/imports` | Import up to five PDF/DOCX sources and create immutable finished DOCX/PDF pairs. |
 | `GET` | `/api/v1/resume-source-artifacts` | List the finished DOCX and PDF files for imported resumes. |
 | `GET` | `/api/v1/resume-source-artifacts/{id}/download` | Download an owned finished DOCX or PDF. |
-| `GET`, `DELETE` | `/api/v1/resumes/{id}` | Read an editable form source or delete any owned resume source. |
-| `GET` | `/api/v1/resumes/{id}/editable.docx` | Render an editable form source as a Word document. |
-| `PUT` | `/api/v1/resumes/{id}/draft` | Save fields, custom sections, and the selected layout for a form source. |
-| `POST` | `/api/v1/resumes/{id}/accept` | Approve a form source as a named role version. |
-| `GET` | `/api/v1/resume-variants` | List the signed-in user's approved versions. |
-| `GET` | `/api/v1/generated-documents` | List private generated files owned by the signed-in user. |
-| `POST` | `/api/v1/resume-variants/{id}/render` | Render an owned version as a private DOCX/PDF bundle. |
-| `GET` | `/api/v1/documents/{id}/download` | Download an owned generated document. |
+| `DELETE` | `/api/v1/resumes/{id}` | Delete an owned resume source and its files. |
 | `GET`, `POST` | `/api/v1/job-applications` | List or create private job-application records with a resume attachment snapshot. |
 | `PUT`, `DELETE` | `/api/v1/job-applications/{id}` | Update or remove an owned job-application record. |
 | `POST` | `/api/v1/job-matches` | Analyze pasted or uploaded job-description content against an owned resume. |
@@ -118,7 +109,7 @@ Service submissions receive an opaque `req_…` reference and are stored in the 
 
 ## Containers
 
-The Compose stack builds the FastAPI service, private LibreOffice/Tesseract converter, Astro SSR frontend, and Nginx gateway. Nginx rate-limits write endpoints, while SQLite state remains in a named volume. Local resume objects use the private state volume. Production uses the authenticated `axelyn-forge-storage` Worker and a private R2 bucket; its bearer token stays server-only. The converter has no published port, uses a read-only filesystem and bounded concurrency, validates each PDF before the API stores it, and extracts text from PNG/JPEG job-post screenshots. A separate core image in `infra/docker/core.Dockerfile` provides the `forge` CLI without baking private candidate files into any image.
+The Compose stack builds the FastAPI service, private LibreOffice/Tesseract converter, Astro SSR frontend, and Nginx gateway. Nginx rate-limits write endpoints, while SQLite state remains in a named volume. Local resume objects use the private state volume. Production uses the authenticated `axelyn-forge-storage` Worker and a private R2 bucket; its bearer token stays server-only. The converter has no published port, uses a read-only filesystem and bounded concurrency, validates each PDF before the API stores it, and extracts text from PNG/JPEG job-post screenshots.
 
 ```bash
 docker compose --env-file apps/web/.env -f infra/compose.yaml up --build
@@ -148,43 +139,7 @@ It must also contain `FORGE_STORAGE_ENDPOINT` and `FORGE_STORAGE_TOKEN`. Deploy 
 npx wrangler deploy --config infra/cloudflare/wrangler.jsonc
 ```
 
-## Document engine
-
-The core package retains the deterministic document pipeline. DOCX templates control presentation, canonical JSON controls facts and document structure, and AI output is limited to validated semantic rewrite operations.
-
-Validate a canonical profile:
-
-```bash
-.venv/bin/forge validate \
-  --data data/profile.json \
-  --schema schemas/profile.schema.json
-```
-
-Render with a private Word template:
-
-```bash
-.venv/bin/forge render \
-  --template /path/to/private-resume-template.docx \
-  --data data/profile.json \
-  --bindings bindings/software-engineer.json \
-  --output output/resume.docx
-```
-
-Run the full OpenRouter-assisted workflow:
-
-```bash
-.venv/bin/forge tailor \
-  --jd /path/to/job-description.txt \
-  --context context/ \
-  --template /path/to/private-resume-template.docx \
-  --data data/profile.json \
-  --bindings bindings/software-engineer.json \
-  --output-dir output
-```
-
-Set `OPENROUTER_API_KEY` before running AI-assisted commands. Provider output cannot modify protected identity, contact, employer, role, date, education, type, or stable-ID fields. OpenRouter requests use `store=False`, require zero-data-retention endpoints, deny provider data collection, and write only usage metadata to SQLite without prompt content or API keys. Model overrides use OpenRouter model IDs such as `openai/gpt-5.4-mini`; the evidence coach can be configured independently with `OPENROUTER_FORGE_AI_MODEL`. When a Forge AI prompt contains a public URL, its domain-restricted reading stage uses `OPENROUTER_WEB_CONTEXT_MODEL` and supplies public site context separately from the candidate's user-confirmed responsibilities.
-
-Forge uses the OpenAI-compatible Python client as its HTTP transport, configured with OpenRouter's base URL and API key. It does not send these workflows to the OpenAI API endpoint.
+OpenRouter requests use `store=False`, zero-data-retention routing, and denied provider data collection. `OPENROUTER_FORGE_AI_MODEL` controls evidence coaching; `OPENROUTER_WEB_CONTEXT_MODEL` controls domain-restricted public-link reading. Website context remains separate from user-confirmed responsibilities.
 
 ## Verification
 
@@ -195,7 +150,7 @@ docker compose -f infra/compose.yaml config
 clerk doctor
 ```
 
-CI runs the Python tests, checks and builds the Astro app, and builds the API, converter, frontend, gateway, and core container images. Pushes to `main` and version tags publish all five images to GitHub Container Registry.
+CI runs the Python tests, checks and builds the Astro app, and builds the API, converter, frontend, and gateway container images. Pushes to `main` and version tags publish all four images to GitHub Container Registry.
 
 ## Private data
 

@@ -1,3 +1,3 @@
 # Axelyn Forge Core
 
-Deterministic document engine for validated semantic rewrites, Word content-control rendering, PDF conversion, OpenRouter-assisted evidence selection, and usage accounting. See the repository root README for usage examples.
+Small shared package for DOCX inspection, PDF conversion, OpenRouter privacy settings, and evidence-grounded interview briefs used by the API and converter services.

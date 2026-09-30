@@ -47,8 +47,6 @@ from .models import (
     ForgeAIThreadSummary,
     HealthResponse,
     AuthenticatedUser,
-    GeneratedDocumentBundle,
-    GeneratedDocumentSummary,
     InterviewBrief,
     InterviewBriefRequest,
     JobApplicationCreate,
@@ -60,16 +58,11 @@ from .models import (
     JobMatchDocumentSummary,
     JobMatchResult,
     JobMatchSummary,
-    ResumeAcceptRequest,
     ResumeDraft,
-    ResumeDraftUpdate,
     ResumeImportItem,
     ResumeImportResponse,
     ResumeSourceArtifactSummary,
-    ResumeSourceDetail,
     ResumeSourceSummary,
-    ResumeTemplateSummary,
-    ResumeVariantSummary,
     Service,
     ServiceRequestAccepted,
     ServiceRequestCreate,
@@ -89,46 +82,23 @@ from .resume_import import (
     draft_payload,
     encode_json,
     extract_resume,
-    normalize_resume_text,
-    resume_plain_text,
-    unmapped_resume_content,
 )
 from .resume_enhancer import (
     ResumeEnhancementUnavailable,
     generate_resume_enhancement,
 )
 from .resume_store import ResumeStore
-from .resume_templates import render_resume, template_catalog
+from .resume_templates import render_resume
 from .storage import create_object_store
 from .store import ServiceRequestStore
 from .website_context import extract_public_urls, retrieve_website_context
 
 
-PROFILE_PHOTO_MAX_BYTES = 5 * 1024 * 1024
-PROFILE_PHOTO_TYPES = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-}
-PROFILE_PHOTO_METADATA = (
-    "profile_photo_filename",
-    "profile_photo_media_type",
-    "profile_photo_object_key",
-)
-FORM_RESUME_MEDIA_TYPE = "application/vnd.axelyn.resume+json"
 USER_SOURCE_ARTIFACT_KINDS = frozenset({"resume_docx", "resume_pdf"})
 
 
 def _source_summary(row: dict[str, object]) -> ResumeSourceSummary:
     return ResumeSourceSummary(**row)
-
-
-def _variant_summary(row: dict[str, object]) -> ResumeVariantSummary:
-    return ResumeVariantSummary(**row)
-
-
-def _document_summary(row: dict[str, object]) -> GeneratedDocumentSummary:
-    return GeneratedDocumentSummary(**row)
 
 
 def _source_artifact_summary(row: dict[str, object]) -> ResumeSourceArtifactSummary:
@@ -151,16 +121,6 @@ def _job_application_summary(row: dict[str, object]) -> JobApplicationSummary:
     return JobApplicationSummary(**row)
 
 
-def _source_detail(
-    row: dict[str, object], draft: dict[str, object]
-) -> ResumeSourceDetail:
-    return ResumeSourceDetail(
-        **row,
-        draft=ResumeDraft(**draft),
-        unmapped_content=unmapped_resume_content(draft),
-    )
-
-
 def _safe_filename(value: str, fallback: str) -> str:
     filename = Path(value).name.strip()[:180]
     return filename or fallback
@@ -169,108 +129,6 @@ def _safe_filename(value: str, fallback: str) -> str:
 def _object_prefix(user_id: str) -> str:
     owner_hash = hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:32]
     return f"users/{owner_hash}"
-
-
-def _profile_photo_payload(upload: UploadFile) -> tuple[bytes, str, str]:
-    media_type = (upload.content_type or "").split(";", 1)[0].strip().casefold()
-    extension = PROFILE_PHOTO_TYPES.get(media_type)
-    if extension is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Profile photos must be JPEG, PNG, or WebP images.",
-        )
-    payload = upload.file.read(PROFILE_PHOTO_MAX_BYTES + 1)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Choose a non-empty profile photo.",
-        )
-    if len(payload) > PROFILE_PHOTO_MAX_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Profile photos are limited to 5 MB.",
-        )
-    signatures = {
-        "image/jpeg": (
-            len(payload) >= 4
-            and payload.startswith(b"\xff\xd8\xff")
-            and payload.endswith(b"\xff\xd9")
-        ),
-        "image/png": (
-            len(payload) >= 24
-            and payload.startswith(b"\x89PNG\r\n\x1a\n")
-            and payload[12:16] == b"IHDR"
-            and int.from_bytes(payload[16:20], "big") > 0
-            and int.from_bytes(payload[20:24], "big") > 0
-        ),
-        "image/webp": (
-            len(payload) >= 20
-            and payload.startswith(b"RIFF")
-            and payload[8:12] == b"WEBP"
-            and payload[12:16] in {b"VP8 ", b"VP8L", b"VP8X"}
-            and int.from_bytes(payload[4:8], "little") + 8 <= len(payload)
-        ),
-    }
-    if not signatures[media_type]:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="The selected file does not match its image format.",
-        )
-    return payload, media_type, extension
-
-
-def _preserve_profile_photo(
-    draft: dict[str, object], original: dict[str, object]
-) -> None:
-    for key in PROFILE_PHOTO_METADATA:
-        value = original.get(key)
-        if value:
-            draft[key] = value
-
-
-def _editable_draft(payload: ResumeDraftUpdate) -> dict[str, object]:
-    sections = payload.sections
-    experience_entries = [
-        entry.model_dump() for entry in payload.experience_entries
-    ]
-    education_entries = [
-        entry.model_dump() for entry in payload.education_entries
-    ]
-    project_entries = [
-        entry.model_dump() for entry in payload.project_entries
-    ]
-    skill_categories = [
-        category.model_dump() for category in payload.skill_categories
-    ]
-    custom_sections = [section.model_dump() for section in payload.custom_sections]
-    if not sections and "sections" not in payload.model_fields_set:
-        normalized = normalize_resume_text(payload.extracted_text)
-        sections = normalized.get("sections", {})
-        if not custom_sections and "custom_sections" not in payload.model_fields_set:
-            custom_sections = list(normalized.get("custom_sections", []))
-    return {
-        "display_name": payload.display_name,
-        "target_role": payload.target_role,
-        "template_id": payload.template_id,
-        "full_name": payload.full_name,
-        "headline": payload.headline,
-        "email_address": payload.email_address,
-        "phone_number": payload.phone_number,
-        "location": payload.location,
-        "linkedin_url": payload.linkedin_url,
-        "portfolio_url": payload.portfolio_url,
-        "github_url": payload.github_url,
-        "other_professional_link": payload.other_professional_link,
-        "contact_line": payload.contact_line,
-        "summary": payload.summary,
-        "extracted_text": payload.extracted_text,
-        "sections": sections,
-        "experience_entries": experience_entries,
-        "education_entries": education_entries,
-        "project_entries": project_entries,
-        "skill_categories": skill_categories,
-        "custom_sections": custom_sections,
-    }
 
 
 def _render_resume_docx(
@@ -408,16 +266,6 @@ def create_app(
     def require_user(request: Request) -> str:
         return user_authenticator(request)
 
-    def require_editable_source(row: dict[str, object]) -> None:
-        if str(row["media_type"]) != FORM_RESUME_MEDIA_TYPE:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "Imported resumes cannot be edited. Delete this resume and "
-                    "upload a replacement file."
-                ),
-            )
-
     def forge_ai_message(row: dict[str, object]) -> ForgeAIMessage:
         try:
             citations = json.loads(str(row["citations_json"]))
@@ -511,32 +359,15 @@ def create_app(
     def resolve_application_resume(
         user_id: str,
         source_id: str,
-        variant_id: str | None,
-    ) -> tuple[dict[str, object], dict[str, object] | None]:
+    ) -> dict[str, object]:
         source = resume_store.get_source(user_id, source_id)
         if source is None:
             raise HTTPException(status_code=404, detail="Resume source not found.")
-        variant: dict[str, object] | None = None
-        if variant_id is not None:
-            variant = resume_store.get_variant(user_id, variant_id)
-            if variant is None or str(variant["source_id"]) != source_id:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Resume version not found for this source.",
-                )
-        return source, variant
+        return source
 
-    def application_resume_snapshot(
-        source: dict[str, object],
-        variant: dict[str, object] | None,
-    ) -> bytes:
-        object_key = (
-            variant["normalized_object_key"]
-            if variant is not None
-            else source["draft_object_key"]
-        )
+    def application_resume_snapshot(source: dict[str, object]) -> bytes:
         try:
-            return object_store.get(str(object_key))
+            return object_store.get(str(source["draft_object_key"]))
         except KeyError as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -675,66 +506,6 @@ def create_app(
             },
         )
 
-    @app.get(
-        "/api/v1/resume-templates",
-        response_model=list[ResumeTemplateSummary],
-        tags=["resumes"],
-    )
-    def list_resume_templates() -> list[ResumeTemplateSummary]:
-        return [ResumeTemplateSummary(**template) for template in template_catalog()]
-
-    @app.post(
-        "/api/v1/resumes",
-        response_model=ResumeSourceDetail,
-        status_code=status.HTTP_201_CREATED,
-        tags=["resumes"],
-    )
-    def create_resume_from_form(
-        payload: ResumeDraftUpdate,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> ResumeSourceDetail:
-        source_id = "src_" + uuid.uuid4().hex
-        draft = _editable_draft(payload)
-        # A form-created resume has no imported source transcript. The structured
-        # fields are canonical, so later edits cannot appear as false unmapped text.
-        draft["extracted_text"] = ""
-        has_content = bool(resume_plain_text(draft).strip())
-        encoded = encode_json(draft)
-        prefix = f"{_object_prefix(user_id)}/sources/{source_id}"
-        original_key = f"{prefix}/original.forge.json"
-        draft_key = f"{prefix}/draft.json"
-        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", payload.display_name).strip("-.")
-        original_filename = f"{safe_name or 'resume'}.forge.json"
-        stored_keys: list[str] = []
-        try:
-            object_store.put(
-                original_key,
-                encoded,
-                "application/vnd.axelyn.resume+json",
-            )
-            stored_keys.append(original_key)
-            object_store.put(draft_key, encoded, "application/json")
-            stored_keys.append(draft_key)
-            row = resume_store.create_source(
-                source_id=source_id,
-                user_id=user_id,
-                display_name=payload.display_name,
-                target_role=payload.target_role,
-                original_filename=original_filename,
-                media_type=FORM_RESUME_MEDIA_TYPE,
-                byte_size=len(encoded),
-                sha256=hashlib.sha256(encoded).hexdigest(),
-                original_object_key=original_key,
-                draft_object_key=draft_key,
-                status="needs_review" if has_content else "needs_ocr",
-                warning=None if has_content else "Content is required.",
-            )
-        except Exception:
-            for key in stored_keys:
-                object_store.delete(key)
-            raise
-        return _source_detail(row, draft)
-
     @app.post(
         "/api/v1/resumes/imports",
         response_model=ResumeImportResponse,
@@ -744,14 +515,13 @@ def create_app(
     def import_resumes(
         user_id: Annotated[str, Depends(require_user)],
         files: Annotated[list[UploadFile], File()],
-        target_role: Annotated[str | None, Form()] = None,
     ) -> ResumeImportResponse:
         if not files or len(files) > resolved_settings.max_resume_files:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Upload between 1 and {resolved_settings.max_resume_files} files.",
             )
-        clean_role = target_role.strip()[:160] if target_role else None
+        clean_role = None
         items: list[ResumeImportItem] = []
         owner_prefix = _object_prefix(user_id)
         for upload in files:
@@ -925,257 +695,6 @@ def create_app(
             )
         return ResumeImportResponse(items=items)
 
-    @app.get(
-        "/api/v1/resumes/{source_id}",
-        response_model=ResumeSourceDetail,
-        tags=["resumes"],
-    )
-    def get_resume(
-        source_id: str,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> ResumeSourceDetail:
-        row = resume_store.get_source(user_id, source_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Resume not found.")
-        require_editable_source(row)
-        try:
-            draft = decode_json(object_store.get(str(row["draft_object_key"])))
-        except KeyError as error:
-            raise HTTPException(status_code=503, detail="Resume draft is unavailable.") from error
-        return _source_detail(row, draft)
-
-    @app.put(
-        "/api/v1/resumes/{source_id}/profile-photo",
-        response_model=ResumeSourceDetail,
-        tags=["resumes"],
-    )
-    def upload_resume_profile_photo(
-        source_id: str,
-        user_id: Annotated[str, Depends(require_user)],
-        photo: Annotated[UploadFile, File()],
-    ) -> ResumeSourceDetail:
-        row = resume_store.get_source(user_id, source_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Resume not found.")
-        require_editable_source(row)
-        try:
-            draft = decode_json(object_store.get(str(row["draft_object_key"])))
-        except KeyError as error:
-            raise HTTPException(
-                status_code=503, detail="Resume draft is unavailable."
-            ) from error
-        payload, media_type, extension = _profile_photo_payload(photo)
-        old_key = str(draft.get("profile_photo_object_key") or "")
-        new_key = (
-            f"{_object_prefix(user_id)}/sources/{source_id}/profile-photo/"
-            f"{uuid.uuid4().hex}{extension}"
-        )
-        draft["profile_photo_filename"] = _safe_filename(
-            photo.filename or "", f"profile-photo{extension}"
-        )
-        draft["profile_photo_media_type"] = media_type
-        draft["profile_photo_object_key"] = new_key
-        try:
-            object_store.put(new_key, payload, media_type)
-            object_store.put(
-                str(row["draft_object_key"]), encode_json(draft), "application/json"
-            )
-        except Exception:
-            object_store.delete(new_key)
-            raise
-        if old_key and old_key != new_key:
-            object_store.delete(old_key)
-        return _source_detail(row, draft)
-
-    @app.get(
-        "/api/v1/resumes/{source_id}/profile-photo",
-        tags=["resumes"],
-    )
-    def get_resume_profile_photo(
-        source_id: str,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> Response:
-        row = resume_store.get_source(user_id, source_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Resume not found.")
-        try:
-            draft = decode_json(object_store.get(str(row["draft_object_key"])))
-            object_key = str(draft.get("profile_photo_object_key") or "")
-            if not object_key:
-                raise KeyError(source_id)
-            payload = object_store.get(object_key)
-        except KeyError as error:
-            raise HTTPException(status_code=404, detail="Profile photo not found.") from error
-        media_type = str(draft.get("profile_photo_media_type") or "image/jpeg")
-        filename = _safe_filename(
-            str(draft.get("profile_photo_filename") or ""), "profile-photo"
-        )
-        download_name = re.sub(r"[^A-Za-z0-9._-]+", "-", filename).strip("-.")
-        return Response(
-            payload,
-            media_type=media_type,
-            headers={
-                "Content-Disposition": (
-                    f'inline; filename="{download_name or "profile-photo"}"'
-                ),
-                "Cache-Control": "private, no-store",
-                "X-Content-Type-Options": "nosniff",
-            },
-        )
-
-    @app.delete(
-        "/api/v1/resumes/{source_id}/profile-photo",
-        status_code=status.HTTP_204_NO_CONTENT,
-        tags=["resumes"],
-    )
-    def delete_resume_profile_photo(
-        source_id: str,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> Response:
-        row = resume_store.get_source(user_id, source_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Resume not found.")
-        require_editable_source(row)
-        try:
-            draft = decode_json(object_store.get(str(row["draft_object_key"])))
-        except KeyError as error:
-            raise HTTPException(
-                status_code=503, detail="Resume draft is unavailable."
-            ) from error
-        object_key = str(draft.pop("profile_photo_object_key", "") or "")
-        draft.pop("profile_photo_filename", None)
-        draft.pop("profile_photo_media_type", None)
-        object_store.put(
-            str(row["draft_object_key"]), encode_json(draft), "application/json"
-        )
-        if object_key:
-            object_store.delete(object_key)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    @app.get(
-        "/api/v1/resumes/{source_id}/editable.docx",
-        tags=["resumes"],
-    )
-    def download_editable_resume(
-        source_id: str,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> Response:
-        row = resume_store.get_source(user_id, source_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Resume not found.")
-        require_editable_source(row)
-        try:
-            draft = decode_json(object_store.get(str(row["draft_object_key"])))
-        except KeyError as error:
-            raise HTTPException(status_code=503, detail="Resume draft is unavailable.") from error
-        if not resume_plain_text(draft).strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Add resume content before creating an editable Word draft.",
-            )
-        document_payload, _, _ = _render_resume_docx(
-            draft=draft,
-            title=str(row["display_name"]),
-            description="Editable Word draft generated from a private resume source.",
-        )
-        safe_stem = re.sub(
-            r"[^A-Za-z0-9._-]+", "-", str(row["display_name"])
-        ).strip("-.")
-        filename = f"{safe_stem or 'resume'}-editable.docx"
-        return Response(
-            document_payload,
-            media_type=DOCX_MEDIA_TYPE,
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "Cache-Control": "private, no-store",
-                "X-Content-Type-Options": "nosniff",
-            },
-        )
-
-    @app.put(
-        "/api/v1/resumes/{source_id}/draft",
-        response_model=ResumeSourceDetail,
-        tags=["resumes"],
-    )
-    def update_resume_draft(
-        source_id: str,
-        payload: ResumeDraftUpdate,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> ResumeSourceDetail:
-        row = resume_store.get_source(user_id, source_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Resume not found.")
-        require_editable_source(row)
-        draft = _editable_draft(payload)
-        try:
-            original_draft = decode_json(
-                object_store.get(str(row["draft_object_key"]))
-            )
-        except KeyError as error:
-            raise HTTPException(
-                status_code=503,
-                detail="Resume draft is unavailable.",
-            ) from error
-        draft["extracted_text"] = str(original_draft.get("extracted_text") or "")
-        _preserve_profile_photo(draft, original_draft)
-        has_content = bool(resume_plain_text(draft).strip())
-        object_store.put(str(row["draft_object_key"]), encode_json(draft), "application/json")
-        updated = resume_store.update_source(
-            user_id=user_id,
-            source_id=source_id,
-            display_name=payload.display_name,
-            target_role=payload.target_role,
-            draft_object_key=str(row["draft_object_key"]),
-            status="needs_review" if has_content else "needs_ocr",
-            warning=None if has_content else str(row.get("warning") or "Content is required."),
-        )
-        assert updated is not None
-        return _source_detail(updated, draft)
-
-    @app.post(
-        "/api/v1/resumes/{source_id}/accept",
-        response_model=ResumeVariantSummary,
-        tags=["resumes"],
-    )
-    def accept_resume(
-        source_id: str,
-        payload: ResumeAcceptRequest,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> ResumeVariantSummary:
-        row = resume_store.get_source(user_id, source_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Resume not found.")
-        require_editable_source(row)
-        draft = _editable_draft(payload)
-        try:
-            original_draft = decode_json(
-                object_store.get(str(row["draft_object_key"]))
-            )
-        except KeyError as error:
-            raise HTTPException(
-                status_code=503,
-                detail="Resume draft is unavailable.",
-            ) from error
-        draft["extracted_text"] = str(original_draft.get("extracted_text") or "")
-        _preserve_profile_photo(draft, original_draft)
-        if not resume_plain_text(draft).strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Add resume content before accepting this version.",
-            )
-        normalized_key = f"{_object_prefix(user_id)}/variants/{source_id}/resume.json"
-        object_store.put(normalized_key, encode_json(draft), "application/json")
-        object_store.put(str(row["draft_object_key"]), encode_json(draft), "application/json")
-        variant = resume_store.accept_source(
-            user_id=user_id,
-            source_id=source_id,
-            name=payload.variant_name,
-            target_role=payload.target_role,
-            normalized_object_key=normalized_key,
-        )
-        assert variant is not None
-        return _variant_summary(variant)
-
     @app.delete(
         "/api/v1/resumes/{source_id}",
         status_code=status.HTTP_204_NO_CONTENT,
@@ -1204,143 +723,6 @@ def create_app(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get(
-        "/api/v1/resume-variants",
-        response_model=list[ResumeVariantSummary],
-        tags=["resumes"],
-    )
-    def list_resume_variants(
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> list[ResumeVariantSummary]:
-        return [
-            _variant_summary(row) for row in resume_store.list_variants(user_id)
-        ]
-
-    @app.get(
-        "/api/v1/generated-documents",
-        response_model=list[GeneratedDocumentSummary],
-        tags=["resumes"],
-    )
-    def list_generated_documents(
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> list[GeneratedDocumentSummary]:
-        return [
-            _document_summary(row) for row in resume_store.list_documents(user_id)
-        ]
-
-    @app.post(
-        "/api/v1/resume-variants/{variant_id}/render",
-        response_model=GeneratedDocumentBundle,
-        status_code=status.HTTP_201_CREATED,
-        tags=["resumes"],
-    )
-    def render_resume_variant(
-        variant_id: str,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> GeneratedDocumentBundle:
-        variant = resume_store.get_variant(user_id, variant_id)
-        if variant is None:
-            raise HTTPException(status_code=404, detail="Resume version not found.")
-        try:
-            normalized = decode_json(
-                object_store.get(str(variant["normalized_object_key"]))
-            )
-        except KeyError as error:
-            raise HTTPException(status_code=503, detail="Resume data is unavailable.") from error
-
-        document_payload, template_id, template_version = _render_resume_docx(
-            draft=normalized,
-            title=str(variant["name"]),
-            description="Resume generated from user-approved source material.",
-        )
-
-        safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", str(variant["name"])).strip("-.")
-        base_filename = f"{safe_stem or 'resume'}-axelyn-forge"
-        try:
-            pdf_payload = converter.docx_to_pdf(
-                document_payload,
-                f"{base_filename}.docx",
-            )
-        except DocumentConversionError as error:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="The LibreOffice PDF converter is temporarily unavailable.",
-            ) from error
-
-        generation_id = uuid.uuid4().hex
-        object_prefix = f"{_object_prefix(user_id)}/documents/{variant_id}/{generation_id}"
-        artifacts = [
-            {
-                "filename": f"{base_filename}.docx",
-                "media_type": DOCX_MEDIA_TYPE,
-                "object_key": f"{object_prefix}.docx",
-                "payload": document_payload,
-            },
-            {
-                "filename": f"{base_filename}.pdf",
-                "media_type": PDF_MEDIA_TYPE,
-                "object_key": f"{object_prefix}.pdf",
-                "payload": pdf_payload,
-            },
-        ]
-        stored_keys: list[str] = []
-        try:
-            for artifact in artifacts:
-                object_store.put(
-                    str(artifact["object_key"]),
-                    bytes(artifact["payload"]),
-                    str(artifact["media_type"]),
-                )
-                stored_keys.append(str(artifact["object_key"]))
-            rows = resume_store.create_documents(
-                user_id=user_id,
-                variant_id=variant_id,
-                documents=[
-                    {
-                        "filename": str(artifact["filename"]),
-                        "media_type": str(artifact["media_type"]),
-                        "object_key": str(artifact["object_key"]),
-                        "template_id": template_id,
-                        "template_version": template_version,
-                    }
-                    for artifact in artifacts
-                ],
-            )
-        except Exception:
-            for key in stored_keys:
-                object_store.delete(key)
-            raise
-        assert rows is not None
-        return GeneratedDocumentBundle(
-            documents=[_document_summary(row) for row in rows]
-        )
-
-    @app.get(
-        "/api/v1/documents/{document_id}/download",
-        tags=["resumes"],
-    )
-    def download_document(
-        document_id: str,
-        user_id: Annotated[str, Depends(require_user)],
-    ) -> Response:
-        document = resume_store.get_document(user_id, document_id)
-        if document is None:
-            raise HTTPException(status_code=404, detail="Document not found.")
-        try:
-            payload = object_store.get(str(document["object_key"]))
-        except KeyError as error:
-            raise HTTPException(status_code=404, detail="Document not found.") from error
-        filename = _safe_filename(str(document["filename"]), "resume.docx")
-        return Response(
-            payload,
-            media_type=str(document["media_type"]),
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "Cache-Control": "private, no-store",
-                "X-Content-Type-Options": "nosniff",
-            },
-        )
-
-    @app.get(
         "/api/v1/job-applications",
         response_model=list[JobApplicationSummary],
         tags=["job tracker"],
@@ -1363,11 +745,7 @@ def create_app(
         payload: JobApplicationCreate,
         user_id: Annotated[str, Depends(require_user)],
     ) -> JobApplicationSummary:
-        source, variant = resolve_application_resume(
-            user_id,
-            payload.resume_source_id,
-            payload.resume_variant_id,
-        )
+        source = resolve_application_resume(user_id, payload.resume_source_id)
         application_id = "job_" + uuid.uuid4().hex
         snapshot_key = (
             f"{_object_prefix(user_id)}/job-applications/{application_id}/"
@@ -1375,7 +753,7 @@ def create_app(
         )
         object_store.put(
             snapshot_key,
-            application_resume_snapshot(source, variant),
+            application_resume_snapshot(source),
             "application/json",
         )
         try:
@@ -1393,16 +771,9 @@ def create_app(
                 next_action_on=payload.next_action_on,
                 notes=payload.notes,
                 resume_source_id=payload.resume_source_id,
-                resume_variant_id=payload.resume_variant_id,
-                resume_name=str(
-                    variant["name"]
-                    if variant is not None
-                    else source["display_name"]
-                ),
+                resume_name=str(source["display_name"]),
                 resume_target_role=(
-                    str(variant["target_role"])
-                    if variant is not None and variant["target_role"]
-                    else str(source["target_role"])
+                    str(source["target_role"])
                     if source["target_role"]
                     else None
                 ),
@@ -1429,20 +800,12 @@ def create_app(
 
         resume_selection_changed = (
             payload.resume_source_id is not None
-            and (
-                payload.resume_source_id != existing["resume_source_id"]
-                or payload.resume_variant_id != existing["resume_variant_id"]
-            )
+            and payload.resume_source_id != existing["resume_source_id"]
         )
         source_id = (
             payload.resume_source_id
             if payload.resume_source_id is not None
             else existing["resume_source_id"]
-        )
-        variant_id = (
-            payload.resume_variant_id
-            if payload.resume_source_id is not None
-            else existing["resume_variant_id"]
         )
         resume_name = str(existing["resume_name"])
         resume_target_role = (
@@ -1454,18 +817,10 @@ def create_app(
         previous_snapshot_key = snapshot_key
         stored_replacement = False
         if resume_selection_changed:
-            source, variant = resolve_application_resume(
-                user_id,
-                payload.resume_source_id,
-                payload.resume_variant_id,
-            )
-            resume_name = str(
-                variant["name"] if variant is not None else source["display_name"]
-            )
+            source = resolve_application_resume(user_id, payload.resume_source_id)
+            resume_name = str(source["display_name"])
             resume_target_role = (
-                str(variant["target_role"])
-                if variant is not None and variant["target_role"]
-                else str(source["target_role"])
+                str(source["target_role"])
                 if source["target_role"]
                 else None
             )
@@ -1475,7 +830,7 @@ def create_app(
             )
             object_store.put(
                 snapshot_key,
-                application_resume_snapshot(source, variant),
+                application_resume_snapshot(source),
                 "application/json",
             )
             stored_replacement = True
@@ -1495,7 +850,6 @@ def create_app(
                 next_action_on=payload.next_action_on,
                 notes=payload.notes,
                 resume_source_id=str(source_id) if source_id else None,
-                resume_variant_id=str(variant_id) if variant_id else None,
                 resume_name=resume_name,
                 resume_target_role=resume_target_role,
                 resume_snapshot_object_key=snapshot_key,

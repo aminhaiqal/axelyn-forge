@@ -81,8 +81,6 @@ jobs:
         include:
           - name: api
             dockerfile: infra/docker/api.Dockerfile
-          - name: core
-            dockerfile: infra/docker/core.Dockerfile
           - name: converter
             dockerfile: infra/docker/converter.Dockerfile
           - name: web
@@ -108,8 +106,6 @@ jobs:
         include:
           - name: api
             dockerfile: infra/docker/api.Dockerfile
-          - name: core
-            dockerfile: infra/docker/core.Dockerfile
           - name: converter
             dockerfile: infra/docker/converter.Dockerfile
           - name: web

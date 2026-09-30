@@ -73,7 +73,6 @@ class RoleAlignmentAnalysis(BaseModel):
     recommendations: List[str]
 
 ResumeSourceStatus = Literal["needs_review", "needs_ocr", "ready"]
-ResumeTemplateId = Literal["ats-classic"]
 ResumeEmploymentType = Literal[
     "",
     "Full-time",
@@ -270,7 +269,7 @@ class ResumeCustomSection(BaseModel):
 class ResumeDraft(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    template_id: ResumeTemplateId = "ats-classic"
+    template_id: Literal["ats-classic"] = "ats-classic"
     full_name: str = Field(default="", max_length=160)
     headline: str = Field(default="", max_length=200)
     email_address: str = Field(default="", max_length=254)
@@ -280,10 +279,6 @@ class ResumeDraft(BaseModel):
     portfolio_url: str = Field(default="", max_length=500)
     github_url: str = Field(default="", max_length=500)
     other_professional_link: str = Field(default="", max_length=500)
-    profile_photo_filename: str = Field(default="", max_length=180)
-    profile_photo_media_type: Literal[
-        "", "image/jpeg", "image/png", "image/webp"
-    ] = ""
     contact_line: str = Field(default="", max_length=300)
     summary: str = ""
     extracted_text: str = ""
@@ -361,18 +356,6 @@ class ResumeSourceSummary(BaseModel):
     updated_at: str
 
 
-class ResumeSourceDetail(ResumeSourceSummary):
-    draft: ResumeDraft
-    unmapped_content: List[str] = Field(default_factory=list)
-
-
-class ResumeTemplateSummary(BaseModel):
-    id: ResumeTemplateId
-    name: str
-    description: str
-    density: Literal["comfortable", "balanced", "compact"]
-
-
 class ResumeImportItem(BaseModel):
     filename: str
     status: Literal["stored", "rejected"]
@@ -431,44 +414,6 @@ class ResumeSourceArtifactSummary(BaseModel):
     updated_at: str
 
 
-class ResumeDraftUpdate(ResumeDraft):
-    template_id: Literal["ats-classic"] = "ats-classic"
-    full_name: str = Field(min_length=2, max_length=160)
-    email_address: str = Field(min_length=3, max_length=254)
-    phone_number: str = Field(min_length=5, max_length=60)
-    location: str = Field(min_length=2, max_length=200)
-    display_name: str = Field(min_length=1, max_length=160)
-    target_role: Optional[str] = Field(default=None, max_length=160)
-
-
-class ResumeAcceptRequest(ResumeDraftUpdate):
-    variant_name: str = Field(min_length=1, max_length=160)
-
-
-class ResumeVariantSummary(BaseModel):
-    id: str
-    source_id: str
-    name: str
-    target_role: Optional[str]
-    status: Literal["ready"]
-    created_at: str
-    updated_at: str
-
-
-class GeneratedDocumentSummary(BaseModel):
-    id: str
-    variant_id: str
-    filename: str
-    media_type: str
-    template_id: str
-    template_version: str
-    created_at: str
-
-
-class GeneratedDocumentBundle(BaseModel):
-    documents: List[GeneratedDocumentSummary]
-
-
 JobApplicationStatus = Literal[
     "saved",
     "applied",
@@ -500,7 +445,6 @@ class JobApplicationCreate(BaseModel):
     )
     notes: Optional[str] = Field(default=None, max_length=10_000)
     resume_source_id: str = Field(min_length=1, max_length=80)
-    resume_variant_id: Optional[str] = Field(default=None, max_length=80)
 
     @field_validator(
         "job_url",
@@ -508,7 +452,6 @@ class JobApplicationCreate(BaseModel):
         "applied_on",
         "next_action_on",
         "notes",
-        "resume_variant_id",
         mode="before",
     )
     @classmethod
@@ -548,7 +491,6 @@ class JobApplicationUpdate(BaseModel):
     )
     notes: Optional[str] = Field(default=None, max_length=10_000)
     resume_source_id: Optional[str] = Field(default=None, max_length=80)
-    resume_variant_id: Optional[str] = Field(default=None, max_length=80)
 
     _blank_values_are_none = field_validator(
         "job_url",
@@ -557,7 +499,6 @@ class JobApplicationUpdate(BaseModel):
         "next_action_on",
         "notes",
         "resume_source_id",
-        "resume_variant_id",
         mode="before",
     )(JobApplicationCreate.blank_values_are_none.__func__)
     _job_url_is_http = field_validator("job_url")(
@@ -578,7 +519,6 @@ class JobApplicationSummary(BaseModel):
     next_action_on: Optional[str]
     notes: Optional[str]
     resume_source_id: Optional[str]
-    resume_variant_id: Optional[str]
     resume_name: str
     resume_target_role: Optional[str]
     created_at: str

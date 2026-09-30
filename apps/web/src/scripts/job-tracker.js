@@ -28,7 +28,6 @@ if (trackerPage instanceof HTMLElement) {
   const closeInterviewButton = document.querySelector("#close-interview-dialog");
   let applications = [];
   let sources = [];
-  let variants = [];
   let activeInterviewApplication = null;
 
   const api = async (path, options = {}) => {
@@ -101,29 +100,13 @@ if (trackerPage instanceof HTMLElement) {
     resumeSelect.replaceChildren();
     const prompt = document.createElement("option");
     prompt.value = "";
-    prompt.textContent = sources.length ? "Choose the resume sent for this role" : "Create or import a resume first";
+    prompt.textContent = sources.length ? "Choose the resume sent for this role" : "Import a resume first";
     resumeSelect.append(prompt);
 
-    if (variants.length) {
-      const group = document.createElement("optgroup");
-      group.label = "Approved resume versions";
-      variants.forEach((variant) => {
-        const option = document.createElement("option");
-        option.value = `variant:${variant.id}`;
-        option.dataset.sourceId = variant.source_id;
-        option.dataset.variantId = variant.id;
-        option.textContent = `${variant.name}${variant.target_role ? ` — ${variant.target_role}` : ""}`;
-        group.append(option);
-      });
-      resumeSelect.append(group);
-    }
-
-    const versionSourceIds = new Set(variants.map((variant) => variant.source_id));
-    const draftSources = sources.filter((source) => !versionSourceIds.has(source.id));
-    if (draftSources.length) {
+    if (sources.length) {
       const group = document.createElement("optgroup");
       group.label = "Resume sources";
-      draftSources.forEach((source) => {
+      sources.forEach((source) => {
         const option = document.createElement("option");
         option.value = `source:${source.id}`;
         option.dataset.sourceId = source.id;
@@ -135,11 +118,9 @@ if (trackerPage instanceof HTMLElement) {
     }
 
     if (selectedApplication) {
-      const selectedValue = selectedApplication.resume_variant_id
-        ? `variant:${selectedApplication.resume_variant_id}`
-        : selectedApplication.resume_source_id
-          ? `source:${selectedApplication.resume_source_id}`
-          : "";
+      const selectedValue = selectedApplication.resume_source_id
+        ? `source:${selectedApplication.resume_source_id}`
+        : "";
       if (selectedValue && Array.from(resumeSelect.options).some((option) => option.value === selectedValue)) {
         resumeSelect.value = selectedValue;
       } else if (!selectedApplication.resume_source_id) {
@@ -158,8 +139,8 @@ if (trackerPage instanceof HTMLElement) {
       } else {
         resumeHelp.append("You need a resume before tracking an application. ");
         const link = document.createElement("a");
-        link.href = "/app/resume";
-        link.textContent = "Create your first resume";
+        link.href = "/app";
+        link.textContent = "Import your first resume";
         resumeHelp.append(link, ".");
       }
     }
@@ -177,7 +158,6 @@ if (trackerPage instanceof HTMLElement) {
     next_action_on: item.next_action_on,
     notes: item.notes,
     resume_source_id: item.resume_source_id,
-    resume_variant_id: item.resume_variant_id,
   });
 
   const editApplication = (item) => {
@@ -493,9 +473,9 @@ if (trackerPage instanceof HTMLElement) {
       } else if (sources.length) {
         empty.append(textElement("strong", "", "No applications yet."), document.createTextNode("Add the first role you want to follow."));
       } else {
-        empty.append(textElement("strong", "", "Start with your resume."), document.createTextNode("Create or import a resume, then return here to attach it to an application. "));
-        const link = textElement("a", "", "Open resume builder");
-        link.href = "/app/resume";
+        empty.append(textElement("strong", "", "Start with your resume."), document.createTextNode("Import a resume, then return here to attach it to an application. "));
+        const link = textElement("a", "", "Open resume library");
+        link.href = "/app";
         empty.append(link);
       }
       list.append(empty);
@@ -592,7 +572,6 @@ if (trackerPage instanceof HTMLElement) {
       next_action_on: String(values.get("next_action_on") || "") || null,
       notes: String(values.get("notes") || "") || null,
       resume_source_id: option?.dataset.sourceId || null,
-      resume_variant_id: option?.dataset.variantId || null,
     };
     if (submitButton instanceof HTMLButtonElement) submitButton.disabled = true;
     setFormStatus(editingId ? "Updating your application…" : "Saving your application…", "pending");
@@ -615,11 +594,9 @@ if (trackerPage instanceof HTMLElement) {
 
   Promise.all([
     api("/api/v1/resumes"),
-    api("/api/v1/resume-variants"),
     api("/api/v1/job-applications"),
-  ]).then(([loadedSources, loadedVariants, loadedApplications]) => {
+  ]).then(([loadedSources, loadedApplications]) => {
     sources = loadedSources;
-    variants = loadedVariants;
     applications = loadedApplications;
     fillResumeOptions();
     renderApplications();

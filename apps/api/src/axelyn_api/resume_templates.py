@@ -25,10 +25,6 @@ DEFAULT_TEMPLATE_ID = "ats-classic"
 
 @dataclass(frozen=True)
 class TemplateSpec:
-    id: str
-    name: str
-    description: str
-    density: str
     font: str
     body_size: float
     name_size: float
@@ -38,60 +34,15 @@ class TemplateSpec:
     paragraph_after: float
 
 
-TEMPLATES = (
-    TemplateSpec(
-        id="ats-classic",
-        name="Classic ATS",
-        description="Traditional hierarchy with generous spacing and a centered identity block.",
-        density="comfortable",
-        font="Arial",
-        body_size=10.5,
-        name_size=24,
-        heading_size=11.5,
-        accent="172A35",
-        margin=0.72,
-        paragraph_after=3.5,
-    ),
-    TemplateSpec(
-        id="ats-modern",
-        name="Modern ATS",
-        description="Crisp left-aligned structure with restrained color and clear section rules.",
-        density="balanced",
-        font="Aptos",
-        body_size=10.25,
-        name_size=25,
-        heading_size=11.5,
-        accent="315E73",
-        margin=0.68,
-        paragraph_after=3,
-    ),
-    TemplateSpec(
-        id="ats-compact",
-        name="Compact ATS",
-        description="Tighter spacing for experienced candidates who need more room without columns.",
-        density="compact",
-        font="Arial",
-        body_size=9.5,
-        name_size=22,
-        heading_size=10.5,
-        accent="223A48",
-        margin=0.55,
-        paragraph_after=2,
-    ),
+TEMPLATE = TemplateSpec(
+    font="Arial",
+    body_size=10.5,
+    name_size=24,
+    heading_size=11.5,
+    accent="172A35",
+    margin=0.72,
+    paragraph_after=3.5,
 )
-TEMPLATE_BY_ID = {template.id: template for template in TEMPLATES}
-
-
-def template_catalog() -> list[dict[str, str]]:
-    template = TEMPLATE_BY_ID[DEFAULT_TEMPLATE_ID]
-    return [
-        {
-            "id": template.id,
-            "name": template.name,
-            "description": template.description,
-            "density": template.density,
-        }
-    ]
 
 
 def _color(value: str) -> RGBColor:
@@ -194,8 +145,7 @@ def render_resume(
     content_controls: bool = False,
 ) -> tuple[str, str]:
     """Render every modeled section into a one-column DOCX without ATS-hostile objects."""
-    template_id = str(draft.get("template_id") or DEFAULT_TEMPLATE_ID)
-    spec = TEMPLATE_BY_ID.get(template_id, TEMPLATE_BY_ID[DEFAULT_TEMPLATE_ID])
+    spec = TEMPLATE
     document = Document()
     section = document.sections[0]
     section.top_margin = Inches(spec.margin)
@@ -223,15 +173,11 @@ def render_resume(
 
     section_style = document.styles.add_style("Resume Section", WD_STYLE_TYPE.PARAGRAPH)
     section_style.base_style = normal
-    section_style.paragraph_format.space_before = Pt(8 if spec.density != "compact" else 5)
+    section_style.paragraph_format.space_before = Pt(8)
     section_style.paragraph_format.space_after = Pt(4)
 
     identity = document.add_paragraph()
-    identity.alignment = (
-        WD_ALIGN_PARAGRAPH.CENTER
-        if spec.id == "ats-classic"
-        else WD_ALIGN_PARAGRAPH.LEFT
-    )
+    identity.alignment = WD_ALIGN_PARAGRAPH.CENTER
     identity.paragraph_format.space_after = Pt(1)
     run = _add_value_run(
         identity,
@@ -327,4 +273,4 @@ def render_resume(
     properties.comments = description
     properties.keywords = "resume, ATS, Axelyn Forge"
     document.save(output)
-    return spec.id, TEMPLATE_VERSION
+    return DEFAULT_TEMPLATE_ID, TEMPLATE_VERSION

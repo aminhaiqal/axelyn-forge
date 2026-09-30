@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import logging
 import os
 import re
 import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from jsonschema import Draft202012Validator
 
-from forge.context_selection import DEFAULT_CONTEXT_SELECTION_MODEL
 from forge.errors import ProviderError
-from forge.job_source import normalize_job_url
-from forge.openrouter_client import create_openrouter_client, openrouter_request_options
+from forge.openrouter_client import (
+    DEFAULT_OPENROUTER_FAST_MODEL,
+    create_openrouter_client,
+    openrouter_request_options,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -129,13 +133,45 @@ def _parse_json_output(output_text: str) -> Any:
     return json.loads(candidate)
 
 
+def _normalize_public_url(value: str) -> tuple[str, str]:
+    """Return a normalized public HTTP(S) URL and its hostname."""
+    if not isinstance(value, str) or not value.strip() or len(value.strip()) > 2048:
+        raise ProviderError("Linked URL is invalid")
+    parsed = urlsplit(value.strip())
+    if parsed.scheme.lower() not in {"http", "https"} or parsed.username or parsed.password:
+        raise ProviderError("Linked URL must be public HTTP(S)")
+    try:
+        hostname, port = parsed.hostname, parsed.port
+    except ValueError as error:
+        raise ProviderError("Linked URL has an invalid host") from error
+    if not hostname:
+        raise ProviderError("Linked URL has no host")
+    hostname = hostname.rstrip(".").lower()
+    if hostname == "localhost" or hostname.endswith(".local"):
+        raise ProviderError("Linked URL must use a public host")
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        try:
+            hostname = hostname.encode("idna").decode("ascii")
+        except UnicodeError as error:
+            raise ProviderError("Linked URL has an invalid host") from error
+    else:
+        if not address.is_global:
+            raise ProviderError("Linked URL must not target a private address")
+    netloc = f"{hostname}:{port}" if port is not None else hostname
+    return urlunsplit(
+        SplitResult(parsed.scheme.lower(), netloc, parsed.path or "/", parsed.query, "")
+    ), hostname
+
+
 def extract_public_urls(message: str) -> list[str]:
     """Return up to two unique, normalized public URLs from a user message."""
     values: list[str] = []
     for match in URL_PATTERN.finditer(message):
         raw_url = match.group(0).rstrip(TRAILING_URL_PUNCTUATION)
         try:
-            normalized, _ = normalize_job_url(raw_url)
+            normalized, _ = _normalize_public_url(raw_url)
         except ProviderError:
             continue
         if normalized not in values:
@@ -176,11 +212,11 @@ def retrieve_website_context(
     model: str | None = None,
 ) -> WebsiteContext:
     """Read one exact public webpage through a domain-restricted web-search tool."""
-    normalized_url, hostname = normalize_job_url(url)
+    normalized_url, hostname = _normalize_public_url(url)
     selected_model = (
         model
         or os.environ.get("OPENROUTER_WEB_CONTEXT_MODEL")
-        or DEFAULT_CONTEXT_SELECTION_MODEL
+        or DEFAULT_OPENROUTER_FAST_MODEL
     ).strip()
     if not selected_model:
         raise ProviderError("OpenRouter website-context model must be a non-empty string")
