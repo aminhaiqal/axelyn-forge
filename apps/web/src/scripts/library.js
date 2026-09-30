@@ -221,11 +221,12 @@ if (page instanceof HTMLElement) {
       return;
     }
     sources.forEach((source) => {
+      const isFormSource = source.media_type === "application/vnd.axelyn.resume+json";
       const card = document.createElement("article");
       card.className = "source-card";
       const filetype = document.createElement("span");
       filetype.className = "source-filetype";
-      filetype.textContent = source.media_type === "application/vnd.axelyn.resume+json"
+      filetype.textContent = isFormSource
         ? "FORM"
         : source.original_filename.split(".").pop()?.toUpperCase() || "FILE";
       const body = document.createElement("div");
@@ -234,15 +235,20 @@ if (page instanceof HTMLElement) {
       title.textContent = source.display_name;
       const meta = document.createElement("div");
       meta.className = "source-meta";
-      const role = document.createElement("span");
-      role.textContent = source.target_role || "No role assigned";
       const size = document.createElement("span");
-      size.textContent = source.media_type === "application/vnd.axelyn.resume+json" ? "Created in Forge" : formatBytes(source.byte_size);
+      size.textContent = isFormSource ? "Created in Forge" : formatBytes(source.byte_size);
       const state = document.createElement("span");
       state.className = "status-pill";
       state.dataset.ready = String(source.status === "ready");
-      state.textContent = source.status === "ready" ? "Approved" : source.status === "needs_ocr" ? "Needs content" : "Draft";
-      meta.append(role, size, state);
+      state.textContent = isFormSource
+        ? source.status === "ready" ? "Approved" : source.status === "needs_ocr" ? "Needs content" : "Draft"
+        : "Imported";
+      if (isFormSource && source.target_role) {
+        const role = document.createElement("span");
+        role.textContent = source.target_role;
+        meta.append(role);
+      }
+      meta.append(size, state);
       body.append(title, meta);
       if (source.warning) {
         const warning = document.createElement("p");
@@ -252,18 +258,18 @@ if (page instanceof HTMLElement) {
       }
       const actions = document.createElement("div");
       actions.className = "source-actions";
-      const edit = document.createElement("a");
-      edit.href = `/app/resume?source=${encodeURIComponent(source.id)}`;
-      edit.textContent = source.status === "ready" ? "Edit resume" : "Continue editing";
-      actions.append(edit);
+      if (isFormSource) {
+        const edit = document.createElement("a");
+        edit.href = `/app/resume?source=${encodeURIComponent(source.id)}`;
+        edit.textContent = source.status === "ready" ? "Edit resume" : "Continue editing";
+        actions.append(edit);
+      }
       const sourceArtifacts = new Map(
         (artifactsBySource.get(source.id) || []).map((artifact) => [artifact.kind, artifact]),
       );
       [
-        ["source_docx", "Source DOCX"],
-        ["sdt_template", "Standard Word template"],
-        ["resume_json", "JSON"],
-        ["resume_schema", "JSON Schema"],
+        ["resume_docx", "DOCX"],
+        ["resume_pdf", "PDF"],
       ].forEach(([kind, label]) => {
         const artifact = sourceArtifacts.get(kind);
         if (!artifact) return;
@@ -273,7 +279,7 @@ if (page instanceof HTMLElement) {
         download.setAttribute("download", artifact.filename);
         actions.append(download);
       });
-      if (!sourceArtifacts.size && source.status !== "needs_ocr") {
+      if (isFormSource && !sourceArtifacts.size && source.status !== "needs_ocr") {
         const word = document.createElement("a");
         word.href = `${apiBase}/api/v1/resumes/${source.id}/editable.docx`;
         word.textContent = "Word draft";
@@ -285,6 +291,7 @@ if (page instanceof HTMLElement) {
       remove.textContent = "Delete";
       remove.dataset.action = "delete";
       remove.dataset.id = source.id;
+      remove.dataset.imported = String(!isFormSource);
       actions.append(remove);
       card.append(filetype, body, actions);
       sourceList.append(card);
@@ -382,7 +389,10 @@ if (page instanceof HTMLElement) {
   sourceList?.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement) || target.dataset.action !== "delete" || !target.dataset.id) return;
-    if (!window.confirm("Delete this resume source and its generated documents?")) return;
+    const confirmation = target.dataset.imported === "true"
+      ? "Delete this imported resume and its DOCX and PDF files? Upload the source again to replace it."
+      : "Delete this resume source and its generated documents?";
+    if (!window.confirm(confirmation)) return;
     target.disabled = true;
     try {
       await api(`/api/v1/resumes/${target.dataset.id}`, { method: "DELETE" });

@@ -99,6 +99,8 @@ PROFILE_PHOTO_METADATA = (
     "profile_photo_media_type",
     "profile_photo_object_key",
 )
+FORM_RESUME_MEDIA_TYPE = "application/vnd.axelyn.resume+json"
+USER_SOURCE_ARTIFACT_KINDS = frozenset({"resume_docx", "resume_pdf"})
 
 
 def _source_summary(row: dict[str, object]) -> ResumeSourceSummary:
@@ -274,6 +276,7 @@ def _source_artifact_payloads(
     display_name: str,
     target_role: str | None,
     original_filename: str,
+    document_converter: DocumentConverter,
 ) -> list[dict[str, object]]:
     safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", display_name).strip("-.")
     safe_stem = safe_stem or "resume"
@@ -282,6 +285,11 @@ def _source_artifact_payloads(
         title=display_name,
         description="Axelyn standard resume generated from a normalized Word source.",
         content_controls=True,
+    )
+    finished_filename = f"{safe_stem}.docx"
+    finished_pdf = document_converter.docx_to_pdf(
+        standard_docx,
+        finished_filename,
     )
     resume_json = build_resume_package(
         draft=draft,
@@ -299,11 +307,18 @@ def _source_artifact_payloads(
             "source.docx",
         ),
         (
-            "sdt_template",
-            f"{safe_stem}-sdt-template.docx",
+            "resume_docx",
+            finished_filename,
             DOCX_MEDIA_TYPE,
             standard_docx,
-            "sdt-template.docx",
+            "resume.docx",
+        ),
+        (
+            "resume_pdf",
+            f"{safe_stem}.pdf",
+            PDF_MEDIA_TYPE,
+            finished_pdf,
+            "resume.pdf",
         ),
         (
             "resume_json",
@@ -360,6 +375,16 @@ def create_app(
 
     def require_user(request: Request) -> str:
         return user_authenticator(request)
+
+    def require_editable_source(row: dict[str, object]) -> None:
+        if str(row["media_type"]) != FORM_RESUME_MEDIA_TYPE:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Imported resumes cannot be edited. Delete this resume and "
+                    "upload a replacement file."
+                ),
+            )
 
     def resolve_application_resume(
         user_id: str,
@@ -492,6 +517,7 @@ def create_app(
         return [
             _source_artifact_summary(row)
             for row in resume_store.list_source_artifacts(user_id)
+            if str(row["kind"]) in USER_SOURCE_ARTIFACT_KINDS
         ]
 
     @app.get(
@@ -503,7 +529,7 @@ def create_app(
         user_id: Annotated[str, Depends(require_user)],
     ) -> Response:
         artifact = resume_store.get_source_artifact(user_id, artifact_id)
-        if artifact is None:
+        if artifact is None or str(artifact["kind"]) not in USER_SOURCE_ARTIFACT_KINDS:
             raise HTTPException(status_code=404, detail="Resume artifact not found.")
         try:
             payload = object_store.get(str(artifact["object_key"]))
@@ -570,7 +596,7 @@ def create_app(
                 display_name=payload.display_name,
                 target_role=payload.target_role,
                 original_filename=original_filename,
-                media_type="application/vnd.axelyn.resume+json",
+                media_type=FORM_RESUME_MEDIA_TYPE,
                 byte_size=len(encoded),
                 sha256=hashlib.sha256(encoded).hexdigest(),
                 original_object_key=original_key,
@@ -683,20 +709,43 @@ def create_app(
                 except (ProviderError, ValueError):
                     ai_warning = (
                         "AI structuring was temporarily unavailable. Forge used its "
-                        "deterministic parser; review the draft before approval."
+                        "deterministic parser. Review the DOCX and PDF, then delete "
+                        "and re-upload the source if changes are needed."
                     )
                     normalized_warning = " ".join(
                         value for value in (normalized_warning, ai_warning) if value
                     )
-            artifact_payloads = _source_artifact_payloads(
-                prefix=prefix,
-                normalized_docx=normalized_docx,
-                draft=draft,
-                display_name=stem,
-                target_role=clean_role,
-                original_filename=original_name,
-            )
-            resume_status = "needs_ocr" if not normalized_text else "needs_review"
+            if not normalized_text.strip():
+                items.append(
+                    ResumeImportItem(
+                        filename=original_name,
+                        status="rejected",
+                        error=(
+                            "No readable resume text was found. Export a searchable "
+                            "PDF or DOCX and upload it again."
+                        ),
+                    )
+                )
+                continue
+            try:
+                artifact_payloads = _source_artifact_payloads(
+                    prefix=prefix,
+                    normalized_docx=normalized_docx,
+                    draft=draft,
+                    display_name=stem,
+                    target_role=clean_role,
+                    original_filename=original_name,
+                    document_converter=converter,
+                )
+            except DocumentConversionError:
+                items.append(
+                    ResumeImportItem(
+                        filename=original_name,
+                        status="rejected",
+                        error="Forge could not create the finished PDF. Try again.",
+                    )
+                )
+                continue
             stored_keys: list[str] = []
             created_source = False
             try:
@@ -722,7 +771,7 @@ def create_app(
                     sha256=extracted.checksum,
                     original_object_key=original_key,
                     draft_object_key=draft_key,
-                    status=resume_status,
+                    status="ready",
                     warning=normalized_warning,
                 )
                 created_source = True
@@ -763,6 +812,7 @@ def create_app(
         row = resume_store.get_source(user_id, source_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
+        require_editable_source(row)
         try:
             draft = decode_json(object_store.get(str(row["draft_object_key"])))
         except KeyError as error:
@@ -782,6 +832,7 @@ def create_app(
         row = resume_store.get_source(user_id, source_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
+        require_editable_source(row)
         try:
             draft = decode_json(object_store.get(str(row["draft_object_key"])))
         except KeyError as error:
@@ -859,6 +910,7 @@ def create_app(
         row = resume_store.get_source(user_id, source_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
+        require_editable_source(row)
         try:
             draft = decode_json(object_store.get(str(row["draft_object_key"])))
         except KeyError as error:
@@ -886,6 +938,7 @@ def create_app(
         row = resume_store.get_source(user_id, source_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
+        require_editable_source(row)
         try:
             draft = decode_json(object_store.get(str(row["draft_object_key"])))
         except KeyError as error:
@@ -927,6 +980,7 @@ def create_app(
         row = resume_store.get_source(user_id, source_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
+        require_editable_source(row)
         draft = _editable_draft(payload)
         try:
             original_draft = decode_json(
@@ -966,6 +1020,7 @@ def create_app(
         row = resume_store.get_source(user_id, source_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Resume not found.")
+        require_editable_source(row)
         draft = _editable_draft(payload)
         try:
             original_draft = decode_json(

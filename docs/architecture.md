@@ -46,12 +46,12 @@ flowchart LR
 
 1. The signed-in user creates a first resume with the guided form or sends up to five DOCX/PDF files to the same-origin import endpoint.
 2. FastAPI validates imported signatures and size limits. A PDF is first converted into DOCX by the private LibreOffice service; an uploaded DOCX becomes the normalized Word source directly.
-3. Forge extracts editable content from that normalized DOCX and stores an owner-scoped package containing the source DOCX, an SDT-tagged standard template, structured JSON, and a Draft 2020-12 JSON Schema. A form-created source stores the structured record directly.
-4. One builder edits both source types. Standard fields cover common resume content; custom sections preserve publications, awards, volunteering, clearances, and other uncommon material.
-5. For imports, the original extracted transcript stays read-only. Lines that are not represented by a standard or custom field appear in a source inbox, so an edit cannot silently discard them.
-6. The single standard renderer uses one reading order, selectable text, standard headings, and no tables, columns, icons, or text boxes.
-7. The user approves a named role version. The API renders every populated section into DOCX, then sends it to the private converter, where headless LibreOffice returns a validated PDF.
-8. The API stores both files as one generated bundle. Download authorization checks both the document ID and Clerk user ID. Storage credentials and R2 object keys never reach browser code.
+3. Forge extracts and structures content from the normalized DOCX, renders a finished DOCX, and sends that same document to the private converter for a matching PDF.
+4. The library exposes only the finished DOCX and PDF. The original source, normalized Word data, structured JSON, and Draft 2020-12 JSON Schema remain internal and owner-scoped.
+5. An imported resume is immutable after processing. Replacing it requires deleting the source and uploading a new file; the API enforces this rule on its detail, draft, photo, editable-document, and acceptance routes.
+6. A form-created source remains editable in the builder. Standard fields cover common resume content; custom sections preserve publications, awards, volunteering, clearances, and other uncommon material.
+7. The standard renderer uses one reading order, selectable text, standard headings, and no tables, columns, icons, or text boxes.
+8. Download authorization checks both the artifact ID and Clerk user ID. Storage credentials and object keys never reach browser code.
 
 ## Job match and tailoring flow
 

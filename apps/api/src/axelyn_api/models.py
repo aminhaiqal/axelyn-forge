@@ -387,6 +387,8 @@ class ResumeImportResponse(BaseModel):
 ResumeSourceArtifactKind = Literal[
     "source_docx",
     "sdt_template",
+    "resume_docx",
+    "resume_pdf",
     "resume_json",
     "resume_schema",
 ]
