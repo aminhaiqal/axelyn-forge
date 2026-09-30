@@ -70,7 +70,7 @@ def _field(value: Any, name: str, default: Any = None) -> Any:
 
 def _used_web_search(response: Any) -> bool:
     if any(
-        _field(item, "type") == "web_search_call"
+        _field(item, "type") in {"web_search_call", "openrouter:web_search"}
         for item in (_field(response, "output", []) or [])
     ):
         return True
@@ -91,7 +91,7 @@ def _source_urls(response: Any) -> tuple[str, ...]:
                 values.append(value)
 
     for item in _field(response, "output", []) or []:
-        if _field(item, "type") == "web_search_call":
+        if _field(item, "type") in {"web_search_call", "openrouter:web_search"}:
             action = _field(item, "action", {})
             add(_field(action, "url"))
             for source in _field(action, "sources", []) or []:
@@ -236,6 +236,8 @@ def retrieve_website_context(
         result = json.loads(output_text)
     except json.JSONDecodeError as error:
         raise ProviderError("Linked website returned invalid context") from error
+    if isinstance(result, dict):
+        result.setdefault("siteName", None)
     errors = sorted(
         Draft202012Validator(WEBSITE_CONTEXT_SCHEMA).iter_errors(result),
         key=lambda error: tuple(str(part) for part in error.absolute_path),
@@ -255,6 +257,8 @@ def retrieve_website_context(
     site_name = result["siteName"]
     if isinstance(site_name, str):
         site_name = site_name.strip() or None
+    if site_name is None:
+        site_name = title.split(" - ", 1)[0].strip() or hostname
     return WebsiteContext(
         requested_url=normalized_url,
         title=title,

@@ -12,7 +12,7 @@ from axelyn_api.website_context import (
 def web_output():
     return [
         {
-            "type": "web_search_call",
+            "type": "openrouter:web_search",
             "action": {
                 "type": "open_page",
                 "url": "https://pastelocity.com.my/",
@@ -52,7 +52,6 @@ class FakeResponses:
                 {
                     "status": "found",
                     "title": "Pastelocity - Handcrafted Caftans & Modest Fashion",
-                    "siteName": "Pastelocity",
                     "summary": (
                         "A Malaysian modest-fashion store offering handcrafted batik, "
                         "kaftans, blouses, custom orders, shipping, and order tracking."
