@@ -253,6 +253,8 @@ if (page instanceof HTMLElement) {
       [
         ["resume_docx", "DOCX"],
         ["resume_pdf", "PDF"],
+        ["resume_json", "JSON"],
+        ["resume_schema", "Schema"],
       ].forEach(([kind, label]) => {
         const artifact = sourceArtifacts.get(kind);
         if (!artifact) return;

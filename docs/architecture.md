@@ -43,11 +43,12 @@ flowchart LR
 
 1. The signed-in user sends up to five DOCX/PDF files to the same-origin import endpoint.
 2. FastAPI validates imported signatures and size limits. A PDF is first converted into DOCX by the private LibreOffice service; an uploaded DOCX becomes the normalized Word source directly.
-3. Forge extracts and structures content from the normalized DOCX, renders a finished DOCX, and sends that same document to the private converter for a matching PDF.
-4. The library exposes only the finished DOCX and PDF. The original source, normalized Word data, structured JSON, and Draft 2020-12 JSON Schema remain internal and owner-scoped.
-5. A resume is immutable after processing. Replacing it requires deleting the source and uploading a new file.
-6. The standard renderer uses one reading order, selectable text, standard headings, and no tables, columns, icons, or text boxes.
-7. Download authorization checks both the artifact ID and Clerk user ID. Storage credentials and object keys never reach browser code.
+3. Forge inventories the normalized document's paragraphs and layout hints. OpenRouter assigns editable nodes semantic JSON Pointers; a deterministic fallback supplies line bindings when AI planning is unavailable.
+4. Forge wraps the selected paragraphs in Structured Document Tags without rebuilding their paragraphs, runs, tables, styles, margins, or section settings. It derives an example JSON document and a Draft 2020-12 schema for that particular layout.
+5. The library exposes the personalized SDT DOCX, its matching PDF, example JSON, and JSON Schema. The original source and JSON-to-SDT binding manifest remain internal and owner-scoped.
+6. `POST /api/v1/resumes/{id}/render` validates changed JSON against that resume's schema, applies values through its private manifest, and returns DOCX or a LibreOffice-rendered PDF.
+7. The current binding engine updates existing scalar paragraphs. Array sizes are fixed in the generated schema until repeatable Word block cloning is implemented.
+8. Download and rendering authorization check both the resume or artifact ID and Clerk user ID. Storage credentials, object keys, and the private binding manifest never reach browser code.
 
 ## Job match and tailoring flow
 

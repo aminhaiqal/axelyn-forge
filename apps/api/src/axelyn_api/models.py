@@ -374,6 +374,7 @@ ResumeSourceArtifactKind = Literal[
     "resume_pdf",
     "resume_json",
     "resume_schema",
+    "resume_manifest",
 ]
 
 

@@ -402,7 +402,10 @@ class ApiTests(unittest.TestCase):
         artifacts = {
             artifact["kind"]: artifact for artifact in artifacts_response.json()
         }
-        self.assertEqual({"resume_docx", "resume_pdf"}, set(artifacts))
+        self.assertEqual(
+            {"resume_docx", "resume_pdf", "resume_json", "resume_schema"},
+            set(artifacts),
+        )
         downloaded_artifacts = {}
         for kind, artifact in artifacts.items():
             download = self.client.get(
@@ -421,11 +424,14 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(VALID_PDF, downloaded_artifacts["resume_pdf"])
         self.assertEqual("backend-resume.docx", artifacts["resume_docx"]["filename"])
         self.assertEqual("backend-resume.pdf", artifacts["resume_pdf"]["filename"])
+        self.assertEqual("backend-resume.json", artifacts["resume_json"]["filename"])
+        self.assertEqual(
+            "backend-resume.schema.json", artifacts["resume_schema"]["filename"]
+        )
         with zipfile.ZipFile(BytesIO(downloaded_artifacts["resume_docx"])) as archive:
             template_xml = archive.read("word/document.xml")
         self.assertIn(b"<w:sdt>", template_xml)
-        self.assertIn(b'w:val="resume.full_name"', template_xml)
-        self.assertIn(b'w:val="rendered_sections.experience.0"', template_xml)
+        self.assertIn(b'w:val="axelyn.', template_xml)
 
         internal_rows = self.client.app.state.resume_store.list_source_artifacts(
             "user_test_123", source_id
@@ -438,6 +444,7 @@ class ApiTests(unittest.TestCase):
                 "resume_pdf",
                 "resume_json",
                 "resume_schema",
+                "resume_manifest",
             },
             set(internal_artifacts),
         )
@@ -454,12 +461,8 @@ class ApiTests(unittest.TestCase):
         )
         Draft202012Validator.check_schema(resume_schema)
         Draft202012Validator(resume_schema).validate(resume_json)
-        self.assertEqual("Taylor Example", resume_json["resume"]["full_name"])
-        self.assertEqual(
-            "Taylor Example",
-            resume_json["template_values"]["resume.full_name"],
-        )
-        for kind in ("source_docx", "resume_json", "resume_schema"):
+        self.assertEqual("Taylor Example", resume_json["profile"]["full_name"])
+        for kind in ("source_docx", "resume_manifest"):
             hidden = self.client.get(
                 f"/api/v1/resume-source-artifacts/{internal_artifacts[kind]['id']}/download",
                 headers=headers,
@@ -539,6 +542,63 @@ class ApiTests(unittest.TestCase):
             draft["summary"],
         )
 
+    def test_personalized_resume_json_round_trips_through_its_sdt_template(self):
+        headers = {"Authorization": "Bearer test-session"}
+        imported = self.client.post(
+            "/api/v1/resumes/imports",
+            headers=headers,
+            files=[
+                (
+                    "files",
+                    (
+                        "personal-layout.docx",
+                        self.resume_docx(),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
+                )
+            ],
+        )
+        self.assertEqual(201, imported.status_code, imported.text)
+        source_id = imported.json()["items"][0]["source"]["id"]
+        artifacts = self.client.get(
+            "/api/v1/resume-source-artifacts", headers=headers
+        ).json()
+        json_artifact = next(
+            artifact
+            for artifact in artifacts
+            if artifact["source_id"] == source_id and artifact["kind"] == "resume_json"
+        )
+        resume_data = self.client.get(
+            f"/api/v1/resume-source-artifacts/{json_artifact['id']}/download",
+            headers=headers,
+        ).json()
+        resume_data["profile"]["full_name"] = "Jordan Example"
+
+        rendered = self.client.post(
+            f"/api/v1/resumes/{source_id}/render",
+            headers=headers,
+            json=resume_data,
+        )
+        self.assertEqual(200, rendered.status_code, rendered.text)
+        self.assertEqual(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            rendered.headers["content-type"],
+        )
+        with zipfile.ZipFile(BytesIO(rendered.content)) as archive:
+            xml = archive.read("word/document.xml")
+        self.assertIn(b"Jordan Example", xml)
+        self.assertNotIn(b"Taylor Example", xml)
+        self.assertIn(b"Built production APIs.", xml)
+
+        invalid = copy.deepcopy(resume_data)
+        invalid["unknown"] = "not in this resume's schema"
+        rejected = self.client.post(
+            f"/api/v1/resumes/{source_id}/render",
+            headers=headers,
+            json=invalid,
+        )
+        self.assertEqual(422, rejected.status_code)
+
     def test_pdf_import_creates_finished_word_and_pdf_files(self):
         headers = {"Authorization": "Bearer test-session"}
         imported = self.client.post(
@@ -559,7 +619,7 @@ class ApiTests(unittest.TestCase):
             "/api/v1/resume-source-artifacts", headers=headers
         ).json()
         self.assertEqual(
-            {"resume_docx", "resume_pdf"},
+            {"resume_docx", "resume_pdf", "resume_json", "resume_schema"},
             {artifact["kind"] for artifact in artifacts},
         )
         finished_word = next(item for item in artifacts if item["kind"] == "resume_docx")

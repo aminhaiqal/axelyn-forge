@@ -70,9 +70,10 @@ The first public contract is versioned under `/api/v1`.
 | `GET` | `/api/v1/me` | Return the authenticated Clerk user ID. |
 | `POST` | `/api/v1/service-requests` | Validate and store a customer service brief. |
 | `GET` | `/api/v1/resumes` | List resume sources owned by the signed-in user. |
-| `POST` | `/api/v1/resumes/imports` | Import up to five PDF/DOCX sources and create immutable finished DOCX/PDF pairs. |
-| `GET` | `/api/v1/resume-source-artifacts` | List the finished DOCX and PDF files for imported resumes. |
-| `GET` | `/api/v1/resume-source-artifacts/{id}/download` | Download an owned finished DOCX or PDF. |
+| `POST` | `/api/v1/resumes/imports` | Import up to five PDF/DOCX sources and create a layout-preserving SDT/JSON/Schema bundle. |
+| `GET` | `/api/v1/resume-source-artifacts` | List the personalized DOCX, PDF, JSON, and schema files for imported resumes. |
+| `GET` | `/api/v1/resume-source-artifacts/{id}/download` | Download an owned resume artifact. |
+| `POST` | `/api/v1/resumes/{id}/render` | Validate that resume's JSON and render it through its private SDT template as DOCX or PDF. |
 | `DELETE` | `/api/v1/resumes/{id}` | Delete an owned resume source and its files. |
 | `GET`, `POST` | `/api/v1/job-applications` | List or create private job-application records with a resume attachment snapshot. |
 | `PUT`, `DELETE` | `/api/v1/job-applications/{id}` | Update or remove an owned job-application record. |

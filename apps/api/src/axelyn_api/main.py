@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any, Annotated, AsyncIterator, Callable, Optional
 
 import uvicorn
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from jsonschema.exceptions import SchemaError, ValidationError as JSONSchemaValidationError
 
 from forge.errors import ProviderError
 from forge.interview_brief import InterviewBriefInputError, generate_interview_brief
@@ -70,10 +71,14 @@ from .models import (
 from .resume_artifacts import (
     JSON_MEDIA_TYPE,
     JSON_SCHEMA_MEDIA_TYPE,
-    build_resume_package,
-    build_resume_schema,
 )
 from .resume_assistant import structure_resume_with_openrouter
+from .personalized_resume import (
+    TemplatePlanner,
+    build_personalized_resume_bundle,
+    plan_resume_template_with_openrouter,
+    render_personalized_resume,
+)
 from .resume_import import (
     DOCX_MEDIA_TYPE,
     PDF_MEDIA_TYPE,
@@ -94,7 +99,9 @@ from .store import ServiceRequestStore
 from .website_context import extract_public_urls, retrieve_website_context
 
 
-USER_SOURCE_ARTIFACT_KINDS = frozenset({"resume_docx", "resume_pdf"})
+USER_SOURCE_ARTIFACT_KINDS = frozenset(
+    {"resume_docx", "resume_pdf", "resume_json", "resume_schema"}
+)
 
 
 def _source_summary(row: dict[str, object]) -> ResumeSourceSummary:
@@ -154,32 +161,25 @@ def _source_artifact_payloads(
     *,
     prefix: str,
     normalized_docx: bytes,
-    draft: dict[str, object],
     display_name: str,
-    target_role: str | None,
-    original_filename: str,
     document_converter: DocumentConverter,
+    template_planner: TemplatePlanner | None,
 ) -> list[dict[str, object]]:
     safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", display_name).strip("-.")
     safe_stem = safe_stem or "resume"
-    standard_docx, _, _ = _render_resume_docx(
-        draft=draft,
-        title=display_name,
-        description="Axelyn standard resume generated from a normalized Word source.",
-        content_controls=True,
+    bundle = build_personalized_resume_bundle(
+        source_docx=normalized_docx,
+        display_name=display_name,
+        planner=template_planner,
     )
+    standard_docx = bundle.template_docx
     finished_filename = f"{safe_stem}.docx"
     finished_pdf = document_converter.docx_to_pdf(
         standard_docx,
         finished_filename,
     )
-    resume_json = build_resume_package(
-        draft=draft,
-        display_name=display_name,
-        target_role=target_role,
-        original_filename=original_filename,
-    )
-    resume_schema = build_resume_schema()
+    resume_json = bundle.example_json
+    resume_schema = bundle.schema_json
     artifacts = (
         (
             "source_docx",
@@ -216,6 +216,13 @@ def _source_artifact_payloads(
             resume_schema,
             "resume.schema.json",
         ),
+        (
+            "resume_manifest",
+            f"{safe_stem}.manifest.json",
+            JSON_MEDIA_TYPE,
+            bundle.manifest_json,
+            "resume.manifest.json",
+        ),
     )
     return [
         {
@@ -236,6 +243,7 @@ def create_app(
     document_converter: Optional[DocumentConverter] = None,
     interview_brief_generator: Optional[Callable[..., dict[str, Any]]] = None,
     resume_draft_generator: Optional[Callable[..., dict[str, object]]] = None,
+    resume_template_planner: TemplatePlanner | None = None,
     forge_ai_generator: Optional[Callable[..., dict[str, object]]] = None,
     resume_enhancement_generator: Optional[Callable[..., dict[str, object]]] = None,
     website_context_reader: Optional[Callable[..., object]] = None,
@@ -260,8 +268,11 @@ def create_app(
     )
     website_reader = website_context_reader or retrieve_website_context
     draft_generator = resume_draft_generator
+    template_planner = resume_template_planner
     if draft_generator is None and resolved_settings.environment.casefold() != "test":
         draft_generator = structure_resume_with_openrouter
+    if template_planner is None and resolved_settings.environment.casefold() != "test":
+        template_planner = plan_resume_template_with_openrouter
 
     def require_user(request: Request) -> str:
         return user_authenticator(request)
@@ -400,6 +411,7 @@ def create_app(
     app.state.document_converter = converter
     app.state.interview_brief_generator = brief_generator
     app.state.resume_draft_generator = draft_generator
+    app.state.resume_template_planner = template_planner
     app.state.forge_ai_generator = coach_generator
     app.state.resume_enhancement_generator = enhancement_generator
     app.state.website_context_reader = website_reader
@@ -501,6 +513,96 @@ def create_app(
             media_type=str(artifact["media_type"]),
             headers={
                 "Content-Disposition": f'attachment; filename="{download_name or "resume"}"',
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.post(
+        "/api/v1/resumes/{source_id}/render",
+        tags=["resumes"],
+    )
+    def render_resume_source(
+        source_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+        data: Annotated[dict[str, object], Body()],
+        output_format: str = "docx",
+    ) -> Response:
+        """Apply validated per-resume JSON to its layout-preserving SDT template."""
+        if output_format not in {"docx", "pdf"}:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="output_format must be docx or pdf.",
+            )
+        source = resume_store.get_source(user_id, source_id)
+        if source is None:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+        artifacts = {
+            str(row["kind"]): row
+            for row in resume_store.list_source_artifacts(user_id, source_id)
+        }
+        required = {"resume_docx", "resume_schema", "resume_manifest"}
+        if not required.issubset(artifacts):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The personalized resume template is unavailable.",
+            )
+        try:
+            template_docx = object_store.get(
+                str(artifacts["resume_docx"]["object_key"])
+            )
+            schema_payload = object_store.get(
+                str(artifacts["resume_schema"]["object_key"])
+            )
+            manifest_payload = object_store.get(
+                str(artifacts["resume_manifest"]["object_key"])
+            )
+        except KeyError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The personalized resume template is temporarily unavailable.",
+            ) from error
+        try:
+            schema = decode_json(schema_payload)
+            manifest = decode_json(manifest_payload)
+            rendered_docx = render_personalized_resume(
+                template_docx=template_docx,
+                data=data,
+                schema=schema,
+                manifest=manifest,
+            )
+        except JSONSchemaValidationError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"The resume data does not match this template: {error.message}",
+            ) from error
+        except (SchemaError, ValueError, KeyError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The personalized resume template is invalid.",
+            ) from error
+        safe_stem = re.sub(
+            r"[^A-Za-z0-9._-]+", "-", str(source["display_name"])
+        ).strip("-.") or "resume"
+        if output_format == "pdf":
+            try:
+                payload = converter.docx_to_pdf(rendered_docx, f"{safe_stem}.docx")
+            except DocumentConversionError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="LibreOffice could not render this personalized resume.",
+                ) from error
+            filename = f"{safe_stem}.pdf"
+            media_type = PDF_MEDIA_TYPE
+        else:
+            payload = rendered_docx
+            filename = f"{safe_stem}.docx"
+            media_type = DOCX_MEDIA_TYPE
+        return Response(
+            payload,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
                 "Cache-Control": "private, no-store",
                 "X-Content-Type-Options": "nosniff",
             },
@@ -626,11 +728,9 @@ def create_app(
                 artifact_payloads = _source_artifact_payloads(
                     prefix=prefix,
                     normalized_docx=normalized_docx,
-                    draft=draft,
                     display_name=stem,
-                    target_role=clean_role,
-                    original_filename=original_name,
                     document_converter=converter,
+                    template_planner=template_planner,
                 )
             except DocumentConversionError:
                 items.append(
