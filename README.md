@@ -153,6 +153,8 @@ clerk doctor
 
 CI runs the Python tests, checks and builds the Astro app, and builds the API, converter, frontend, and gateway container images. Pushes to `main` publish all four images to GitHub Container Registry, invoke the production host's restricted `deploy <commit-sha>` command, and verify the public health endpoint. Version tags publish immutable images without changing production.
 
+The restricted host command is versioned at `infra/deploy/production-deploy.sh`. It accepts only the exact head of `main`, deploys commit-addressed images, waits for Compose health checks, and restores the prior release if the replacement stack fails.
+
 ## Private data
 
 Keep `.env`, candidate DOCX files, SQLite databases, generated output, and `.forge-private/` out of Git. Service requests contain personal information; back up and restrict access to the `forge-state` volume according to your retention policy.
