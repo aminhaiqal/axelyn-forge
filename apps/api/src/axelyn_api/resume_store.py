@@ -817,6 +817,29 @@ class ResumeStore:
             ).fetchone()
         return self._dict(row)
 
+    def list_job_matches(self, user_id: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT matches.id, matches.source_id, sources.display_name AS resume_name,
+                       matches.target_role, matches.company, matches.match_state,
+                       matches.match_percentage, matches.created_at,
+                       EXISTS (
+                           SELECT 1 FROM job_match_documents AS documents
+                           WHERE documents.user_id = matches.user_id
+                             AND documents.match_id = matches.id
+                       ) AS has_documents
+                FROM job_matches AS matches
+                JOIN resume_sources AS sources
+                  ON sources.id = matches.source_id
+                 AND sources.user_id = matches.user_id
+                WHERE matches.user_id = ?
+                ORDER BY matches.created_at DESC, matches.rowid DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def create_job_match_documents(
         self,
         *,
@@ -865,6 +888,20 @@ class ResumeStore:
                 (document_id, user_id),
             ).fetchone()
         return self._dict(row)
+
+    def list_job_match_documents(
+        self, user_id: str, match_id: str
+    ) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM job_match_documents
+                WHERE user_id = ? AND match_id = ?
+                ORDER BY created_at DESC, rowid DESC
+                """,
+                (user_id, match_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def source_object_keys(self, user_id: str, source_id: str) -> list[str] | None:
         source = self.get_source(user_id, source_id)

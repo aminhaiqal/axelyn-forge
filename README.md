@@ -86,6 +86,8 @@ The first public contract is versioned under `/api/v1`.
 | `GET`, `POST` | `/api/v1/job-applications` | List or create private job-application records with a resume attachment snapshot. |
 | `PUT`, `DELETE` | `/api/v1/job-applications/{id}` | Update or remove an owned job-application record. |
 | `POST` | `/api/v1/job-matches` | Analyze pasted or uploaded job-description content against an owned resume. |
+| `GET` | `/api/v1/job-matches` | List the signed-in user's saved job-match history. |
+| `GET` | `/api/v1/job-matches/{id}` | Reopen one owned analysis with its generated document links. |
 | `POST` | `/api/v1/job-matches/{id}/tailor` | Generate an evidence-grounded DOCX/PDF bundle for a Match or Some match result. |
 | `GET` | `/api/v1/job-match-documents/{id}/download` | Download an owned tailored resume document. |
 | `GET` | `/api/v1/job-applications/{id}/interview-brief` | Load the private interview brief saved for a tracked application. |

@@ -46,9 +46,11 @@ from .models import (
     JobApplicationSummary,
     JobApplicationUpdate,
     JobMatchAnalysis,
+    JobMatchDetail,
     JobMatchDocumentBundle,
     JobMatchDocumentSummary,
     JobMatchResult,
+    JobMatchSummary,
     ResumeAcceptRequest,
     ResumeDraft,
     ResumeDraftUpdate,
@@ -121,6 +123,14 @@ def _source_artifact_summary(row: dict[str, object]) -> ResumeSourceArtifactSumm
 
 def _job_document_summary(row: dict[str, object]) -> JobMatchDocumentSummary:
     return JobMatchDocumentSummary(**row)
+
+
+def _job_match_label(match_state: object) -> str:
+    return {
+        "match": "Match",
+        "some_match": "Some match",
+        "no_match": "No match",
+    }[str(match_state)]
 
 
 def _job_application_summary(row: dict[str, object]) -> JobApplicationSummary:
@@ -1513,6 +1523,60 @@ def create_app(
         if existing is not None:
             object_store.delete(str(existing["object_key"]))
         return interview_brief_response(row)
+
+    @app.get(
+        "/api/v1/job-matches",
+        response_model=list[JobMatchSummary],
+        tags=["job matching"],
+    )
+    def list_job_matches(
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> list[JobMatchSummary]:
+        return [
+            JobMatchSummary(
+                **row,
+                match_label=_job_match_label(row["match_state"]),
+            )
+            for row in resume_store.list_job_matches(user_id)
+        ]
+
+    @app.get(
+        "/api/v1/job-matches/{match_id}",
+        response_model=JobMatchDetail,
+        tags=["job matching"],
+    )
+    def get_job_match(
+        match_id: str,
+        user_id: Annotated[str, Depends(require_user)],
+    ) -> JobMatchDetail:
+        match = resume_store.get_job_match(user_id, match_id)
+        if match is None:
+            raise HTTPException(status_code=404, detail="Job match not found.")
+        source = resume_store.get_source(user_id, str(match["source_id"]))
+        if source is None:
+            raise HTTPException(status_code=404, detail="Resume not found.")
+        try:
+            analysis = JobMatchAnalysis(
+                **decode_json(object_store.get(str(match["analysis_object_key"])))
+            )
+        except (KeyError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Job match data is temporarily unavailable.",
+            ) from error
+        return JobMatchDetail(
+            id=str(match["id"]),
+            source_id=str(match["source_id"]),
+            resume_name=str(source["display_name"]),
+            target_role=str(match["target_role"]),
+            company=str(match["company"]) if match["company"] else None,
+            created_at=str(match["created_at"]),
+            documents=[
+                _job_document_summary(row)
+                for row in resume_store.list_job_match_documents(user_id, match_id)
+            ],
+            **analysis.model_dump(),
+        )
 
     @app.post(
         "/api/v1/job-matches",

@@ -652,6 +652,19 @@ class JobMatchResult(JobMatchAnalysis):
     created_at: str
 
 
+class JobMatchSummary(BaseModel):
+    id: str
+    source_id: str
+    resume_name: str
+    target_role: str
+    company: Optional[str]
+    match_percentage: int = Field(ge=0, le=100)
+    match_state: JobMatchState
+    match_label: Literal["Match", "Some match", "No match"]
+    has_documents: bool
+    created_at: str
+
+
 class JobMatchDocumentSummary(BaseModel):
     id: str
     match_id: str
@@ -661,4 +674,8 @@ class JobMatchDocumentSummary(BaseModel):
 
 
 class JobMatchDocumentBundle(BaseModel):
+    documents: List[JobMatchDocumentSummary]
+
+
+class JobMatchDetail(JobMatchResult):
     documents: List[JobMatchDocumentSummary]

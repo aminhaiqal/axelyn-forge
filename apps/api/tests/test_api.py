@@ -978,6 +978,31 @@ class ApiTests(unittest.TestCase):
         self.assertGreaterEqual(result["match_percentage"], 70)
         self.assertTrue(result["can_generate"])
 
+        history = self.client.get("/api/v1/job-matches", headers=headers)
+        other_history = self.client.get(
+            "/api/v1/job-matches",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        detail = self.client.get(
+            f"/api/v1/job-matches/{result['id']}", headers=headers
+        )
+        other_detail = self.client.get(
+            f"/api/v1/job-matches/{result['id']}",
+            headers={"Authorization": "Bearer other-session"},
+        )
+        self.assertEqual(200, history.status_code, history.text)
+        self.assertEqual([], other_history.json())
+        self.assertEqual(1, len(history.json()))
+        self.assertEqual("Backend Engineer", history.json()[0]["target_role"])
+        self.assertEqual("Example Systems", history.json()[0]["company"])
+        self.assertEqual("backend-resume", history.json()[0]["resume_name"])
+        self.assertEqual("Match", history.json()[0]["match_label"])
+        self.assertFalse(history.json()[0]["has_documents"])
+        self.assertEqual(200, detail.status_code, detail.text)
+        self.assertEqual(result["reasons"], detail.json()["reasons"])
+        self.assertEqual([], detail.json()["documents"])
+        self.assertEqual(404, other_detail.status_code)
+
         other_generate = self.client.post(
             f"/api/v1/job-matches/{result['id']}/tailor",
             headers={"Authorization": "Bearer other-session"},
@@ -998,6 +1023,14 @@ class ApiTests(unittest.TestCase):
             },
             {document["media_type"] for document in documents},
         )
+        updated_history = self.client.get(
+            "/api/v1/job-matches", headers=headers
+        ).json()
+        reopened = self.client.get(
+            f"/api/v1/job-matches/{result['id']}", headers=headers
+        ).json()
+        self.assertTrue(updated_history[0]["has_documents"])
+        self.assertEqual(2, len(reopened["documents"]))
         for document in documents:
             downloaded = self.client.get(
                 f"/api/v1/job-match-documents/{document['id']}/download",

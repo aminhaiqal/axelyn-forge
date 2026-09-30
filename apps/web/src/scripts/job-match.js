@@ -19,6 +19,8 @@ if (matchPage instanceof HTMLElement) {
   const tailorBlock = document.querySelector("#tailor-block");
   const generateButton = document.querySelector("#generate-tailored-resume");
   const downloads = document.querySelector("#tailor-downloads");
+  const historyList = document.querySelector("#match-history-list");
+  const historyCount = document.querySelector("#match-history-count");
   let latestMatch = null;
 
   const api = async (path, options = {}) => {
@@ -114,6 +116,71 @@ if (matchPage instanceof HTMLElement) {
     downloads.hidden = documents.length === 0;
   };
 
+  const historyDate = new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  const renderHistory = (matches) => {
+    if (!(historyList instanceof HTMLElement)) return;
+    historyList.replaceChildren();
+    if (historyCount) historyCount.textContent = `${matches.length} saved ${matches.length === 1 ? "match" : "matches"}`;
+    if (!matches.length) {
+      const empty = document.createElement("p");
+      empty.className = "history-message";
+      empty.textContent = "Your completed job-match analyses will appear here.";
+      historyList.append(empty);
+      return;
+    }
+    matches.forEach((match) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "match-history-item";
+      item.dataset.matchId = match.id;
+
+      const role = document.createElement("div");
+      role.className = "history-role";
+      const date = document.createElement("span");
+      const parsedDate = new Date(match.created_at);
+      date.textContent = Number.isNaN(parsedDate.getTime()) ? match.created_at : historyDate.format(parsedDate);
+      const title = document.createElement("h3");
+      title.textContent = match.target_role;
+      const company = document.createElement("p");
+      company.textContent = match.company || "Company not specified";
+      role.append(date, title, company);
+
+      const resume = document.createElement("span");
+      resume.className = "history-resume";
+      resume.textContent = `${match.resume_name}${match.has_documents ? " · Files ready" : ""}`;
+
+      const score = document.createElement("div");
+      score.className = "history-score";
+      score.dataset.state = match.match_state;
+      const percentage = document.createElement("strong");
+      percentage.textContent = `${match.match_percentage}%`;
+      const label = document.createElement("span");
+      label.textContent = match.match_label;
+      score.append(percentage, label);
+
+      item.append(role, resume, score);
+      historyList.append(item);
+    });
+  };
+
+  const loadHistory = async () => {
+    if (!(historyList instanceof HTMLElement)) return;
+    try {
+      renderHistory(await api("/api/v1/job-matches"));
+    } catch (error) {
+      historyList.replaceChildren();
+      const message = document.createElement("p");
+      message.className = "history-message";
+      message.textContent = error instanceof Error ? error.message : "Match history is unavailable.";
+      historyList.append(message);
+      if (historyCount) historyCount.textContent = "Unavailable";
+    }
+  };
+
   const generateTailored = async () => {
     if (!latestMatch || !(generateButton instanceof HTMLButtonElement)) return;
     generateButton.disabled = true;
@@ -126,6 +193,7 @@ if (matchPage instanceof HTMLElement) {
       const message = document.querySelector("#tailor-message");
       if (message) message.textContent = "Your evidence-grounded Word and PDF files are ready.";
       if (resultState) resultState.textContent = "Documents ready";
+      loadHistory();
     } catch (error) {
       generateButton.disabled = false;
       generateButton.firstChild.textContent = "Try generation again ";
@@ -135,7 +203,7 @@ if (matchPage instanceof HTMLElement) {
     }
   };
 
-  const renderResult = (result) => {
+  const renderResult = (result, { autoGenerate = true } = {}) => {
     latestMatch = result;
     if (workspace instanceof HTMLElement) workspace.dataset.hasResult = "true";
     if (resultShell instanceof HTMLElement) resultShell.hidden = false;
@@ -157,25 +225,41 @@ if (matchPage instanceof HTMLElement) {
     fillKeywords("#missing-keywords", result.missing_keywords, "No priority gaps found");
     fillList("#match-recommendations", result.recommendations, "Keep every claim tied to evidence you can verify.");
 
-    if (downloads instanceof HTMLElement) {
-      downloads.hidden = true;
-      downloads.replaceChildren();
-    }
+    const existingDocuments = Array.isArray(result.documents) ? result.documents : [];
+    renderDownloads(existingDocuments);
     if (tailorBlock instanceof HTMLElement) tailorBlock.hidden = result.match_state === "no_match";
     if (generateButton instanceof HTMLButtonElement) {
-      generateButton.hidden = false;
+      generateButton.hidden = existingDocuments.length > 0;
       generateButton.disabled = false;
-      generateButton.firstChild.textContent = result.match_state === "match" ? "Generating Word and PDF " : "Generate tailored resume ";
+      generateButton.firstChild.textContent = "Generate tailored resume ";
     }
     const tailorMessage = document.querySelector("#tailor-message");
     if (tailorMessage) {
-      tailorMessage.textContent = result.match_state === "match"
+      tailorMessage.textContent = existingDocuments.length
+        ? "Your saved evidence-grounded Word and PDF files are ready."
+        : result.match_state === "match"
         ? "Strong fit found. Forge is creating both formats now."
         : "Forge can prioritize supported evidence without adding claims.";
     }
     resultPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (result.match_state === "match") generateTailored();
+    if (autoGenerate && result.match_state === "match" && !existingDocuments.length) generateTailored();
   };
+
+  historyList?.addEventListener("click", async (event) => {
+    const target = event.target;
+    const item = target instanceof Element ? target.closest("[data-match-id]") : null;
+    if (!(item instanceof HTMLButtonElement) || !item.dataset.matchId) return;
+    item.disabled = true;
+    try {
+      const result = await api(`/api/v1/job-matches/${item.dataset.matchId}`);
+      renderResult(result, { autoGenerate: false });
+      setStatus(`Opened saved ${result.match_label.toLowerCase()} analysis from ${historyDate.format(new Date(result.created_at))}.`, "success");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "The saved match could not be opened.", "error");
+    } finally {
+      item.disabled = false;
+    }
+  });
 
   if (description instanceof HTMLTextAreaElement) {
     description.addEventListener("input", () => {
@@ -221,6 +305,7 @@ if (matchPage instanceof HTMLElement) {
     try {
       const result = await api("/api/v1/job-matches", { method: "POST", body: values });
       renderResult(result);
+      loadHistory();
       setStatus(`${result.match_label}: ${result.match_percentage}% evidence coverage.`, "success");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The match could not be analyzed.", "error");
@@ -231,4 +316,5 @@ if (matchPage instanceof HTMLElement) {
   });
 
   loadResumes();
+  loadHistory();
 }
